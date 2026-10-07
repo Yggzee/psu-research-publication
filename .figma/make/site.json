@@ -1,0 +1,11 @@
+{
+  "title": "PSUResearchPub",
+  "description": "Streamline research publication tracking for university units with a user-friendly dashboard, enabling efficient management of researchers, publications, and impact analysis.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
