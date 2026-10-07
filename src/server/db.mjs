@@ -131,7 +131,7 @@ export function initDatabase() {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       token TEXT NOT NULL,
-      actor_id TEXT NOT NULL DEFAULT 'dan.k/google-scholar-scraper',
+      actor_id TEXT NOT NULL DEFAULT 'johnvc~google-scholar-api',
       is_active INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'untested',
       username TEXT,
@@ -139,6 +139,7 @@ export function initDatabase() {
       created_at TEXT NOT NULL,
       last_tested_at TEXT
     );
+    UPDATE apify_tokens SET actor_id = 'johnvc~google-scholar-api' WHERE actor_id LIKE '%dan.k%';
   `);
 
   // Seed default admin account ONLY if no admin exists

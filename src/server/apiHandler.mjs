@@ -451,26 +451,64 @@ export async function handleApiRequest(req, res) {
         return sendJson(200, { results: [], fromCache: true });
       }
 
+      // Query normalization for smart searching (e.g. "Lastname, Firstname" -> "Firstname Lastname")
+      let cleanQuery = query.trim();
+      if (cleanQuery.includes(',') && !cleanQuery.includes('AND') && !cleanQuery.includes('OR')) {
+        const parts = cleanQuery.split(',').map((p) => p.trim());
+        if (parts.length === 2 && parts[0] && parts[1]) {
+          cleanQuery = `${parts[1]} ${parts[0]}`;
+        }
+      }
+
       // STEP 1: Check database cache FIRST (exact or like match on title, authors, or query)
       const cached = db.prepare(`
-        SELECT * FROM scraped_publications 
+        SELECT id, title, authors, journal, year, citations, abstract, url 
+        FROM scraped_publications 
         WHERE LOWER(title) LIKE LOWER(?) 
            OR LOWER(authors) LIKE LOWER(?) 
            OR LOWER(search_query) LIKE LOWER(?)
-        LIMIT 20
-      `).all(`%${query}%`, `%${query}%`, `%${query}%`);
+        LIMIT 30
+      `).all(`%${cleanQuery}%`, `%${cleanQuery}%`, `%${cleanQuery}%`);
 
-      if (cached.length > 0) {
+      // Also check local institutional publications database
+      const localPubs = db.prepare(`
+        SELECT id, title, authors, journal, year, citations, abstract, url 
+        FROM publications 
+        WHERE LOWER(title) LIKE LOWER(?) 
+           OR LOWER(authors) LIKE LOWER(?) 
+           OR LOWER(owner_name) LIKE LOWER(?)
+        LIMIT 30
+      `).all(`%${cleanQuery}%`, `%${cleanQuery}%`, `%${cleanQuery}%`);
+
+      const combinedCached = [];
+      const seenTitles = new Set();
+
+      for (const p of [...cached, ...localPubs]) {
+        const normTitle = (p.title || '').trim().toLowerCase();
+        if (!normTitle || seenTitles.has(normTitle)) continue;
+        seenTitles.add(normTitle);
+
+        let parsedAuthors = [];
+        try {
+          parsedAuthors = Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]');
+        } catch {
+          parsedAuthors = typeof p.authors === 'string' ? p.authors.split(',').map((a) => a.trim()) : [];
+        }
+
+        combinedCached.push({
+          ...p,
+          authors: parsedAuthors,
+          fromCache: true,
+        });
+      }
+
+      if (combinedCached.length > 0) {
         // Cache HIT! Zero API calls or Apify scraping needed!
         return sendJson(200, {
-          results: cached.map((p) => ({
-            ...p,
-            authors: JSON.parse(p.authors || '[]'),
-            fromCache: true,
-          })),
+          results: combinedCached,
           fromCache: true,
-          count: cached.length,
-          message: 'Loaded instantly from local database cache (0 scraper calls)',
+          count: combinedCached.length,
+          message: `Loaded ${combinedCached.length} publications instantly from local database cache (0 scraper credits used)`,
         });
       }
 
@@ -483,7 +521,7 @@ export async function handleApiRequest(req, res) {
         id: r.id,
         name: r.name,
         token: r.token,
-        actorId: r.actor_id || 'dan.k/google-scholar-scraper'
+        actorId: (r.actor_id || 'johnvc~google-scholar-api').replace('/', '~')
       }));
 
       if (candidateTokens.length === 0 && (process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN)) {
@@ -491,7 +529,7 @@ export async function handleApiRequest(req, res) {
           id: 'env',
           name: 'Environment Token',
           token: process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN,
-          actorId: process.env.APIFY_ACTOR_ID || 'dan.k/google-scholar-scraper'
+          actorId: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-api').replace('/', '~')
         });
       }
 
@@ -512,14 +550,21 @@ export async function handleApiRequest(req, res) {
       // Try tokens in order (active token first, then auto-failover to backup tokens)
       for (const cand of candidateTokens) {
         try {
+          // Normalize actor id (redirect older broken defaults like dan.k to working johnvc)
+          const targetActor = cand.actorId.includes('dan.k') ? 'johnvc~google-scholar-api' : cand.actorId;
+          const actorUrlSegment = targetActor.replace('/', '~');
+
           const apifyRes = await fetch(
-            `https://api.apify.com/v2/acts/${encodeURIComponent(cand.actorId)}/run-sync-get-dataset-items?token=${cand.token}`,
+            `https://api.apify.com/v2/acts/${actorUrlSegment}/run-sync-get-dataset-items?token=${cand.token}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                queries: [query],
-                maxItems: 20,
+                q: cleanQuery,
+                query: cleanQuery,
+                queries: [cleanQuery],
+                max_pages: 1,
+                maxResults: 20,
               }),
             }
           );
@@ -558,18 +603,58 @@ export async function handleApiRequest(req, res) {
       const now = new Date().toISOString();
 
       for (const raw of items) {
-        const authors = Array.isArray(raw.authors)
-          ? raw.authors
-          : typeof raw.authors === 'string'
-          ? raw.authors.split(',').map((a) => a.trim())
-          : [];
-        const id = raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const title = raw.title || 'Untitled Publication';
-        const journal = raw.source || raw.journal || 'Academic Publication';
-        const year = parseInt(raw.year || raw.publicationYear, 10) || new Date().getFullYear();
-        const citations = parseInt(raw.citations || raw.citationCount || 0, 10) || 0;
-        const abstract = raw.abstract || raw.snippet || '';
-        const paperUrl = raw.url || raw.link || '';
+        if (!raw || raw.error) continue;
+
+        const title = (raw.paper_title || raw.title || raw.name || '').trim();
+        if (!title) continue;
+
+        // Smart author extraction
+        let authors = [];
+        if (Array.isArray(raw.publication_info?.authors)) {
+          authors = raw.publication_info.authors
+            .map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim()))
+            .filter(Boolean);
+        } else if (Array.isArray(raw.authors)) {
+          authors = raw.authors
+            .map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim()))
+            .filter(Boolean);
+        } else if (typeof raw.authors === 'string') {
+          authors = raw.authors.split(',').map((a) => a.trim()).filter(Boolean);
+        }
+
+        if (authors.length === 0 && raw.publication_info?.summary) {
+          const authorPart = raw.publication_info.summary.split('-')[0];
+          if (authorPart && authorPart.trim()) {
+            authors = [authorPart.trim()];
+          }
+        }
+
+        if (authors.length === 0) {
+          authors = [cleanQuery];
+        }
+
+        // Journal and Year extraction
+        let journal = (raw.source || raw.journal || '').trim();
+        if (!journal && raw.publication_info?.summary) {
+          journal = raw.publication_info.summary.trim();
+        }
+        if (!journal) journal = 'Academic Publication';
+
+        let year = parseInt(raw.year || raw.publicationYear, 10);
+        if (!year && raw.publication_info?.summary) {
+          const ym = raw.publication_info.summary.match(/\b(19\d{2}|20\d{2})\b/);
+          if (ym) year = parseInt(ym[1], 10);
+        }
+        if (!year) year = new Date().getFullYear();
+
+        const citations = parseInt(
+          raw.inline_links?.cited_by_total ?? raw.citations ?? raw.citationCount ?? 0,
+          10
+        ) || 0;
+
+        const abstract = raw.snippet || raw.abstract || raw.description || '';
+        const paperUrl = raw.link || raw.url || raw.resources?.[0]?.link || '';
+        const id = raw.result_id || raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
         insertScraped.run(
           id,
@@ -580,7 +665,7 @@ export async function handleApiRequest(req, res) {
           citations,
           abstract,
           paperUrl,
-          query,
+          cleanQuery,
           now
         );
 
@@ -601,7 +686,7 @@ export async function handleApiRequest(req, res) {
         results: formattedResults,
         fromCache: false,
         count: formattedResults.length,
-        message: `Scraped ${formattedResults.length} publications via Apify (${usedTokenName}) and permanently saved to database.`,
+        message: `Scraped ${formattedResults.length} publications via Google Scholar (${usedTokenName}) and cached to database.`,
       });
     }
 
@@ -660,7 +745,7 @@ export async function handleApiRequest(req, res) {
 
       const cleanToken = token.trim();
       const tokenName = (name || '').trim() || `Token ${Date.now().toString().slice(-4)}`;
-      const cleanActorId = (actorId || '').trim() || 'dan.k/google-scholar-scraper';
+      const cleanActorId = ((actorId || '').trim() || 'johnvc~google-scholar-api').replace('/', '~');
       const id = `tok-${Date.now()}`;
       const now = new Date().toISOString();
 

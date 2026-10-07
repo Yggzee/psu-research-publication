@@ -57,7 +57,35 @@ export function isFacultyMember(researcherName: string): boolean {
  */
 export function hasFacultyAuthor(authors: string[]): boolean {
   const facultyList = getFacultyList();
-  return authors.some(author => facultyList.includes(author));
+  if (facultyList.length === 0) return false;
+
+  return authors.some((author) => {
+    const cleanAuthor = author.toLowerCase().trim();
+    if (!cleanAuthor) return false;
+
+    return facultyList.some((fac) => {
+      const cleanFac = fac.toLowerCase().trim();
+      // Exact match
+      if (cleanAuthor === cleanFac || cleanAuthor.includes(cleanFac)) return true;
+
+      // Smart academic name matching (e.g. "Julius Oscar Moreno" matches "OJC Moreno", "JO Moreno", "Moreno")
+      const facParts = cleanFac.split(/\s+/).filter(Boolean);
+      const lastName = facParts[facParts.length - 1];
+
+      if (lastName && lastName.length > 2) {
+        // Must contain the last name
+        if (cleanAuthor.includes(lastName)) {
+          // If single word author match or has matching initials
+          const firstInitial = facParts[0]?.[0];
+          if (!firstInitial || cleanAuthor.includes(firstInitial) || cleanAuthor === lastName) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    });
+  });
 }
 
 /**

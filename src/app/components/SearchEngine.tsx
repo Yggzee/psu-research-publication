@@ -19,15 +19,28 @@ export function SearchEngine() {
   const [isFromCache, setIsFromCache] = useState(false);
   const [requiresApify, setRequiresApify] = useState(false);
   const [showTokenManager, setShowTokenManager] = useState(false);
+  const [searchMode, setSearchMode] = useState<"smart" | "author">("smart");
+  const [facultyNames, setFacultyNames] = useState<string[]>([]);
 
   const currentUser = getCurrentUser();
   const isInstructor = currentUser.role === "instructor";
 
   useEffect(() => {
-    const updateFacultyCount = () => {
-      setFacultyCount(getFacultyList().length);
+    const updateFaculty = async () => {
+      try {
+        const resList = await apiService.getResearchers().catch(() => []);
+        if (Array.isArray(resList) && resList.length > 0) {
+          const names = resList.filter((r) => r.isFaculty).map((r) => r.name);
+          setFacultyNames(names);
+          setFacultyCount(names.length);
+          return;
+        }
+      } catch {}
+      const fallback = getFacultyList();
+      setFacultyNames(fallback);
+      setFacultyCount(fallback.length);
     };
-    updateFacultyCount();
+    updateFaculty();
 
     setClaimedIds(
       getResearchRecords()
@@ -35,14 +48,22 @@ export function SearchEngine() {
         .map((record) => record.id.replace(/^claim-/, ""))
     );
 
-    window.addEventListener("storage", updateFacultyCount);
-    return () => window.removeEventListener("storage", updateFacultyCount);
+    window.addEventListener("storage", updateFaculty);
+    return () => window.removeEventListener("storage", updateFaculty);
   }, [currentUser.instructorId]);
 
-  const handleSearch = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const executeSearch = async (textToSearch?: string, modeToUse?: "smart" | "author") => {
+    const q = (textToSearch !== undefined ? textToSearch : searchQuery).trim();
+    if (!q) return;
 
+    const activeMode = modeToUse || searchMode;
+    // If author-specific search mode is active, format with author: prefix
+    const finalQuery =
+      activeMode === "author" && !q.toLowerCase().startsWith("author:")
+        ? `author:${q}`
+        : q;
+
+    setSearchQuery(q);
     setHasSearched(true);
     setIsSearching(true);
     setCacheNotice(null);
@@ -50,7 +71,7 @@ export function SearchEngine() {
 
     try {
       // Calls SQLite Search API - checks cached scraped table first!
-      const data = await apiService.searchGoogleScholar(searchQuery.trim());
+      const data = await apiService.searchGoogleScholar(finalQuery);
       setSearchResults(data.results || []);
       setIsFromCache(Boolean(data.fromCache));
       setRequiresApify(Boolean(data.requiresApify));
@@ -63,6 +84,11 @@ export function SearchEngine() {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleSearch = async (e: FormEvent) => {
+    e.preventDefault();
+    await executeSearch();
   };
 
   const handleSavePublication = async (result: ScholarSearchResult) => {
@@ -192,13 +218,44 @@ export function SearchEngine() {
       {/* Search Bar */}
       <form onSubmit={handleSearch}>
         <Card className="shadow-md">
-          <CardContent className="p-4 sm:p-6">
+          <CardContent className="p-4 sm:p-6 space-y-3">
+            {/* Search Mode Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-500">Mode:</span>
+              <button
+                type="button"
+                onClick={() => setSearchMode("smart")}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                  searchMode === "smart"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                Smart Search (Topic & Author)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode("author")}
+                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                  searchMode === "author"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                Author Filter (author:...)
+              </button>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <Input
                   type="text"
-                  placeholder="Search topic or researcher (e.g. data mining, agriculture, education)"
+                  placeholder={
+                    searchMode === "author"
+                      ? "Enter author name to find all papers with their name (e.g. Julius Oscar Moreno, Santos)"
+                      : "Search researcher name or topic (e.g. Julius Oscar Moreno, data mining)"
+                  }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-12 h-12 text-base"
@@ -213,6 +270,26 @@ export function SearchEngine() {
                 {isSearching ? "Searching..." : "Search"}
               </Button>
             </div>
+
+            {/* Quick Researcher Search Chips */}
+            {facultyNames.length > 0 && (
+              <div className="pt-1 flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <User className="w-3 h-3 text-blue-600" /> Quick Search:
+                </span>
+                {facultyNames.slice(0, 6).map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => executeSearch(name)}
+                    className="text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full transition-colors font-medium"
+                    title={`Search all publications by ${name}`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </form>

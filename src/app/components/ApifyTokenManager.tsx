@@ -34,7 +34,7 @@ export function ApifyTokenManager({ onTokenChanged, compact = false }: ApifyToke
   const [showAddForm, setShowAddForm] = useState(false);
   const [tokenName, setTokenName] = useState("");
   const [tokenValue, setTokenValue] = useState("");
-  const [actorId, setActorId] = useState("dan.k/google-scholar-scraper");
+  const [actorId, setActorId] = useState("johnvc~google-scholar-api");
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
 
   const fetchTokens = async () => {
