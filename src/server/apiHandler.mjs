@@ -474,110 +474,135 @@ export async function handleApiRequest(req, res) {
         });
       }
 
-      // STEP 2: Apify Google Scholar Scraper Integration
-      const apifyToken = process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN;
-      const apifyActorId = process.env.APIFY_ACTOR_ID || 'dan.k/google-scholar-scraper';
+      // STEP 2: Apify Google Scholar Scraper Integration with Multi-Token Failover
+      const tokenRows = db.prepare(`
+        SELECT * FROM apify_tokens ORDER BY is_active DESC, created_at DESC
+      `).all();
 
-      if (!apifyToken) {
-        // Apify is not connected yet - Do NOT fabricate fake data
+      const candidateTokens = tokenRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        token: r.token,
+        actorId: r.actor_id || 'dan.k/google-scholar-scraper'
+      }));
+
+      if (candidateTokens.length === 0 && (process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN)) {
+        candidateTokens.push({
+          id: 'env',
+          name: 'Environment Token',
+          token: process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN,
+          actorId: process.env.APIFY_ACTOR_ID || 'dan.k/google-scholar-scraper'
+        });
+      }
+
+      if (candidateTokens.length === 0) {
         return sendJson(200, {
           results: [],
           fromCache: false,
           count: 0,
           requiresApify: true,
-          message: 'Apify Google Scholar Scraper is not connected yet. Configure your APIFY_TOKEN in .env to enable live scraping.',
+          message: 'Apify Google Scholar Scraper is not connected yet. Add your token in the Apify Scraper tab or in .env.',
         });
       }
 
-      try {
-        // Trigger Apify Google Scholar Actor run synchronously
-        const apifyRes = await fetch(
-          `https://api.apify.com/v2/acts/${encodeURIComponent(apifyActorId)}/run-sync-get-dataset-items?token=${apifyToken}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              queries: [query],
-              maxItems: 20,
-            }),
-          }
-        );
+      let lastError = null;
+      let rawItems = null;
+      let usedTokenName = '';
 
-        if (!apifyRes.ok) {
-          const errText = await apifyRes.text();
-          return sendJson(502, {
-            error: `Apify scraping failed (${apifyRes.status}): ${errText}`,
-            results: [],
-            fromCache: false,
-          });
-        }
-
-        const rawItems = await apifyRes.json();
-        const items = Array.isArray(rawItems) ? rawItems : [];
-
-        // Save every scraped publication to SQLite cache so we never scrape it again!
-        const insertScraped = db.prepare(`
-          INSERT OR IGNORE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, search_query, scraped_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const formattedResults = [];
-        const now = new Date().toISOString();
-
-        for (const raw of items) {
-          const authors = Array.isArray(raw.authors)
-            ? raw.authors
-            : typeof raw.authors === 'string'
-            ? raw.authors.split(',').map((a) => a.trim())
-            : [];
-          const id = raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          const title = raw.title || 'Untitled Publication';
-          const journal = raw.source || raw.journal || 'Academic Publication';
-          const year = parseInt(raw.year || raw.publicationYear, 10) || new Date().getFullYear();
-          const citations = parseInt(raw.citations || raw.citationCount || 0, 10) || 0;
-          const abstract = raw.abstract || raw.snippet || '';
-          const paperUrl = raw.url || raw.link || '';
-
-          insertScraped.run(
-            id,
-            title,
-            JSON.stringify(authors),
-            journal,
-            year,
-            citations,
-            abstract,
-            paperUrl,
-            query,
-            now
+      // Try tokens in order (active token first, then auto-failover to backup tokens)
+      for (const cand of candidateTokens) {
+        try {
+          const apifyRes = await fetch(
+            `https://api.apify.com/v2/acts/${encodeURIComponent(cand.actorId)}/run-sync-get-dataset-items?token=${cand.token}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                queries: [query],
+                maxItems: 20,
+              }),
+            }
           );
 
-          formattedResults.push({
-            id,
-            title,
-            authors,
-            journal,
-            year,
-            citations,
-            abstract,
-            url: paperUrl,
-            fromCache: false,
-          });
-        }
+          if (!apifyRes.ok) {
+            const errText = await apifyRes.text();
+            lastError = `Token "${cand.name}" failed (${apifyRes.status}): ${errText}`;
+            continue; // Failover to next token!
+          }
 
-        return sendJson(200, {
-          results: formattedResults,
-          fromCache: false,
-          count: formattedResults.length,
-          message: `Scraped ${formattedResults.length} publications via Apify and permanently saved to database.`,
-        });
-      } catch (err) {
-        console.error('[Apify Request Error]:', err);
-        return sendJson(500, {
-          error: `Apify connection error: ${err.message}`,
+          rawItems = await apifyRes.json();
+          usedTokenName = cand.name;
+          break; // Success!
+        } catch (err) {
+          lastError = err.message;
+        }
+      }
+
+      if (!rawItems) {
+        return sendJson(502, {
+          error: `Apify scraping failed across ${candidateTokens.length} token(s): ${lastError}`,
           results: [],
           fromCache: false,
         });
       }
+
+      const items = Array.isArray(rawItems) ? rawItems : [];
+
+      // Save every scraped publication to SQLite cache so we never scrape it again!
+      const insertScraped = db.prepare(`
+        INSERT OR IGNORE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, search_query, scraped_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const formattedResults = [];
+      const now = new Date().toISOString();
+
+      for (const raw of items) {
+        const authors = Array.isArray(raw.authors)
+          ? raw.authors
+          : typeof raw.authors === 'string'
+          ? raw.authors.split(',').map((a) => a.trim())
+          : [];
+        const id = raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const title = raw.title || 'Untitled Publication';
+        const journal = raw.source || raw.journal || 'Academic Publication';
+        const year = parseInt(raw.year || raw.publicationYear, 10) || new Date().getFullYear();
+        const citations = parseInt(raw.citations || raw.citationCount || 0, 10) || 0;
+        const abstract = raw.abstract || raw.snippet || '';
+        const paperUrl = raw.url || raw.link || '';
+
+        insertScraped.run(
+          id,
+          title,
+          JSON.stringify(authors),
+          journal,
+          year,
+          citations,
+          abstract,
+          paperUrl,
+          query,
+          now
+        );
+
+        formattedResults.push({
+          id,
+          title,
+          authors,
+          journal,
+          year,
+          citations,
+          abstract,
+          url: paperUrl,
+          fromCache: false,
+        });
+      }
+
+      return sendJson(200, {
+        results: formattedResults,
+        fromCache: false,
+        count: formattedResults.length,
+        message: `Scraped ${formattedResults.length} publications via Apify (${usedTokenName}) and permanently saved to database.`,
+      });
     }
 
     // ----------------------------------------------------
@@ -600,6 +625,136 @@ export async function handleApiRequest(req, res) {
 
       db.prepare('UPDATE publications SET approval_status = ? WHERE id = ?').run(status, claimId);
       return sendJson(200, { success: true, message: `Claim marked as ${status}` });
+    }
+
+    // ----------------------------------------------------
+    // 7. APIFY TOKENS MANAGEMENT (Multi-Token support)
+    // ----------------------------------------------------
+    if (pathname === '/api/apify/tokens' && method === 'GET') {
+      const rows = db.prepare(`
+        SELECT id, name, actor_id, is_active, status, username, plan, created_at, last_tested_at,
+               SUBSTR(token, 1, 10) || '...' || SUBSTR(token, -4) as masked_token
+        FROM apify_tokens
+        ORDER BY created_at DESC
+      `).all();
+
+      return sendJson(200, rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        actorId: r.actor_id,
+        isActive: Boolean(r.is_active),
+        status: r.status,
+        username: r.username,
+        plan: r.plan,
+        createdAt: r.created_at,
+        lastTestedAt: r.last_tested_at,
+        maskedToken: r.masked_token,
+      })));
+    }
+
+    if (pathname === '/api/apify/tokens' && method === 'POST') {
+      const { name, token, actorId } = await readJsonBody();
+      if (!token || !token.trim()) {
+        return sendJson(400, { error: 'Apify API token is required' });
+      }
+
+      const cleanToken = token.trim();
+      const tokenName = (name || '').trim() || `Token ${Date.now().toString().slice(-4)}`;
+      const cleanActorId = (actorId || '').trim() || 'dan.k/google-scholar-scraper';
+      const id = `tok-${Date.now()}`;
+      const now = new Date().toISOString();
+
+      let status = 'untested';
+      let username = null;
+      let plan = null;
+
+      try {
+        const testRes = await fetch('https://api.apify.com/v2/users/me', {
+          headers: { Authorization: `Bearer ${cleanToken}` },
+        });
+        if (testRes.ok) {
+          const userJson = await testRes.json();
+          status = 'valid';
+          username = userJson.data?.username || userJson.data?.id || null;
+          plan = userJson.data?.plan?.id || 'Free';
+        } else {
+          status = 'invalid';
+        }
+      } catch {
+        status = 'untested';
+      }
+
+      const count = db.prepare('SELECT count(*) as c FROM apify_tokens').get().c;
+      const isActive = count === 0 ? 1 : 0;
+
+      db.prepare(`
+        INSERT INTO apify_tokens (id, name, token, actor_id, is_active, status, username, plan, created_at, last_tested_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, tokenName, cleanToken, cleanActorId, isActive, status, username, plan, now, status !== 'untested' ? now : null);
+
+      return sendJson(201, {
+        success: true,
+        message: status === 'valid' ? 'Token verified and connected successfully!' : 'Token added.',
+        token: {
+          id,
+          name: tokenName,
+          actorId: cleanActorId,
+          isActive: Boolean(isActive),
+          status,
+          username,
+          plan,
+          maskedToken: cleanToken.slice(0, 10) + '...' + cleanToken.slice(-4),
+        },
+      });
+    }
+
+    if (pathname.startsWith('/api/apify/tokens/') && pathname.endsWith('/activate') && method === 'PUT') {
+      const id = pathname.replace('/api/apify/tokens/', '').replace('/activate', '');
+      db.prepare('UPDATE apify_tokens SET is_active = 0').run();
+      db.prepare('UPDATE apify_tokens SET is_active = 1 WHERE id = ?').run(id);
+      return sendJson(200, { success: true, message: 'Token set as active' });
+    }
+
+    if (pathname.startsWith('/api/apify/tokens/') && pathname.endsWith('/test') && method === 'POST') {
+      const id = pathname.replace('/api/apify/tokens/', '').replace('/test', '');
+      const item = db.prepare('SELECT * FROM apify_tokens WHERE id = ?').get(id);
+      if (!item) {
+        return sendJson(404, { error: 'Token not found' });
+      }
+
+      try {
+        const testRes = await fetch('https://api.apify.com/v2/users/me', {
+          headers: { Authorization: `Bearer ${item.token}` },
+        });
+        const now = new Date().toISOString();
+        if (testRes.ok) {
+          const userJson = await testRes.json();
+          const username = userJson.data?.username || userJson.data?.id || null;
+          const plan = userJson.data?.plan?.id || 'Active';
+          db.prepare('UPDATE apify_tokens SET status = ?, username = ?, plan = ?, last_tested_at = ? WHERE id = ?')
+            .run('valid', username, plan, now, id);
+          return sendJson(200, { success: true, status: 'valid', username, plan, message: 'Token is valid and active on Apify!' });
+        } else {
+          db.prepare('UPDATE apify_tokens SET status = ?, last_tested_at = ? WHERE id = ?')
+            .run('invalid', now, id);
+          return sendJson(400, { success: false, status: 'invalid', message: `Token rejected by Apify (${testRes.status})` });
+        }
+      } catch (err) {
+        return sendJson(500, { error: `Failed to test token: ${err.message}` });
+      }
+    }
+
+    if (pathname.startsWith('/api/apify/tokens/') && method === 'DELETE') {
+      const id = pathname.replace('/api/apify/tokens/', '');
+      db.prepare('DELETE FROM apify_tokens WHERE id = ?').run(id);
+      const active = db.prepare('SELECT id FROM apify_tokens WHERE is_active = 1').get();
+      if (!active) {
+        const first = db.prepare('SELECT id FROM apify_tokens ORDER BY created_at DESC LIMIT 1').get();
+        if (first) {
+          db.prepare('UPDATE apify_tokens SET is_active = 1 WHERE id = ?').run(first.id);
+        }
+      }
+      return sendJson(200, { success: true, message: 'Token removed' });
     }
 
     // Unknown API endpoint

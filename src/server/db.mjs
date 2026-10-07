@@ -125,6 +125,22 @@ export function initDatabase() {
     );
   `);
 
+  // 7. Apify Scraper Tokens Table (Support for multiple tokens, switching, and auto-failover)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS apify_tokens (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      token TEXT NOT NULL,
+      actor_id TEXT NOT NULL DEFAULT 'dan.k/google-scholar-scraper',
+      is_active INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'untested',
+      username TEXT,
+      plan TEXT,
+      created_at TEXT NOT NULL,
+      last_tested_at TEXT
+    );
+  `);
+
   // Seed default admin account ONLY if no admin exists
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!existingAdmin) {
