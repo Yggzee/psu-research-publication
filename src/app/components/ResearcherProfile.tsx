@@ -1,11 +1,11 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, User, FileText, Quote, ChevronDown } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { ArrowLeft, User, FileText, Quote } from "lucide-react";
+import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { mockResearchers, type Publication } from "../data/mockData";
 import { getFacultyPhoto } from "../utils/facultyUtils";
+import { useResearcher } from "../hooks/useResearchers";
 
 type SortOption = "year" | "citations" | "journal";
 
@@ -14,10 +14,10 @@ export function ResearcherProfile() {
   const navigate = useNavigate();
   const [sortBy, setSortBy] = useState<SortOption>("year");
 
-  const researcher = mockResearchers.find((r) => r.id === id);
+  const { researcher, loading } = useResearcher(id || "");
 
   const sortedPublications = useMemo(() => {
-    if (!researcher) return [];
+    if (!researcher || !researcher.publications) return [];
     
     const pubs = [...researcher.publications];
     
@@ -33,10 +33,18 @@ export function ResearcherProfile() {
     }
   }, [researcher, sortBy]);
 
+  if (loading) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-gray-500">Loading researcher profile from database...</p>
+      </div>
+    );
+  }
+
   if (!researcher) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-600">Researcher not found</p>
+        <p className="text-gray-600">Researcher not found in the database.</p>
         <Button onClick={() => navigate("/dashboard/researchers")} className="mt-4">
           Back to Researchers
         </Button>
@@ -59,24 +67,24 @@ export function ResearcherProfile() {
       {/* Researcher Header */}
       <Card>
         <CardContent className="p-8">
-          <div className="flex items-start gap-6">
+          <div className="flex flex-col sm:flex-row items-start gap-6">
             {/* Avatar */}
-            {getFacultyPhoto(researcher.name) ? (
+            {getFacultyPhoto(researcher.name) || (researcher as any).photoUrl ? (
               <img
-                src={getFacultyPhoto(researcher.name)}
+                src={getFacultyPhoto(researcher.name) || (researcher as any).photoUrl}
                 alt={researcher.name}
                 className="w-24 h-24 rounded-full object-cover border-4 border-blue-200 flex-shrink-0"
               />
             ) : (
               <div className="bg-blue-100 rounded-full p-6 flex-shrink-0">
-                <User className="w-16 h-16 text-blue-600" />
+                <User className="w-12 h-12 text-blue-600" />
               </div>
             )}
 
             {/* Info */}
             <div className="flex-1">
               <h1 className="text-3xl text-gray-900 mb-2">{researcher.name}</h1>
-              <p className="text-lg text-gray-600 mb-6">{researcher.affiliation}</p>
+              <p className="text-lg text-gray-600 mb-6">{researcher.affiliation || "Pangasinan State University - Asingan Campus"}</p>
 
               {/* Stats */}
               <div className="grid grid-cols-2 gap-6">
@@ -85,7 +93,7 @@ export function ResearcherProfile() {
                     <FileText className="w-4 h-4 text-gray-500" />
                     <p className="text-sm text-gray-600">Publications</p>
                   </div>
-                  <p className="text-2xl text-gray-900">{researcher.totalPublications}</p>
+                  <p className="text-2xl text-gray-900">{researcher.totalPublications || 0}</p>
                 </div>
 
                 <div>
@@ -93,7 +101,7 @@ export function ResearcherProfile() {
                     <Quote className="w-4 h-4 text-gray-500" />
                     <p className="text-sm text-gray-600">Total Citations</p>
                   </div>
-                  <p className="text-2xl text-gray-900">{researcher.totalCitations}</p>
+                  <p className="text-2xl text-gray-900">{researcher.totalCitations || 0}</p>
                 </div>
               </div>
             </div>
@@ -106,20 +114,21 @@ export function ResearcherProfile() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl text-gray-900">Publications</h2>
           
-          {/* Sort Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">Sort by:</span>
-            <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="year">Year</SelectItem>
-                <SelectItem value="citations">Citation Count</SelectItem>
-                <SelectItem value="journal">Journal</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {sortedPublications.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">Sort by:</span>
+              <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="year">Year</SelectItem>
+                  <SelectItem value="citations">Citation Count</SelectItem>
+                  <SelectItem value="journal">Journal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {/* Publications List */}
@@ -132,19 +141,17 @@ export function ResearcherProfile() {
             >
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
-                  {/* Year Badge */}
                   <div className="bg-blue-50 text-blue-600 px-3 py-1 rounded-lg text-sm flex-shrink-0">
                     {publication.year}
                   </div>
 
-                  {/* Publication Info */}
                   <div className="flex-1">
                     <h3 className="text-lg text-gray-900 mb-2 hover:text-blue-600 transition-colors">
                       {publication.title}
                     </h3>
 
                     <p className="text-sm text-gray-600 mb-2">
-                      {publication.authors.join(", ")}
+                      {Array.isArray(publication.authors) ? publication.authors.join(", ") : publication.authors}
                     </p>
 
                     <p className="text-sm text-gray-700 mb-3">
@@ -159,7 +166,7 @@ export function ResearcherProfile() {
                         </span>
                       </div>
 
-                      {publication.impactScore && (
+                      {publication.impactScore !== undefined && (
                         <div className="flex items-center gap-2">
                           <div className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">
                             Impact Score: {publication.impactScore}
@@ -169,7 +176,6 @@ export function ResearcherProfile() {
                     </div>
                   </div>
 
-                  {/* View Details Button */}
                   <Button
                     variant="outline"
                     size="sm"
@@ -184,6 +190,15 @@ export function ResearcherProfile() {
               </CardContent>
             </Card>
           ))}
+
+          {sortedPublications.length === 0 && (
+            <Card>
+              <CardContent className="py-12 text-center text-gray-500">
+                <FileText className="mx-auto h-12 w-12 text-gray-300 mb-2" />
+                <p>No publications registered for this researcher yet.</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

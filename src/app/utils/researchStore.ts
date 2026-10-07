@@ -1,17 +1,21 @@
-import { mockResearchers } from "../data/mockData";
+import { apiService } from "../services/api.service";
 
 export type UserRole = "admin" | "instructor";
 export type ResearchStatus = "In Progress" | "Unpublished" | "Published";
 
 export interface ManagedResearcher {
+  id?: string;
   lastName: string;
   firstName: string;
   name: string;
   instructorId: string;
-  password: string;
+  password?: string;
+  email?: string;
   department: string;
   isFaculty: boolean;
   photoUrl?: string;
+  totalPublications?: number;
+  totalCitations?: number;
 }
 
 export interface StoredPublication {
@@ -23,9 +27,10 @@ export interface StoredPublication {
   citations: number;
   abstract?: string;
   url?: string;
+  impactScore?: number;
   ownerId: string;
   ownerName: string;
-  source: "claim" | "manual" | "admin";
+  source: "claim" | "manual" | "admin" | "scraped";
   approvalStatus: "pending" | "approved" | "rejected";
   researchStatus: ResearchStatus;
   isPublic: boolean;
@@ -34,64 +39,44 @@ export interface StoredPublication {
 }
 
 export interface SessionUser {
+  id?: string;
   role: UserRole;
   instructorId?: string;
+  username?: string;
   name: string;
   department?: string;
+  isFaculty?: boolean;
+  photoUrl?: string;
 }
 
 export const FACULTY_DATA_KEY = "psu_faculty_data";
 export const PUBLICATIONS_STORAGE_KEY = "psu_research_records";
 export const SESSION_STORAGE_KEY = "psu_current_user";
 
-function splitName(name: string) {
-  const parts = name.trim().split(/\s+/);
-  return {
-    firstName: parts.slice(0, -1).join(" ") || parts[0],
-    lastName: parts.length > 1 ? parts[parts.length - 1] : "",
-  };
-}
-
+// Default managed researchers starts completely empty (No mock data!)
 export function getDefaultManagedResearchers(): ManagedResearcher[] {
-  return mockResearchers.map((researcher, index) => {
-    const { firstName, lastName } = splitName(researcher.name);
-    return {
-      firstName,
-      lastName,
-      name: researcher.name,
-      instructorId: `PSU-${String(index + 1).padStart(3, "0")}`,
-      password: "password",
-      department: researcher.department,
-      isFaculty: true,
-    };
-  });
+  return [];
 }
 
 export function getManagedResearchers(): ManagedResearcher[] {
   const stored = localStorage.getItem(FACULTY_DATA_KEY);
-  if (!stored) return getDefaultManagedResearchers();
+  if (!stored) return [];
 
   try {
-    const parsed = JSON.parse(stored) as Partial<ManagedResearcher>[];
-    return parsed.map((member, index) => {
-      const fallbackName = member.name || "Researcher";
-      const split = splitName(fallbackName);
-      const firstName = member.firstName || split.firstName;
-      const lastName = member.lastName || split.lastName;
-      return {
-        firstName,
-        lastName,
-        name: `${firstName} ${lastName}`.trim(),
-        instructorId: member.instructorId || `PSU-${String(index + 1).padStart(3, "0")}`,
-        password: member.password || "password",
-        department: member.department || "BSIT",
-        isFaculty: member.isFaculty ?? true,
-        photoUrl: member.photoUrl,
-      };
-    });
+    const parsed = JSON.parse(stored) as ManagedResearcher[];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return getDefaultManagedResearchers();
+    return [];
   }
+}
+
+export function saveManagedResearchers(researchers: ManagedResearcher[]) {
+  localStorage.setItem(FACULTY_DATA_KEY, JSON.stringify(researchers));
+  localStorage.setItem(
+    "psu_faculty_members",
+    JSON.stringify(researchers.filter((r) => r.isFaculty).map((r) => r.name))
+  );
+  window.dispatchEvent(new Event("storage"));
 }
 
 export function getResearchRecords(): StoredPublication[] {
@@ -112,6 +97,13 @@ export function addResearchRecord(record: StoredPublication) {
   if (!records.some((item) => item.id === record.id && item.ownerId === record.ownerId)) {
     saveResearchRecords([...records, record]);
   }
+  // Also asynchronously sync to SQLite backend
+  apiService.createPublication({
+    ...record,
+    impactScore: record.impactScore || 0,
+  }).catch(() => {
+    // Graceful offline fallback
+  });
 }
 
 export function updateResearchRecord(id: string, updates: Partial<StoredPublication>) {
@@ -120,6 +112,7 @@ export function updateResearchRecord(id: string, updates: Partial<StoredPublicat
       record.id === id ? { ...record, ...updates } : record,
     ),
   );
+  apiService.updatePublication(id, updates).catch(() => {});
 }
 
 export function getCurrentUser(): SessionUser {
@@ -127,9 +120,9 @@ export function getCurrentUser(): SessionUser {
     const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (stored) return JSON.parse(stored);
   } catch {
-    // Use the admin fallback below.
+    // Fallback below
   }
-  return { role: "admin", name: "Admin User" };
+  return { role: "admin", name: "Admin User", username: "admin" };
 }
 
 export function setCurrentUser(user: SessionUser) {

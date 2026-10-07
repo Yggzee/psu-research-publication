@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { FileBarChart, Download, Calendar, TrendingUp, Users, FileText, Award, Filter } from "lucide-react";
+import { useState, useEffect } from "react";
+import { FileBarChart, Download, Calendar, TrendingUp, Users, FileText, Award, Filter, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { researchers, publications } from "../data/mockData";
+import { apiService, type DashboardStatsResponse } from "../services/api.service";
+import type { Publication, Researcher } from "../data/mockData";
 
 type ReportType = "summary" | "researcher" | "department" | "yearly";
 
@@ -13,56 +14,99 @@ export function ReportsPage() {
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [exportYear, setExportYear] = useState<string>("all");
   const [exportDepartment, setExportDepartment] = useState<string>("all");
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Calculate metrics
-  const totalCitations = researchers.reduce((sum, r) => sum + r.citations, 0);
-  const totalPublications = publications.reduce((sum, p) => sum + p.publications.length, 0);
+  // Database state
+  const [researchersList, setResearchersList] = useState<any[]>([]);
+  const [publicationsList, setPublicationsList] = useState<any[]>([]);
+  const [dashboardData, setDashboardData] = useState<DashboardStatsResponse>({
+    totalResearchers: 0,
+    totalPublications: 0,
+    totalCitations: 0,
+    averageImpactScore: 0.0,
+    topResearchers: [],
+    deptYearStats: [],
+  });
 
-  // Get unique years
-  const publicationYears = publications.flatMap(p => p.publications.map(pub => pub.year));
-  const earliestYear = Math.min(...publicationYears);
-  const latestYear = Math.max(new Date().getFullYear(), 2026);
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [stats, researchers, pubs] = await Promise.all([
+        apiService.getDashboardStats().catch(() => null),
+        apiService.getResearchers().catch(() => []),
+        apiService.getPublications().catch(() => []),
+      ]);
+
+      if (stats) setDashboardData(stats);
+      if (Array.isArray(researchers)) setResearchersList(researchers);
+      if (Array.isArray(pubs)) setPublicationsList(pubs);
+    } catch (err) {
+      console.warn("Failed to load reports data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Calculate metrics from real data
+  const totalCitations = dashboardData.totalCitations;
+  const totalPublications = dashboardData.totalPublications;
+  const totalResearchers = dashboardData.totalResearchers;
+  const safeResearchers = Math.max(totalResearchers, 1);
+  const safePubs = Math.max(totalPublications, 1);
+
+  // Get unique years from publications
+  const publicationYears = publicationsList.map((p: any) => p.year).filter(Boolean);
+  const currentYear = new Date().getFullYear();
+  const earliestYear = publicationYears.length > 0 ? Math.min(...publicationYears) : currentYear - 5;
+  const latestYear = Math.max(currentYear, ...publicationYears);
   const years = Array.from(
     { length: latestYear - earliestYear + 1 },
     (_, index) => latestYear - index,
   );
 
   // Department order
-  const departmentOrder = ["BSIT", "BSBA", "BEE", "BTLED", "BIT", "BSE"];
+  const departmentOrder = ["BSIT", "BSBA", "BEE", "BTLED", "BIT", "BSE", "Non Teaching"];
 
-  // Department stats
+  // Department stats from researchers list
   const deptStats: { [key: string]: { researchers: number; citations: number; publications: number } } = {};
-  researchers.forEach(r => {
-    if (!deptStats[r.department]) {
-      deptStats[r.department] = { researchers: 0, citations: 0, publications: 0 };
+  researchersList.forEach((r: any) => {
+    const dept = r.department || "Unassigned";
+    if (!deptStats[dept]) {
+      deptStats[dept] = { researchers: 0, citations: 0, publications: 0 };
     }
-    deptStats[r.department].researchers += 1;
-    deptStats[r.department].citations += r.citations;
-  });
-
-  publications.forEach(p => {
-    const researcher = researchers.find(r => r.id === p.authorId);
-    if (researcher) {
-      deptStats[researcher.department].publications += p.publications.length;
-    }
+    deptStats[dept].researchers += 1;
+    deptStats[dept].citations += r.totalCitations || 0;
+    deptStats[dept].publications += r.totalPublications || 0;
   });
 
   const handleDownload = () => {
-    const rows = publications.flatMap((group) => {
-      const researcher = researchers.find((item) => item.id === group.authorId);
-      return group.publications
-        .filter((publication) => exportYear === "all" || publication.year.toString() === exportYear)
-        .filter(() => exportDepartment === "all" || researcher?.department === exportDepartment)
-        .map((publication) => ({
-          title: publication.title,
-          authors: publication.authors.join(", "),
-          researcher: group.authorName,
+    const rows = publicationsList
+      .filter((pub: any) => exportYear === "all" || pub.year?.toString() === exportYear)
+      .filter((pub: any) => {
+        if (exportDepartment === "all") return true;
+        const researcher = researchersList.find(
+          (r: any) => r.instructorId === pub.owner_id || r.instructorId === pub.ownerId
+        );
+        return researcher?.department === exportDepartment;
+      })
+      .map((pub: any) => {
+        const researcher = researchersList.find(
+          (r: any) => r.instructorId === pub.owner_id || r.instructorId === pub.ownerId
+        );
+        return {
+          title: pub.title,
+          authors: Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors,
+          researcher: pub.owner_name || pub.ownerName || researcher?.name || "Unknown",
           department: researcher?.department || "Unassigned",
-          journal: publication.journal,
-          year: publication.year,
-          citations: publication.citations,
-        }));
-    });
+          journal: pub.journal || "",
+          year: pub.year,
+          citations: pub.citations || 0,
+        };
+      });
 
     const escapeCell = (value: string | number) =>
       String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -95,11 +139,15 @@ export function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl text-gray-900 mb-2">Reports</h1>
-          <p className="text-gray-600">Generate and export research performance reports</p>
+          <p className="text-gray-600">Generate and export research performance reports from database</p>
         </div>
+        <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading} className="self-start">
+          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
       <Card className="border-blue-200">
@@ -139,12 +187,12 @@ export function ReportsPage() {
       {/* Report Type Selector */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
             <div className="flex items-center gap-2">
               <Filter className="w-5 h-5 text-gray-600" />
               <span className="text-sm text-gray-700">Report Type:</span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant={selectedReport === "summary" ? "default" : "outline"}
                 onClick={() => setSelectedReport("summary")}
@@ -200,7 +248,7 @@ export function ReportsPage() {
                 <Users className="w-5 h-5 text-blue-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl text-gray-900">{researchers.length}</div>
+                <div className="text-2xl text-gray-900">{totalResearchers}</div>
                 <p className="text-xs text-gray-600 mt-1">Active faculty members</p>
               </CardContent>
             </Card>
@@ -237,19 +285,19 @@ export function ReportsPage() {
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <span className="text-gray-700">Average Citations per Researcher</span>
                   <span className="text-gray-900 font-medium">
-                    {(totalCitations / researchers.length).toFixed(0)}
+                    {(totalCitations / safeResearchers).toFixed(0)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-100">
                   <span className="text-gray-700">Average Publications per Researcher</span>
                   <span className="text-gray-900 font-medium">
-                    {(totalPublications / researchers.length).toFixed(1)}
+                    {(totalPublications / safeResearchers).toFixed(1)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-3">
                   <span className="text-gray-700">Average Citations per Publication</span>
                   <span className="text-gray-900 font-medium">
-                    {(totalCitations / totalPublications).toFixed(1)}
+                    {(totalCitations / safePubs).toFixed(1)}
                   </span>
                 </div>
               </div>
@@ -265,35 +313,40 @@ export function ReportsPage() {
             <CardTitle className="text-base">Researcher Performance Report</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 text-sm text-gray-700">Researcher</th>
-                    <th className="text-left py-3 px-4 text-sm text-gray-700">Department</th>
-                    <th className="text-center py-3 px-4 text-sm text-gray-700">Publications</th>
-                    <th className="text-center py-3 px-4 text-sm text-gray-700">Citations</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {researchers.map((researcher) => {
-                    const pubs = publications.find(p => p.authorId === researcher.id);
-                    return (
-                      <tr key={researcher.id} className="border-b border-gray-100 hover:bg-gray-50">
+            {researchersList.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                <Users className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+                <p className="text-sm">No researchers in the database yet.</p>
+                <p className="text-xs text-gray-400 mt-1">Add researchers from the Admin Panel.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 text-sm text-gray-700">Researcher</th>
+                      <th className="text-left py-3 px-4 text-sm text-gray-700">Department</th>
+                      <th className="text-center py-3 px-4 text-sm text-gray-700">Publications</th>
+                      <th className="text-center py-3 px-4 text-sm text-gray-700">Citations</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {researchersList.map((researcher: any) => (
+                      <tr key={researcher.id || researcher.instructorId} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-3 px-4 text-sm text-gray-900">{researcher.name}</td>
                         <td className="py-3 px-4 text-sm text-gray-600">{researcher.department}</td>
                         <td className="text-center py-3 px-4 text-sm text-gray-900">
-                          {pubs?.publications.length || 0}
+                          {researcher.totalPublications || 0}
                         </td>
                         <td className="text-center py-3 px-4 text-sm text-gray-900">
-                          {researcher.citations}
+                          {researcher.totalCitations || 0}
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -305,44 +358,52 @@ export function ReportsPage() {
             <CardTitle className="text-base">Department Performance Report</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 text-sm text-gray-700">Department</th>
-                    <th className="text-center py-3 px-4 text-sm text-gray-700">Researchers</th>
-                    <th className="text-center py-3 px-4 text-sm text-gray-700">Publications</th>
-                    <th className="text-center py-3 px-4 text-sm text-gray-700">Citations</th>
-                    <th className="text-center py-3 px-4 text-sm text-gray-700">Avg Citations</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(deptStats)
-                    .sort((a, b) => {
-                      const indexA = departmentOrder.indexOf(a[0]);
-                      const indexB = departmentOrder.indexOf(b[0]);
-                      return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
-                    })
-                    .map(([dept, stats]) => (
-                      <tr key={dept} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4 text-sm text-gray-900">{dept}</td>
-                        <td className="text-center py-3 px-4 text-sm text-gray-900">
-                          {stats.researchers}
-                        </td>
-                        <td className="text-center py-3 px-4 text-sm text-gray-900">
-                          {stats.publications}
-                        </td>
-                        <td className="text-center py-3 px-4 text-sm text-gray-900">
-                          {stats.citations}
-                        </td>
-                        <td className="text-center py-3 px-4 text-sm text-gray-900">
-                          {(stats.citations / stats.researchers).toFixed(0)}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            {Object.keys(deptStats).length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                <FileBarChart className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+                <p className="text-sm">No department data yet.</p>
+                <p className="text-xs text-gray-400 mt-1">Data will appear once researchers are added.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-3 px-4 text-sm text-gray-700">Department</th>
+                      <th className="text-center py-3 px-4 text-sm text-gray-700">Researchers</th>
+                      <th className="text-center py-3 px-4 text-sm text-gray-700">Publications</th>
+                      <th className="text-center py-3 px-4 text-sm text-gray-700">Citations</th>
+                      <th className="text-center py-3 px-4 text-sm text-gray-700">Avg Citations</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(deptStats)
+                      .sort((a, b) => {
+                        const indexA = departmentOrder.indexOf(a[0]);
+                        const indexB = departmentOrder.indexOf(b[0]);
+                        return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+                      })
+                      .map(([dept, stats]) => (
+                        <tr key={dept} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4 text-sm text-gray-900">{dept}</td>
+                          <td className="text-center py-3 px-4 text-sm text-gray-900">
+                            {stats.researchers}
+                          </td>
+                          <td className="text-center py-3 px-4 text-sm text-gray-900">
+                            {stats.publications}
+                          </td>
+                          <td className="text-center py-3 px-4 text-sm text-gray-900">
+                            {stats.citations}
+                          </td>
+                          <td className="text-center py-3 px-4 text-sm text-gray-900">
+                            {(stats.citations / Math.max(stats.researchers, 1)).toFixed(0)}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -350,57 +411,69 @@ export function ReportsPage() {
       {/* Yearly Trends Report */}
       {selectedReport === "yearly" && (
         <div className="space-y-4">
-          {years.map((year) => {
-            const yearPubs = publications.flatMap(p =>
-              p.publications.filter(pub => pub.year === year)
-            );
-            const yearCitations = yearPubs.reduce((sum, pub) => sum + pub.citations, 0);
+          {publicationsList.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-gray-500">
+                <Calendar className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+                <p className="text-sm">No publications to generate yearly trends.</p>
+                <p className="text-xs text-gray-400 mt-1">Publications will appear as researchers add their work.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            years.map((year) => {
+              const yearPubs = publicationsList.filter((pub: any) => pub.year === year);
+              const yearCitations = yearPubs.reduce((sum: number, pub: any) => sum + (pub.citations || 0), 0);
 
-            if (selectedYear !== "all" && selectedYear !== year.toString()) {
-              return null;
-            }
+              if (selectedYear !== "all" && selectedYear !== year.toString()) {
+                return null;
+              }
 
-            return (
-              <Card key={year}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-base">{year} Research Output</CardTitle>
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Calendar className="w-4 h-4" />
-                      {year}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <FileText className="w-5 h-5 text-blue-600" />
-                        <span className="text-sm text-gray-600">Publications</span>
+              if (yearPubs.length === 0 && selectedYear === "all") {
+                return null;
+              }
+
+              return (
+                <Card key={year}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">{year} Research Output</CardTitle>
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Calendar className="w-4 h-4" />
+                        {year}
                       </div>
-                      <p className="text-2xl text-gray-900">{yearPubs.length}</p>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <TrendingUp className="w-5 h-5 text-blue-600" />
-                        <span className="text-sm text-gray-600">Total Citations</span>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <FileText className="w-5 h-5 text-blue-600" />
+                          <span className="text-sm text-gray-600">Publications</span>
+                        </div>
+                        <p className="text-2xl text-gray-900">{yearPubs.length}</p>
                       </div>
-                      <p className="text-2xl text-gray-900">{yearCitations}</p>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Award className="w-5 h-5 text-blue-600" />
-                        <span className="text-sm text-gray-600">Avg Citations/Pub</span>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingUp className="w-5 h-5 text-blue-600" />
+                          <span className="text-sm text-gray-600">Total Citations</span>
+                        </div>
+                        <p className="text-2xl text-gray-900">{yearCitations}</p>
                       </div>
-                      <p className="text-2xl text-gray-900">
-                        {yearPubs.length > 0 ? (yearCitations / yearPubs.length).toFixed(1) : 0}
-                      </p>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Award className="w-5 h-5 text-blue-600" />
+                          <span className="text-sm text-gray-600">Avg Citations/Pub</span>
+                        </div>
+                        <p className="text-2xl text-gray-900">
+                          {yearPubs.length > 0 ? (yearCitations / yearPubs.length).toFixed(1) : 0}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
         </div>
       )}
     </div>

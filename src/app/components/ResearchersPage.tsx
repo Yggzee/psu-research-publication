@@ -1,75 +1,55 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { User, FileText, Quote, ChevronRight, Search, Shield } from "lucide-react";
+import { User, FileText, Quote, ChevronRight, Search, Shield, RefreshCw } from "lucide-react";
 import { Card, CardContent } from "./ui/card";
-import { mockResearchers } from "../data/mockData";
 import { DEPARTMENTS, DEPARTMENT_COLORS, type Department } from "../utils/chartUtils";
-import { filterFacultyResearchers, getFacultyList, getFacultyPhoto } from "../utils/facultyUtils";
+import { filterFacultyResearchers, getFacultyPhoto } from "../utils/facultyUtils";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Button } from "./ui/button";
+import { useResearchers } from "../hooks/useResearchers";
 
 type SortOption = "citations" | "publications";
 type ViewMode = "all" | "by-department";
 
 export function ResearchersPage() {
   const navigate = useNavigate();
+  const { researchers: dbResearchers, loading, refresh } = useResearchers();
+
   const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("citations");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
-  const [facultyCount, setFacultyCount] = useState(0);
 
-  // Update faculty count when component mounts or when returning from admin page
-  useEffect(() => {
-    const updateFacultyCount = () => {
-      setFacultyCount(getFacultyList().length);
-    };
-    updateFacultyCount();
-
-    // Listen for storage changes (when admin updates faculty list)
-    window.addEventListener('storage', updateFacultyCount);
-    window.addEventListener('focus', updateFacultyCount);
-
-    return () => {
-      window.removeEventListener('storage', updateFacultyCount);
-      window.removeEventListener('focus', updateFacultyCount);
-    };
-  }, []);
+  const facultyCount = dbResearchers.filter((r) => (r as any).isFaculty !== false).length;
 
   // Filter and sort researchers
   const filteredAndSortedResearchers = useMemo(() => {
-    // Apply faculty filter first
-    let filtered = filterFacultyResearchers(mockResearchers);
+    let filtered = filterFacultyResearchers(dbResearchers);
 
-    // Filter by department
     if (selectedDepartment !== "all") {
       filtered = filtered.filter((r) => r.department === selectedDepartment);
     }
 
-    // Filter by search query
     if (searchQuery) {
       filtered = filtered.filter((r) =>
         r.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
-    // Sort
     const sorted = [...filtered].sort((a, b) => {
       if (sortBy === "citations") {
-        return b.totalCitations - a.totalCitations;
+        return (b.totalCitations || 0) - (a.totalCitations || 0);
       } else {
-        return b.totalPublications - a.totalPublications;
+        return (b.totalPublications || 0) - (a.totalPublications || 0);
       }
     });
 
     return sorted;
-  }, [selectedDepartment, searchQuery, sortBy]);
+  }, [dbResearchers, selectedDepartment, searchQuery, sortBy]);
 
-  // Group by department for "by-department" view
   const researchersByDepartment = useMemo(() => {
-    const grouped: Record<string, typeof mockResearchers> = {};
-
+    const grouped: Record<string, typeof dbResearchers> = {};
     DEPARTMENTS.forEach((dept) => {
       const deptResearchers = filteredAndSortedResearchers.filter(
         (r) => r.department === dept
@@ -78,33 +58,37 @@ export function ResearchersPage() {
         grouped[dept] = deptResearchers;
       }
     });
-
     return grouped;
   }, [filteredAndSortedResearchers]);
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl text-gray-900 mb-2">PSU Asingan Researchers</h1>
-        <p className="text-gray-600">
-          Browse faculty members and their research contributions
-        </p>
-        {facultyCount > 0 && (
-          <div className="flex items-center gap-2 mt-2">
-            <Shield className="w-4 h-4 text-blue-600" />
-            <p className="text-sm text-blue-600">
-              Filtered by faculty members ({facultyCount} active)
-            </p>
-          </div>
-        )}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl text-gray-900 mb-1">PSU Asingan Researchers</h1>
+          <p className="text-gray-600">
+            Registered faculty members in the SQLite institutional repository
+          </p>
+          {facultyCount > 0 && (
+            <div className="flex items-center gap-2 mt-2">
+              <Shield className="w-4 h-4 text-blue-600" />
+              <p className="text-sm text-blue-600">
+                Filtered by active faculty members ({facultyCount} active)
+              </p>
+            </div>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={refresh} disabled={loading} className="self-start">
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
       {/* Filter Controls */}
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Search Bar */}
             <div className="md:col-span-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -118,7 +102,6 @@ export function ResearchersPage() {
               </div>
             </div>
 
-            {/* Department Filter */}
             <div>
               <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
                 <SelectTrigger>
@@ -135,7 +118,6 @@ export function ResearchersPage() {
               </Select>
             </div>
 
-            {/* Sort By */}
             <div>
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
                 <SelectTrigger>
@@ -149,7 +131,6 @@ export function ResearchersPage() {
             </div>
           </div>
 
-          {/* View Mode Toggle */}
           <div className="flex gap-2 mt-4">
             <Button
               variant={viewMode === "all" ? "default" : "outline"}
@@ -171,7 +152,6 @@ export function ResearchersPage() {
         </CardContent>
       </Card>
 
-      {/* Results Count */}
       <div className="text-sm text-gray-600">
         Showing {filteredAndSortedResearchers.length} researcher(s)
       </div>
@@ -186,11 +166,10 @@ export function ResearchersPage() {
               onClick={() => navigate(`/dashboard/researcher/${researcher.id}`)}
             >
               <CardContent className="p-6">
-                {/* Researcher Header */}
                 <div className="flex items-start gap-4 mb-6">
-                  {getFacultyPhoto(researcher.name) ? (
+                  {getFacultyPhoto(researcher.name) || (researcher as any).photoUrl ? (
                     <img
-                      src={getFacultyPhoto(researcher.name)}
+                      src={getFacultyPhoto(researcher.name) || (researcher as any).photoUrl}
                       alt={researcher.name}
                       className="w-16 h-16 rounded-full object-cover border-2 border-blue-200 flex-shrink-0"
                     />
@@ -207,7 +186,7 @@ export function ResearchersPage() {
                       <div
                         className="w-3 h-3 rounded"
                         style={{
-                          backgroundColor: DEPARTMENT_COLORS[researcher.department as Department],
+                          backgroundColor: DEPARTMENT_COLORS[researcher.department as Department] || "#6b7280",
                           border: researcher.department === "BIT" ? "1px solid #9CA3AF" : "none",
                         }}
                       />
@@ -217,7 +196,6 @@ export function ResearchersPage() {
                   <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
                 </div>
 
-                {/* Metrics Grid */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-gray-50 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">
@@ -225,7 +203,7 @@ export function ResearchersPage() {
                       <p className="text-xs text-gray-600">Publications</p>
                     </div>
                     <p className="text-2xl text-gray-900">
-                      {researcher.totalPublications}
+                      {researcher.totalPublications || 0}
                     </p>
                   </div>
 
@@ -235,13 +213,12 @@ export function ResearchersPage() {
                       <p className="text-xs text-gray-600">Citations</p>
                     </div>
                     <p className="text-2xl text-gray-900">
-                      {researcher.totalCitations}
+                      {researcher.totalCitations || 0}
                     </p>
                   </div>
                 </div>
 
-                {/* Recent Publication Preview */}
-                {researcher.publications.length > 0 && (
+                {researcher.publications && researcher.publications.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-gray-200">
                     <p className="text-xs text-gray-500 mb-2">Most Recent Publication</p>
                     <p className="text-sm text-gray-700 line-clamp-2">
@@ -261,35 +238,32 @@ export function ResearchersPage() {
       {/* Researchers Grid - By Department View */}
       {viewMode === "by-department" && (
         <div className="space-y-8">
-          {Object.entries(researchersByDepartment).map(([dept, researchers]) => (
+          {Object.entries(researchersByDepartment).map(([dept, deptResearchers]) => (
             <div key={dept}>
-              {/* Department Header */}
               <div className="flex items-center gap-3 mb-4">
                 <div
                   className="w-6 h-6 rounded"
                   style={{
-                    backgroundColor: DEPARTMENT_COLORS[dept as Department],
+                    backgroundColor: DEPARTMENT_COLORS[dept as Department] || "#6b7280",
                     border: dept === "BIT" ? "1px solid #9CA3AF" : "none",
                   }}
                 />
                 <h2 className="text-2xl text-gray-900">{dept}</h2>
-                <span className="text-sm text-gray-600">({researchers.length} researchers)</span>
+                <span className="text-sm text-gray-600">({deptResearchers.length} researchers)</span>
               </div>
 
-              {/* Department Researchers Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {researchers.map((researcher) => (
+                {deptResearchers.map((researcher) => (
                   <Card
                     key={researcher.id}
                     className="hover:shadow-lg transition-all cursor-pointer border-2 hover:border-blue-300"
                     onClick={() => navigate(`/dashboard/researcher/${researcher.id}`)}
                   >
                     <CardContent className="p-6">
-                      {/* Researcher Header */}
                       <div className="flex items-start gap-4 mb-6">
-                        {getFacultyPhoto(researcher.name) ? (
+                        {getFacultyPhoto(researcher.name) || (researcher as any).photoUrl ? (
                           <img
-                            src={getFacultyPhoto(researcher.name)}
+                            src={getFacultyPhoto(researcher.name) || (researcher as any).photoUrl}
                             alt={researcher.name}
                             className="w-16 h-16 rounded-full object-cover border-2 border-blue-200 flex-shrink-0"
                           />
@@ -299,49 +273,22 @@ export function ResearchersPage() {
                           </div>
                         )}
                         <div className="flex-1">
-                          <h3 className="text-xl text-gray-900 mb-1">
-                            {researcher.name}
-                          </h3>
-                          <p className="text-sm text-gray-600">{researcher.affiliation}</p>
+                          <h3 className="text-xl text-gray-900 mb-1">{researcher.name}</h3>
+                          <p className="text-sm text-gray-600">{researcher.affiliation || "PSU Asingan"}</p>
                         </div>
                         <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
                       </div>
 
-                      {/* Metrics Grid */}
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <FileText className="w-4 h-4 text-gray-500" />
-                            <p className="text-xs text-gray-600">Publications</p>
-                          </div>
-                          <p className="text-2xl text-gray-900">
-                            {researcher.totalPublications}
-                          </p>
+                          <p className="text-xs text-gray-600">Publications</p>
+                          <p className="text-2xl text-gray-900">{researcher.totalPublications || 0}</p>
                         </div>
-
                         <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Quote className="w-4 h-4 text-gray-500" />
-                            <p className="text-xs text-gray-600">Citations</p>
-                          </div>
-                          <p className="text-2xl text-gray-900">
-                            {researcher.totalCitations}
-                          </p>
+                          <p className="text-xs text-gray-600">Citations</p>
+                          <p className="text-2xl text-gray-900">{researcher.totalCitations || 0}</p>
                         </div>
                       </div>
-
-                      {/* Recent Publication Preview */}
-                      {researcher.publications.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <p className="text-xs text-gray-500 mb-2">Most Recent Publication</p>
-                          <p className="text-sm text-gray-700 line-clamp-2">
-                            {researcher.publications[0].title}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {researcher.publications[0].year} • {researcher.publications[0].citations} citations
-                          </p>
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -351,36 +298,18 @@ export function ResearchersPage() {
         </div>
       )}
 
-      {/* No Results */}
-      {filteredAndSortedResearchers.length === 0 && (
+      {/* Empty State */}
+      {filteredAndSortedResearchers.length === 0 && !loading && (
         <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-gray-600">No researchers found matching your filters.</p>
+          <CardContent className="py-12 text-center text-gray-500">
+            <User className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+            <p className="text-base font-medium">No registered researchers found</p>
+            <p className="text-sm mt-1 text-gray-400">
+              The administrator can register researchers via the Admin Panel.
+            </p>
           </CardContent>
         </Card>
       )}
-
-      {/* Info Card */}
-      <Card className="bg-blue-50 border-blue-100 mt-8">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-3">
-            <div className="bg-blue-100 rounded-full p-2">
-              <User className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="text-sm text-blue-900 mb-1">About This Directory</h3>
-              <p className="text-sm text-blue-800">
-                This directory showcases faculty members at Pangasinan State University - Asingan Campus.
-                Click on any researcher card to view their complete publication list, citation metrics,
-                and detailed impact analysis.
-              </p>
-              <p className="text-xs text-blue-700 mt-3">
-                Note: Data is synchronized with Google Scholar to provide up-to-date research metrics.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

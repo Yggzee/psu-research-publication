@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import psuLogo from "figma:asset/0f3e65de85ff26584e9a3039d47bcf17ff6e6368.png";
 import psuBuilding from "../../imports/psu_newbuilding.jpg";
 import { getManagedResearchers, setCurrentUser } from "../utils/researchStore";
+import { apiService } from "../services/api.service";
 
 export function LoginScreen() {
   const navigate = useNavigate();
@@ -16,35 +17,74 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const instructor = getManagedResearchers().find(
-      (member) =>
-        member.instructorId.toLowerCase() === email.trim().toLowerCase() &&
-        member.password === password,
-    );
+    setLoginError("");
+    setIsLoading(true);
 
-    if (instructor) {
-      setCurrentUser({
-        role: "instructor",
-        instructorId: instructor.instructorId,
-        name: instructor.name,
-        department: instructor.department,
-      });
-      navigate("/dashboard/search-engine");
-      return;
+    const inputId = email.trim();
+
+    try {
+      // 1. Try real SQLite Database authentication
+      const res = await apiService.login(inputId, password);
+      if (res && res.user) {
+        setCurrentUser({
+          id: res.user.id,
+          role: res.user.role,
+          name: res.user.name,
+          username: res.user.username,
+          instructorId: res.user.instructorId,
+          department: res.user.department,
+          isFaculty: res.user.isFaculty,
+          photoUrl: res.user.photoUrl,
+        });
+
+        if (res.user.role === "admin") {
+          navigate("/dashboard");
+        } else {
+          navigate("/dashboard/search-engine");
+        }
+        return;
+      }
+    } catch (err: any) {
+      console.warn("API login failed, checking local credentials fallback:", err);
+      // 2. Local Fallback for offline usage
+      const instructor = getManagedResearchers().find(
+        (member) =>
+          (member.instructorId?.toLowerCase() === inputId.toLowerCase() ||
+           member.name.toLowerCase() === inputId.toLowerCase() ||
+           (member as any).email?.toLowerCase() === inputId.toLowerCase()) &&
+          member.password === password,
+      );
+
+      if (instructor) {
+        setCurrentUser({
+          role: "instructor",
+          instructorId: instructor.instructorId,
+          name: instructor.name,
+          department: instructor.department,
+          isFaculty: instructor.isFaculty,
+          photoUrl: instructor.photoUrl,
+        });
+        navigate("/dashboard/search-engine");
+        return;
+      }
+
+      if (
+        (inputId.toLowerCase() === "admin" || inputId.toLowerCase() === "admin@psu.edu.ph") &&
+        password === "admin"
+      ) {
+        setCurrentUser({ role: "admin", name: "Administrator", username: "admin" });
+        navigate("/dashboard");
+        return;
+      }
+
+      setLoginError(err.message || "Invalid login. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
     }
-
-    if (
-      (email.trim().toLowerCase() === "admin" || email.trim().toLowerCase() === "admin@psu.edu.ph") &&
-      password === "admin"
-    ) {
-      setCurrentUser({ role: "admin", name: "Admin User" });
-      navigate("/dashboard");
-      return;
-    }
-
-    setLoginError("Invalid login. Use your instructor ID or administrator credentials.");
   };
 
   return (
@@ -130,7 +170,7 @@ export function LoginScreen() {
                   Pangasinan State University – Asingan Campus
                 </p>
                 <p className="mt-2 text-xs text-gray-500">
-                  Admin demo: admin / admin • Instructor demo: PSU-001 / password
+                  Default admin: admin / admin
                 </p>
               </div>
             </CardContent>

@@ -1,9 +1,41 @@
-import { API_CONFIG, API_ENDPOINTS } from '../config/api.config';
-import { Researcher, Publication } from '../data/mockData';
+import { API_CONFIG } from '../config/api.config';
+import type { Publication, Researcher } from '../data/mockData';
+
+export interface DashboardStatsResponse {
+  totalResearchers: number;
+  totalPublications: number;
+  totalCitations: number;
+  averageImpactScore: number;
+  topResearchers: Array<{
+    id: string;
+    name: string;
+    department: string;
+    citations: number;
+    publications: number;
+  }>;
+  deptYearStats: Array<{
+    department: string;
+    year: number;
+    publications: number;
+    citations: number;
+  }>;
+}
+
+export interface ScholarSearchResult {
+  id: string;
+  title: string;
+  authors: string[];
+  journal: string;
+  year: number;
+  citations: number;
+  abstract?: string;
+  url?: string;
+  fromCache?: boolean;
+}
 
 /**
  * Base API Service
- * Handles all HTTP requests to the Laravel backend
+ * Handles all HTTP requests to the SQLite Database API
  */
 class ApiService {
   private baseUrl: string;
@@ -12,9 +44,6 @@ class ApiService {
     this.baseUrl = API_CONFIG.BASE_URL;
   }
 
-  /**
-   * Generic fetch wrapper with error handling
-   */
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -32,86 +61,137 @@ class ApiService {
       });
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        const errorBody = await response.json().catch(() => null);
+        throw new Error(errorBody?.error || `API Error: ${response.status} ${response.statusText}`);
       }
 
       return await response.json();
     } catch (error) {
-      console.error('API Request Failed:', error);
+      console.error(`API Request to ${url} failed:`, error);
       throw error;
     }
   }
 
-  /**
-   * Authentication
-   */
-  async login(email: string, password: string) {
-    return this.request(API_ENDPOINTS.LOGIN, {
+  // 1. Authentication
+  async login(loginId: string, password: string) {
+    return this.request<{
+      user: {
+        id: string;
+        role: 'admin' | 'instructor';
+        name: string;
+        username: string;
+        email?: string;
+        instructorId: string;
+        department?: string;
+        isFaculty: boolean;
+        photoUrl?: string;
+      };
+    }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username: loginId, password }),
     });
   }
 
-  /**
-   * Get all researchers
-   */
+  // 2. Dashboard
+  async getDashboardStats(): Promise<DashboardStatsResponse> {
+    return this.request<DashboardStatsResponse>('/dashboard/stats');
+  }
+
+  // 3. Researchers
   async getResearchers(): Promise<Researcher[]> {
-    return this.request<Researcher[]>(API_ENDPOINTS.RESEARCHERS);
+    return this.request<Researcher[]>('/researchers');
   }
 
-  /**
-   * Get researcher by ID
-   */
   async getResearcherById(id: string): Promise<Researcher> {
-    return this.request<Researcher>(API_ENDPOINTS.RESEARCHER_BY_ID(id));
+    return this.request<Researcher>(`/researchers/${id}`);
   }
 
-  /**
-   * Get researcher publications
-   */
-  async getResearcherPublications(id: string): Promise<Publication[]> {
-    return this.request<Publication[]>(API_ENDPOINTS.RESEARCHER_PUBLICATIONS(id));
-  }
-
-  /**
-   * Get publication by ID
-   */
-  async getPublicationById(id: string): Promise<Publication> {
-    return this.request<Publication>(API_ENDPOINTS.PUBLICATION_BY_ID(id));
-  }
-
-  /**
-   * Get dashboard statistics
-   */
-  async getDashboardStats() {
-    return this.request(API_ENDPOINTS.DASHBOARD_STATS);
-  }
-
-  /**
-   * Trigger Google Scholar scraping via Apify
-   * This calls your Laravel backend, which then calls Apify
-   */
-  async triggerScrapingJob(researcherName: string, scholarUrl?: string) {
-    return this.request(API_ENDPOINTS.TRIGGER_SCRAPING, {
+  async createResearcher(data: {
+    firstName: string;
+    lastName: string;
+    instructorId: string;
+    password: string;
+    department: string;
+    isFaculty: boolean;
+    photoUrl?: string;
+    email?: string;
+  }) {
+    return this.request('/researchers', {
       method: 'POST',
-      body: JSON.stringify({ researcherName, scholarUrl }),
+      body: JSON.stringify(data),
     });
   }
 
-  /**
-   * Check scraping job status
-   */
-  async getScrapingStatus(jobId: string) {
-    return this.request(API_ENDPOINTS.SCRAPING_STATUS(jobId));
+  async updateResearcher(id: string, data: Partial<{
+    firstName: string;
+    lastName: string;
+    password?: string;
+    department: string;
+    isFaculty: boolean;
+    photoUrl?: string;
+  }>) {
+    return this.request(`/researchers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   }
 
-  /**
-   * Search Google Scholar
-   */
-  async searchGoogleScholar(query: string) {
-    return this.request(API_ENDPOINTS.SEARCH_GOOGLE_SCHOLAR, {
+  async deleteResearcher(id: string) {
+    return this.request(`/researchers/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // 4. Publications
+  async getPublications(): Promise<Publication[]> {
+    return this.request<Publication[]>('/publications');
+  }
+
+  async getPublicationById(id: string): Promise<Publication> {
+    return this.request<Publication>(`/publications/${id}`);
+  }
+
+  async createPublication(data: Partial<Publication> & {
+    ownerId?: string;
+    ownerName?: string;
+    source?: string;
+    approvalStatus?: string;
+    researchStatus?: string;
+    isPublic?: boolean;
+    fileName?: string;
+  }) {
+    return this.request('/publications', {
       method: 'POST',
-      body: JSON.stringify({ query }),
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePublication(id: string, data: Record<string, unknown>) {
+    return this.request(`/publications/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // 5. Google Scholar & Scraper Caching
+  async searchGoogleScholar(query: string): Promise<{
+    results: ScholarSearchResult[];
+    fromCache: boolean;
+    count: number;
+    message: string;
+  }> {
+    return this.request(`/search/google-scholar?q=${encodeURIComponent(query)}`);
+  }
+
+  // 6. Claims
+  async getClaims() {
+    return this.request('/claims');
+  }
+
+  async reviewClaim(id: string, status: 'approved' | 'rejected') {
+    return this.request(`/claims/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
     });
   }
 }

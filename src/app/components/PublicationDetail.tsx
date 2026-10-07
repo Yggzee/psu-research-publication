@@ -1,26 +1,46 @@
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Quote, TrendingUp, ExternalLink, Calendar, Users, BookOpen } from "lucide-react";
+import { ArrowLeft, Quote, TrendingUp, ExternalLink, Calendar, Users, BookOpen, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { mockResearchers, type Publication } from "../data/mockData";
+import { apiService } from "../services/api.service";
+import type { Publication } from "../data/mockData";
 
 export function PublicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // Find the publication across all researchers
-  let publication: Publication | undefined;
-  let researcherName: string | undefined;
+  const [publication, setPublication] = useState<Publication | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  for (const researcher of mockResearchers) {
-    const found = researcher.publications.find((pub) => pub.id === id);
-    if (found) {
-      publication = found;
-      researcherName = researcher.name;
-      break;
-    }
+  useEffect(() => {
+    if (!id) return;
+
+    const loadPublication = async () => {
+      setLoading(true);
+      try {
+        const data = await apiService.getPublicationById(id);
+        if (data) {
+          setPublication(data);
+        }
+      } catch (err) {
+        console.warn("Failed to load publication from database:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPublication();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      </div>
+    );
   }
 
   if (!publication) {
@@ -36,6 +56,8 @@ export function PublicationDetail() {
 
   const citationTrendData = publication.citationTrend || [];
   const citingPapers = publication.citingPapers || [];
+  const currentYear = new Date().getFullYear();
+  const yearsActive = Math.max(currentYear - publication.year, 1);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -59,7 +81,11 @@ export function PublicationDetail() {
               <Users className="w-5 h-5 text-gray-500 mt-0.5" />
               <div>
                 <p className="text-sm text-gray-600 mb-1">Authors</p>
-                <p className="text-gray-900">{publication.authors.join(", ")}</p>
+                <p className="text-gray-900">
+                  {Array.isArray(publication.authors)
+                    ? publication.authors.join(", ")
+                    : publication.authors}
+                </p>
               </div>
             </div>
 
@@ -108,11 +134,11 @@ export function PublicationDetail() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Impact Score */}
-          {publication.impactScore && (
+          {(publication as any).impactScore != null && (publication as any).impactScore > 0 && (
             <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Research Impact Score</p>
-                <p className="text-3xl text-green-700">{publication.impactScore}/10</p>
+                <p className="text-3xl text-green-700">{(publication as any).impactScore}/10</p>
               </div>
               <div className="w-32 h-32">
                 <svg viewBox="0 0 36 36" className="transform -rotate-90">
@@ -127,7 +153,7 @@ export function PublicationDetail() {
                     fill="none"
                     stroke="#10b981"
                     strokeWidth="3"
-                    strokeDasharray={`${(publication.impactScore / 10) * 100}, 100`}
+                    strokeDasharray={`${((publication as any).impactScore / 10) * 100}, 100`}
                   />
                 </svg>
               </div>
@@ -175,7 +201,7 @@ export function PublicationDetail() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {citingPapers.map((paper, index) => (
+              {citingPapers.map((paper: any, index: number) => (
                 <div
                   key={`citing-${id}-${index}`}
                   className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all"
@@ -210,7 +236,7 @@ export function PublicationDetail() {
               <Quote className="w-8 h-8 text-blue-600 mx-auto mb-2" />
               <p className="text-sm text-gray-600 mb-1">Average Citations/Year</p>
               <p className="text-2xl text-gray-900">
-                {(publication.citations / (2026 - publication.year)).toFixed(1)}
+                {(publication.citations / yearsActive).toFixed(1)}
               </p>
             </div>
           </CardContent>
@@ -236,7 +262,9 @@ export function PublicationDetail() {
             <div className="text-center">
               <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
               <p className="text-sm text-gray-600 mb-1">Co-Authors</p>
-              <p className="text-2xl text-gray-900">{publication.authors.length}</p>
+              <p className="text-2xl text-gray-900">
+                {Array.isArray(publication.authors) ? publication.authors.length : 1}
+              </p>
             </div>
           </CardContent>
         </Card>

@@ -7,14 +7,14 @@
  */
 
 export const API_CONFIG = {
-  // Change this to your Laravel API base URL
-  BASE_URL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api',
+  // Use relative /api endpoint (handled by SQLite plugin) or custom remote host
+  BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api',
   
   // API timeout in milliseconds
   TIMEOUT: 30000,
   
-  // Enable/disable mock data fallback during development
-  USE_MOCK_DATA: import.meta.env.VITE_USE_MOCK_DATA === 'true' || true,
+  // Connect directly to SQLite database - No mock data
+  USE_MOCK_DATA: false,
 };
 
 /**

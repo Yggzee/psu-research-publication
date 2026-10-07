@@ -1,49 +1,41 @@
 import { useState, useEffect } from 'react';
 import { apiService } from '../services/api.service';
-import { mockResearchers, Researcher } from '../data/mockData';
-import { API_CONFIG } from '../config/api.config';
+import type { Researcher } from '../data/mockData';
 
 /**
- * Custom hook to fetch researchers
- * Automatically falls back to mock data if API fails or USE_MOCK_DATA is true
+ * Custom hook to fetch researchers from SQLite Database API
  */
 export function useResearchers() {
   const [researchers, setResearchers] = useState<Researcher[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const refresh = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiService.getResearchers();
+      setResearchers(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.warn('Failed to load researchers from database:', err);
+      setError('Could not connect to database.');
+      setResearchers([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchResearchers = async () => {
-      setLoading(true);
-      setError(null);
-
-      // Use mock data if enabled in config
-      if (API_CONFIG.USE_MOCK_DATA) {
-        setResearchers(mockResearchers);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const data = await apiService.getResearchers();
-        setResearchers(data);
-      } catch (err) {
-        console.error('Failed to fetch researchers, using mock data:', err);
-        setError('Failed to load researchers from API. Using cached data.');
-        setResearchers(mockResearchers); // Fallback to mock data
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchResearchers();
+    refresh();
+    window.addEventListener('storage', refresh);
+    return () => window.removeEventListener('storage', refresh);
   }, []);
 
-  return { researchers, loading, error };
+  return { researchers, loading, error, refresh };
 }
 
 /**
- * Custom hook to fetch a single researcher by ID
+ * Custom hook to fetch a single researcher by ID from SQLite Database API
  */
 export function useResearcher(id: string) {
   const [researcher, setResearcher] = useState<Researcher | null>(null);
@@ -51,26 +43,17 @@ export function useResearcher(id: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
     const fetchResearcher = async () => {
       setLoading(true);
       setError(null);
-
-      // Use mock data if enabled in config
-      if (API_CONFIG.USE_MOCK_DATA) {
-        const found = mockResearchers.find((r) => r.id === id);
-        setResearcher(found || null);
-        setLoading(false);
-        return;
-      }
-
       try {
         const data = await apiService.getResearcherById(id);
-        setResearcher(data);
-      } catch (err) {
-        console.error('Failed to fetch researcher, using mock data:', err);
-        setError('Failed to load researcher from API. Using cached data.');
-        const found = mockResearchers.find((r) => r.id === id);
-        setResearcher(found || null);
+        setResearcher(data || null);
+      } catch (err: any) {
+        console.warn('Failed to load researcher from database:', err);
+        setError('Researcher not found in database.');
+        setResearcher(null);
       } finally {
         setLoading(false);
       }

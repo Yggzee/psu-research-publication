@@ -1,78 +1,78 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { FileText, TrendingUp, Calendar, User, Search, Shield } from "lucide-react";
+import { FileText, TrendingUp, Calendar, User, Search, Shield, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { publications } from "../data/mockData";
 import { filterFacultyPublications, getFacultyList } from "../utils/facultyUtils";
+import { apiService } from "../services/api.service";
+import type { Publication } from "../data/mockData";
 
 type SortOption = "impact-high" | "impact-low" | "citations-high" | "citations-low" | "year-new" | "year-old";
 
 export function PublicationsPage() {
   const navigate = useNavigate();
+  const [publicationsList, setPublicationsList] = useState<Publication[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<SortOption>("impact-high");
+  const [sortBy, setSortBy] = useState<SortOption>("year-new");
   const [facultyCount, setFacultyCount] = useState(0);
 
-  // Update faculty count when component mounts or when returning from admin page
+  const loadPublications = async () => {
+    setLoading(true);
+    try {
+      const data = await apiService.getPublications();
+      setPublicationsList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("Failed to load publications from database:", err);
+      setPublicationsList([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const updateFacultyCount = () => {
-      setFacultyCount(getFacultyList().length);
-    };
-    updateFacultyCount();
-
-    // Listen for storage changes (when admin updates faculty list)
-    window.addEventListener('storage', updateFacultyCount);
-    window.addEventListener('focus', updateFacultyCount);
-
-    return () => {
-      window.removeEventListener('storage', updateFacultyCount);
-      window.removeEventListener('focus', updateFacultyCount);
-    };
+    loadPublications();
+    setFacultyCount(getFacultyList().length);
+    window.addEventListener("research-records-updated", loadPublications);
+    return () => window.removeEventListener("research-records-updated", loadPublications);
   }, []);
 
-  // Get all publications from all researchers
   const allPublications = useMemo(() => {
-    const pubs = publications.flatMap(pub =>
-      pub.publications.map(p => ({
-        ...p,
-        authorName: pub.authorName,
-        authorId: pub.authorId,
-      }))
-    );
+    return filterFacultyPublications(publicationsList);
+  }, [publicationsList]);
 
-    // Apply faculty filter
-    return filterFacultyPublications(pubs);
-  }, []);
+  // Compute years based on actual database publications
+  const years = useMemo(() => {
+    if (allPublications.length === 0) return [];
+    const pubYears = allPublications.map((p) => p.year);
+    const earliest = Math.min(...pubYears);
+    const latest = Math.max(...pubYears, new Date().getFullYear());
+    const result = [];
+    for (let y = latest; y >= earliest; y--) {
+      result.push(y);
+    }
+    return result;
+  }, [allPublications]);
 
-  // Keep the filter current even when a year has no publications yet.
-  const earliestYear = Math.min(...allPublications.map((publication) => publication.year));
-  const latestYear = Math.max(new Date().getFullYear(), 2026);
-  const years = Array.from(
-    { length: latestYear - earliestYear + 1 },
-    (_, index) => latestYear - index,
-  );
-
-  // Filter and sort publications
   const filteredAndSortedPublications = useMemo(() => {
-    // Filter
-    let filtered = allPublications.filter(pub => {
-      const matchesSearch = pub.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            pub.journal.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            pub.authorName.toLowerCase().includes(searchQuery.toLowerCase());
+    let filtered = allPublications.filter((pub) => {
+      const authorText = Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors || "";
+      const matchesSearch =
+        pub.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pub.journal.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        authorText.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesYear = selectedYear === "all" || pub.year.toString() === selectedYear;
       return matchesSearch && matchesYear;
     });
 
-    // Sort
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
         case "impact-high":
-          return (b.impactFactor || 0) - (a.impactFactor || 0);
+          return ((b as any).impact_score || b.impactScore || 0) - ((a as any).impact_score || a.impactScore || 0);
         case "impact-low":
-          return (a.impactFactor || 0) - (b.impactFactor || 0);
+          return ((a as any).impact_score || a.impactScore || 0) - ((b as any).impact_score || b.impactScore || 0);
         case "citations-high":
           return b.citations - a.citations;
         case "citations-low":
@@ -92,17 +92,23 @@ export function PublicationsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl text-gray-900 mb-2">Publications</h1>
-        <p className="text-gray-600">Browse and explore research publications from PSU Asingan faculty</p>
-        {facultyCount > 0 && (
-          <div className="flex items-center gap-2 mt-2">
-            <Shield className="w-4 h-4 text-blue-600" />
-            <p className="text-sm text-blue-600">
-              Showing publications with faculty authors only ({facultyCount} faculty members)
-            </p>
-          </div>
-        )}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl text-gray-900 mb-1">Publications</h1>
+          <p className="text-gray-600">Explore research publications registered in the SQLite repository</p>
+          {facultyCount > 0 && (
+            <div className="flex items-center gap-2 mt-2">
+              <Shield className="w-4 h-4 text-blue-600" />
+              <p className="text-sm text-blue-600">
+                Filtered by PSU faculty publications ({facultyCount} faculty members)
+              </p>
+            </div>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={loadPublications} disabled={loading} className="self-start">
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -113,8 +119,8 @@ export function PublicationsPage() {
             <FileText className="w-5 h-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-gray-900">{allPublications.length}</div>
-            <p className="text-xs text-gray-600 mt-1">Across all researchers</p>
+            <div className="text-2xl text-gray-900 font-semibold">{allPublications.length}</div>
+            <p className="text-xs text-gray-600 mt-1">Across all faculty</p>
           </CardContent>
         </Card>
 
@@ -124,7 +130,7 @@ export function PublicationsPage() {
             <TrendingUp className="w-5 h-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-gray-900">
+            <div className="text-2xl text-gray-900 font-semibold">
               {allPublications.reduce((sum, p) => sum + p.citations, 0)}
             </div>
             <p className="text-xs text-gray-600 mt-1">Combined impact</p>
@@ -137,9 +143,9 @@ export function PublicationsPage() {
             <Calendar className="w-5 h-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-gray-900">{years.length}</div>
+            <div className="text-2xl text-gray-900 font-semibold">{years.length}</div>
             <p className="text-xs text-gray-600 mt-1">
-              {Math.min(...years)} - {Math.max(...years)}
+              {years.length > 0 ? `${Math.min(...years)} - ${Math.max(...years)}` : "No years active yet"}
             </p>
           </CardContent>
         </Card>
@@ -149,8 +155,7 @@ export function PublicationsPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Search */}
-            <div className="md:col-span-1 relative">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <Input
                 placeholder="Search publications..."
@@ -160,7 +165,6 @@ export function PublicationsPage() {
               />
             </div>
 
-            {/* Year Filter */}
             <div>
               <select
                 value={selectedYear}
@@ -168,25 +172,24 @@ export function PublicationsPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="all">All Years</option>
-                {years.map(year => (
-                  <option key={year} value={year}>{year}</option>
+                {years.map((year) => (
+                  <option key={year} value={year.toString()}>{year}</option>
                 ))}
               </select>
             </div>
 
-            {/* Sort Dropdown */}
             <div>
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="impact-high">Most Impactful</SelectItem>
-                  <SelectItem value="impact-low">Least Impactful</SelectItem>
-                  <SelectItem value="citations-high">Most Citations</SelectItem>
-                  <SelectItem value="citations-low">Least Citations</SelectItem>
                   <SelectItem value="year-new">By Year (Newest First)</SelectItem>
                   <SelectItem value="year-old">By Year (Oldest First)</SelectItem>
+                  <SelectItem value="citations-high">Most Citations</SelectItem>
+                  <SelectItem value="citations-low">Least Citations</SelectItem>
+                  <SelectItem value="impact-high">Most Impactful</SelectItem>
+                  <SelectItem value="impact-low">Least Impactful</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -198,7 +201,7 @@ export function PublicationsPage() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-600">
-            Showing {filteredAndSortedPublications.length} publication{filteredAndSortedPublications.length !== 1 ? 's' : ''}
+            Showing {filteredAndSortedPublications.length} publication{filteredAndSortedPublications.length !== 1 ? "s" : ""}
           </p>
         </div>
 
@@ -206,27 +209,17 @@ export function PublicationsPage() {
           <Card
             key={pub.id}
             className="cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => navigate(`/dashboard/publication/${pub.id}`)}
           >
             <CardContent className="pt-6">
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <h3
-                    className="text-gray-900 mb-2 hover:text-blue-600 cursor-pointer"
-                    onClick={() => navigate(`/dashboard/publication/${pub.id}`)}
-                  >
+                  <h3 className="text-gray-900 font-medium mb-2 hover:text-blue-600">
                     {pub.title}
                   </h3>
                   <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
                     <User className="w-4 h-4" />
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/dashboard/researcher/${pub.authorId}`);
-                      }}
-                      className="hover:text-blue-600 hover:underline"
-                    >
-                      {pub.authorName}
-                    </button>
+                    <span>{Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors}</span>
                   </div>
                   <p className="text-sm text-gray-600 mb-3">
                     {pub.journal} • {pub.year}
@@ -236,9 +229,9 @@ export function PublicationsPage() {
                       <TrendingUp className="w-4 h-4 text-blue-600" />
                       <span className="text-gray-700">{pub.citations} citations</span>
                     </div>
-                    {pub.impactFactor && (
-                      <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
-                        Impact: {pub.impactFactor}
+                    {((pub as any).impact_score || pub.impactScore) && (
+                      <div className="bg-green-100 text-green-700 px-3 py-0.5 rounded-full text-xs font-medium">
+                        Impact: {(pub as any).impact_score || pub.impactScore}
                       </div>
                     )}
                   </div>
@@ -248,12 +241,14 @@ export function PublicationsPage() {
           </Card>
         ))}
 
-        {filteredAndSortedPublications.length === 0 && (
+        {filteredAndSortedPublications.length === 0 && !loading && (
           <Card>
-            <CardContent className="py-12 text-center">
-              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600">No publications found</p>
-              <p className="text-sm text-gray-500 mt-1">Try adjusting your search criteria</p>
+            <CardContent className="py-12 text-center text-gray-500">
+              <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-base font-medium">No publications found</p>
+              <p className="text-sm text-gray-400 mt-1">
+                Publications added by faculty or saved from Google Scholar will appear here.
+              </p>
             </CardContent>
           </Card>
         )}
