@@ -16,6 +16,7 @@ export function SearchEngine() {
   const [claimedIds, setClaimedIds] = useState<string[]>([]);
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [isFromCache, setIsFromCache] = useState(false);
+  const [requiresApify, setRequiresApify] = useState(false);
 
   const currentUser = getCurrentUser();
   const isInstructor = currentUser.role === "instructor";
@@ -43,16 +44,19 @@ export function SearchEngine() {
     setHasSearched(true);
     setIsSearching(true);
     setCacheNotice(null);
+    setRequiresApify(false);
 
     try {
       // Calls SQLite Search API - checks cached scraped table first!
       const data = await apiService.searchGoogleScholar(searchQuery.trim());
       setSearchResults(data.results || []);
       setIsFromCache(Boolean(data.fromCache));
-      setCacheNotice(data.message || (data.fromCache ? "Loaded from database cache" : "Scraped and stored in database"));
+      setRequiresApify(Boolean(data.requiresApify));
+      setCacheNotice(data.message || (data.fromCache ? "Loaded from database cache" : ""));
     } catch (err: any) {
-      console.warn("API Search failed, using offline search fallback:", err);
+      console.warn("API Search failed:", err);
       setSearchResults([]);
+      setRequiresApify(false);
       setCacheNotice("Could not contact search service. Please check network.");
     } finally {
       setIsSearching(false);
@@ -184,8 +188,28 @@ export function SearchEngine() {
         </Card>
       </form>
 
+      {/* Apify Not Connected Notice */}
+      {requiresApify && searchResults.length === 0 && !isSearching && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-amber-900">Apify Google Scholar Scraper Not Connected</h4>
+                <p className="text-sm text-amber-800">
+                  {cacheNotice || "Configure your APIFY_TOKEN in .env to enable live scraping from Google Scholar."}
+                </p>
+                <p className="text-xs text-amber-700 mt-2">
+                  Once connected with an Apify API token, searched papers will automatically scrape and be permanently cached in your SQLite database so you never need to call the scraper again for the same research.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Cache Status Badge */}
-      {cacheNotice && (
+      {cacheNotice && !requiresApify && searchResults.length > 0 && (
         <div className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${
           isFromCache ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-blue-50 text-blue-800 border-blue-200"
         }`}>
@@ -293,7 +317,7 @@ export function SearchEngine() {
             );
           })}
 
-          {searchResults.length === 0 && !isSearching && (
+          {searchResults.length === 0 && !isSearching && !requiresApify && (
             <Card>
               <CardContent className="py-12 text-center text-gray-500">
                 <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />

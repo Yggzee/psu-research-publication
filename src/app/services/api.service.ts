@@ -178,6 +178,7 @@ class ApiService {
     results: ScholarSearchResult[];
     fromCache: boolean;
     count: number;
+    requiresApify?: boolean;
     message: string;
   }> {
     return this.request(`/search/google-scholar?q=${encodeURIComponent(query)}`);

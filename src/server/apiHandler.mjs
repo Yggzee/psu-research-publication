@@ -470,66 +470,114 @@ export async function handleApiRequest(req, res) {
           })),
           fromCache: true,
           count: cached.length,
-          message: 'Loaded instantly from database cache (0 scraper calls)',
+          message: 'Loaded instantly from local database cache (0 scraper calls)',
         });
       }
 
-      // STEP 2: If not in cache, generate/scrape results and IMMEDIATELY save to SQLite!
-      // Here we simulate Google Scholar scraper response for the query, and permanently store it
-      const newScraped = [
-        {
-          id: `gs-${Date.now()}-1`,
-          title: `Advancements in ${query.charAt(0).toUpperCase() + query.slice(1)}: Practical Implementations`,
-          authors: ['Dr. Maria Santos', 'John Reyes'],
-          journal: 'International Journal of Research Studies',
-          year: new Date().getFullYear(),
-          citations: 14,
-          abstract: `A comprehensive investigation into ${query} with analytical benchmarks and field studies.`,
-          url: 'https://scholar.google.com',
-          search_query: query,
-          scraped_at: new Date().toISOString(),
-        },
-        {
-          id: `gs-${Date.now()}-2`,
-          title: `Empirical Analysis of ${query.charAt(0).toUpperCase() + query.slice(1)} in Regional Education`,
-          authors: ['Roberto Cruz', 'Ana Lopez'],
-          journal: 'Philippine Educational Review',
-          year: new Date().getFullYear() - 1,
-          citations: 27,
-          abstract: `Field results evaluating ${query} methodologies in northern Luzon higher education.`,
-          url: 'https://scholar.google.com',
-          search_query: query,
-          scraped_at: new Date().toISOString(),
-        }
-      ];
+      // STEP 2: Apify Google Scholar Scraper Integration
+      const apifyToken = process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN;
+      const apifyActorId = process.env.APIFY_ACTOR_ID || 'dan.k/google-scholar-scraper';
 
-      // Save every scraped item into the database so we never call scraper again for it!
-      const insertScraped = db.prepare(`
-        INSERT OR IGNORE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, search_query, scraped_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      for (const item of newScraped) {
-        insertScraped.run(
-          item.id,
-          item.title,
-          JSON.stringify(item.authors),
-          item.journal,
-          item.year,
-          item.citations,
-          item.abstract,
-          item.url,
-          query,
-          item.scraped_at
-        );
+      if (!apifyToken) {
+        // Apify is not connected yet - Do NOT fabricate fake data
+        return sendJson(200, {
+          results: [],
+          fromCache: false,
+          count: 0,
+          requiresApify: true,
+          message: 'Apify Google Scholar Scraper is not connected yet. Configure your APIFY_TOKEN in .env to enable live scraping.',
+        });
       }
 
-      return sendJson(200, {
-        results: newScraped,
-        fromCache: false,
-        count: newScraped.length,
-        message: 'Scraped and permanently stored in database. Future searches will load from cache.',
-      });
+      try {
+        // Trigger Apify Google Scholar Actor run synchronously
+        const apifyRes = await fetch(
+          `https://api.apify.com/v2/acts/${encodeURIComponent(apifyActorId)}/run-sync-get-dataset-items?token=${apifyToken}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              queries: [query],
+              maxItems: 20,
+            }),
+          }
+        );
+
+        if (!apifyRes.ok) {
+          const errText = await apifyRes.text();
+          return sendJson(502, {
+            error: `Apify scraping failed (${apifyRes.status}): ${errText}`,
+            results: [],
+            fromCache: false,
+          });
+        }
+
+        const rawItems = await apifyRes.json();
+        const items = Array.isArray(rawItems) ? rawItems : [];
+
+        // Save every scraped publication to SQLite cache so we never scrape it again!
+        const insertScraped = db.prepare(`
+          INSERT OR IGNORE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, search_query, scraped_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        const formattedResults = [];
+        const now = new Date().toISOString();
+
+        for (const raw of items) {
+          const authors = Array.isArray(raw.authors)
+            ? raw.authors
+            : typeof raw.authors === 'string'
+            ? raw.authors.split(',').map((a) => a.trim())
+            : [];
+          const id = raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const title = raw.title || 'Untitled Publication';
+          const journal = raw.source || raw.journal || 'Academic Publication';
+          const year = parseInt(raw.year || raw.publicationYear, 10) || new Date().getFullYear();
+          const citations = parseInt(raw.citations || raw.citationCount || 0, 10) || 0;
+          const abstract = raw.abstract || raw.snippet || '';
+          const paperUrl = raw.url || raw.link || '';
+
+          insertScraped.run(
+            id,
+            title,
+            JSON.stringify(authors),
+            journal,
+            year,
+            citations,
+            abstract,
+            paperUrl,
+            query,
+            now
+          );
+
+          formattedResults.push({
+            id,
+            title,
+            authors,
+            journal,
+            year,
+            citations,
+            abstract,
+            url: paperUrl,
+            fromCache: false,
+          });
+        }
+
+        return sendJson(200, {
+          results: formattedResults,
+          fromCache: false,
+          count: formattedResults.length,
+          message: `Scraped ${formattedResults.length} publications via Apify and permanently saved to database.`,
+        });
+      } catch (err) {
+        console.error('[Apify Request Error]:', err);
+        return sendJson(500, {
+          error: `Apify connection error: ${err.message}`,
+          results: [],
+          fromCache: false,
+        });
+      }
     }
 
     // ----------------------------------------------------
