@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ComponentType } from "react";
 import { TrendingUp, FileText, ChevronLeft, ChevronRight, Users, Calendar, AlertCircle, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -97,7 +97,7 @@ export function ImpactAnalysisPage() {
     setYearRange({ start: newStart, end: newEnd });
   };
 
-  const EmptyChartPlaceholder = ({ icon: Icon, label }: { icon: React.ElementType; label: string }) => (
+  const EmptyChartPlaceholder = ({ icon: Icon, label }: { icon: ComponentType<{ className?: string }>; label: string }) => (
     <div className="h-[300px] flex flex-col items-center justify-center text-center p-6 bg-gray-50 rounded-lg border border-dashed">
       <Icon className="w-10 h-10 text-gray-400 mb-2" />
       <p className="text-sm font-medium text-gray-700">{label}</p>

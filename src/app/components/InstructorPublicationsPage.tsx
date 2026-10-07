@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { BookOpen, ExternalLink, FileText, Plus, Upload, RefreshCw } from "lucide-react";
 import {
   getCurrentUser,
@@ -60,7 +60,7 @@ export function InstructorPublicationsPage() {
       (Array.isArray(p.authors) ? p.authors.includes(user.name) : String(p.authors).includes(user.name))
   );
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const coAuthors = form.coAuthors.split(",").map((a) => a.trim()).filter(Boolean);
     const authors = [user.name, ...coAuthors];

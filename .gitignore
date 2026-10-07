@@ -57,3 +57,5 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+data/*.db-shm
+data/*.db-wal

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { Mail, Lock } from "lucide-react";
@@ -19,7 +19,7 @@ export function LoginScreen() {
 
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoginError("");
     setIsLoading(true);

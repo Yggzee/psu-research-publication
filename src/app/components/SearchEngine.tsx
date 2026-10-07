@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Search, User, FileText, Quote, Shield, AlertCircle, CheckCircle2, Eye, Save, Hand, Database, Sparkles } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
@@ -36,7 +36,7 @@ export function SearchEngine() {
     return () => window.removeEventListener("storage", updateFacultyCount);
   }, [currentUser.instructorId]);
 
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
