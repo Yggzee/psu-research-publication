@@ -12,6 +12,7 @@ import {
   type ManagedResearcher,
 } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
+import { ApifyTokenManager } from "./ApifyTokenManager";
 
 const DEPARTMENTS = ["BSIT", "BSBA", "BSE", "BEE", "BTLED", "BIT", "Non Teaching"];
 
@@ -253,6 +254,9 @@ export function AdminPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Apify Scraper Multi-Token Integration */}
+      <ApifyTokenManager />
 
       {/* Add / Edit Form */}
       {isAdding && (

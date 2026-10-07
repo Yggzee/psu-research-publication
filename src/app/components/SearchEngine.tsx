@@ -1,11 +1,12 @@
 import { useState, useEffect, type FormEvent } from "react";
-import { Search, User, FileText, Quote, Shield, AlertCircle, CheckCircle2, Eye, Save, Hand, Database, Sparkles } from "lucide-react";
+import { Search, User, FileText, Quote, Shield, AlertCircle, CheckCircle2, Eye, Save, Hand, Database, Sparkles, KeyRound, X } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { isPSUPaper, getFacultyList } from "../utils/facultyUtils";
 import { getCurrentUser, getResearchRecords, addResearchRecord } from "../utils/researchStore";
 import { apiService, type ScholarSearchResult } from "../services/api.service";
+import { ApifyTokenManager } from "./ApifyTokenManager";
 
 export function SearchEngine() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -17,6 +18,7 @@ export function SearchEngine() {
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [isFromCache, setIsFromCache] = useState(false);
   const [requiresApify, setRequiresApify] = useState(false);
+  const [showTokenManager, setShowTokenManager] = useState(false);
 
   const currentUser = getCurrentUser();
   const isInstructor = currentUser.role === "instructor";
@@ -160,6 +162,33 @@ export function SearchEngine() {
         </CardContent>
       </Card>
 
+      {/* Scraper Settings Header Action */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">
+          Google Scholar scraping is cached permanently in your SQLite database.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowTokenManager((prev) => !prev)}
+          className="text-xs flex items-center gap-1.5"
+        >
+          <KeyRound className="w-3.5 h-3.5 text-orange-600" />
+          {showTokenManager ? "Close Scraper Settings" : "Apify Scraper Settings"}
+        </Button>
+      </div>
+
+      {showTokenManager && (
+        <div className="transition-all">
+          <ApifyTokenManager
+            onTokenChanged={() => {
+              setRequiresApify(false);
+            }}
+          />
+        </div>
+      )}
+
       {/* Search Bar */}
       <form onSubmit={handleSearch}>
         <Card className="shadow-md">
@@ -190,22 +219,31 @@ export function SearchEngine() {
 
       {/* Apify Not Connected Notice */}
       {requiresApify && searchResults.length === 0 && !isSearching && (
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <h4 className="text-sm font-semibold text-amber-900">Apify Google Scholar Scraper Not Connected</h4>
-                <p className="text-sm text-amber-800">
-                  {cacheNotice || "Configure your APIFY_TOKEN in .env to enable live scraping from Google Scholar."}
-                </p>
-                <p className="text-xs text-amber-700 mt-2">
-                  Once connected with an Apify API token, searched papers will automatically scrape and be permanently cached in your SQLite database so you never need to call the scraper again for the same research.
-                </p>
+        <div className="space-y-4">
+          <Card className="border-amber-300 bg-amber-50">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-amber-900">Apify Google Scholar Scraper Not Connected</h4>
+                  <p className="text-sm text-amber-800">
+                    Connect an Apify API token below to start scraping live research publications from Google Scholar.
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Free accounts receive $5 monthly usage. Once scraped, papers are saved permanently in SQLite so you never re-scrape the same query.
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          <ApifyTokenManager
+            compact
+            onTokenChanged={() => {
+              setRequiresApify(false);
+            }}
+          />
+        </div>
       )}
 
       {/* Cache Status Badge */}

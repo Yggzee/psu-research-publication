@@ -195,6 +195,63 @@ class ApiService {
       body: JSON.stringify({ status }),
     });
   }
+
+  // 7. Apify Token Management
+  async getApifyTokens(): Promise<ApifyToken[]> {
+    return this.request<ApifyToken[]>('/apify/tokens');
+  }
+
+  async addApifyToken(data: {
+    name?: string;
+    token: string;
+    actorId?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    token: ApifyToken;
+  }> {
+    return this.request('/apify/tokens', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async activateApifyToken(id: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/apify/tokens/${id}/activate`, {
+      method: 'PUT',
+    });
+  }
+
+  async testApifyToken(id: string): Promise<{
+    success: boolean;
+    status: 'valid' | 'invalid';
+    username?: string;
+    plan?: string;
+    message: string;
+  }> {
+    return this.request(`/apify/tokens/${id}/test`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteApifyToken(id: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/apify/tokens/${id}`, {
+      method: 'DELETE',
+    });
+  }
+}
+
+export interface ApifyToken {
+  id: string;
+  name: string;
+  actorId: string;
+  isActive: boolean;
+  status: 'valid' | 'invalid' | 'untested';
+  username?: string | null;
+  plan?: string | null;
+  createdAt: string;
+  lastTestedAt?: string | null;
+  maskedToken: string;
 }
 
 export const apiService = new ApiService();
