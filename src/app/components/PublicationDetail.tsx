@@ -14,6 +14,8 @@ export function PublicationDetail() {
 
   const [publication, setPublication] = useState<Publication | null>(null);
   const [loading, setLoading] = useState(true);
+  const [citationPage, setCitationPage] = useState(1);
+  const CITATIONS_PER_PAGE = 5;
 
   useEffect(() => {
     if (!id) return;
@@ -56,6 +58,11 @@ export function PublicationDetail() {
 
   const citationTrendData = publication.citationTrend || [];
   const citingPapers = publication.citingPapers || [];
+  const totalCitationPages = Math.ceil(citingPapers.length / CITATIONS_PER_PAGE) || 1;
+  const paginatedCitingPapers = citingPapers.slice(
+    (citationPage - 1) * CITATIONS_PER_PAGE,
+    citationPage * CITATIONS_PER_PAGE
+  );
   const currentYear = new Date().getFullYear();
   const yearsActive = Math.max(currentYear - publication.year, 1);
 
@@ -119,6 +126,20 @@ export function PublicationDetail() {
             <div className="pt-6 border-t border-gray-200">
               <h3 className="text-lg text-gray-900 mb-2">Abstract</h3>
               <p className="text-gray-700 leading-relaxed">{publication.abstract}</p>
+            </div>
+          )}
+
+          {/* Source Link */}
+          {publication.url && (
+            <div className="pt-4">
+              <Button
+                variant="outline"
+                onClick={() => window.open(publication.url, "_blank")}
+                className="text-blue-600 border-blue-300 hover:bg-blue-50"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                View Original Paper
+              </Button>
             </div>
           )}
         </CardContent>
@@ -194,36 +215,142 @@ export function PublicationDetail() {
       </Card>
 
       {/* Citing Publications */}
-      {citingPapers.length > 0 && (
+      {(citingPapers.length > 0 || publication.citations > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle>Papers Citing This Research ({citingPapers.length})</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Papers Citing This Research ({citingPapers.length > 0 ? citingPapers.length : publication.citations})</CardTitle>
+              {publication.citedByLink && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(publication.citedByLink, "_blank")}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  View All on Google Scholar
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {citingPapers.map((paper: any, index: number) => (
-                <div
-                  key={`citing-${id}-${index}`}
-                  className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h4 className="text-gray-900 mb-1">{paper.title}</h4>
-                      <p className="text-sm text-gray-600 mb-1">{paper.authors}</p>
-                      <p className="text-sm text-gray-500">Published in {paper.year}</p>
+            {citingPapers.length > 0 ? (
+              <div className="space-y-4">
+                <div className="space-y-4">
+                  {paginatedCitingPapers.map((paper: any, index: number) => {
+                    const globalIndex = (citationPage - 1) * CITATIONS_PER_PAGE + index + 1;
+                    return (
+                      <div
+                        key={`citing-${id}-${globalIndex}`}
+                        className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+                                #{globalIndex}
+                              </span>
+                              <h4 className="text-gray-900 font-medium">{paper.title}</h4>
+                            </div>
+                            {paper.authors && (
+                              <p className="text-sm text-gray-600 mb-1">{paper.authors}</p>
+                            )}
+                            {paper.year && (
+                              <p className="text-sm text-gray-500">Published in {paper.year}</p>
+                            )}
+                          </div>
+                          {paper.link && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(paper.link, "_blank")}
+                              className="shrink-0 text-blue-600 border-blue-200 hover:bg-blue-50"
+                            >
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              View Paper
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Pagination Controls (5 per page) */}
+                {totalCitationPages > 1 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100">
+                    <p className="text-xs sm:text-sm text-gray-500">
+                      Showing {(citationPage - 1) * CITATIONS_PER_PAGE + 1}–{Math.min(citationPage * CITATIONS_PER_PAGE, citingPapers.length)} of {citingPapers.length} citing papers
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={citationPage === 1}
+                        onClick={() => setCitationPage(p => Math.max(1, p - 1))}
+                        className="h-8 text-xs px-2.5"
+                      >
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalCitationPages }, (_, i) => i + 1).map((pageNum) => (
+                          <Button
+                            key={`page-${pageNum}`}
+                            variant={citationPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            className={`h-8 w-8 p-0 text-xs ${citationPage === pageNum ? "bg-blue-600 text-white" : ""}`}
+                            onClick={() => setCitationPage(pageNum)}
+                          >
+                            {pageNum}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={citationPage === totalCitationPages}
+                        onClick={() => setCitationPage(p => Math.min(totalCitationPages, p + 1))}
+                        className="h-8 text-xs px-2.5"
+                      >
+                        Next
+                      </Button>
                     </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 space-y-3">
+                <Quote className="w-10 h-10 text-gray-300 mx-auto" />
+                <div>
+                  <p className="text-gray-600 mb-1">
+                    This publication has been cited <strong>{publication.citations}</strong> time{publication.citations !== 1 ? "s" : ""}.
+                  </p>
+                  {publication.citedByLink ? (
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(paper.link, "_blank")}
+                      variant="default"
+                      className="mt-3 bg-blue-600 hover:bg-blue-700"
+                      onClick={() => window.open(publication.citedByLink, "_blank")}
                     >
                       <ExternalLink className="w-4 h-4 mr-2" />
-                      View
+                      View Citing Papers on Google Scholar
                     </Button>
-                  </div>
+                  ) : publication.url ? (
+                    <Button
+                      variant="outline"
+                      className="mt-3"
+                      onClick={() => window.open(publication.url, "_blank")}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      View on Source
+                    </Button>
+                  ) : (
+                    <p className="text-sm text-gray-400">
+                      Individual citing papers will appear here as they are indexed.
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

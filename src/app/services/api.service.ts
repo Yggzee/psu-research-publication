@@ -30,6 +30,8 @@ export interface ScholarSearchResult {
   citations: number;
   abstract?: string;
   url?: string;
+  citedByLink?: string;
+  citedByTotal?: number;
   fromCache?: boolean;
 }
 
@@ -159,6 +161,14 @@ class ApiService {
     researchStatus?: string;
     isPublic?: boolean;
     fileName?: string;
+    createdAt?: string;
+    citedByLink?: string;
+    citingPapers?: Array<{
+      title: string;
+      authors?: string;
+      year?: number;
+      link?: string;
+    }>;
   }) {
     return this.request('/publications', {
       method: 'POST',
@@ -174,14 +184,16 @@ class ApiService {
   }
 
   // 5. Google Scholar & Scraper Caching
-  async searchGoogleScholar(query: string): Promise<{
+  async searchGoogleScholar(query: string, refresh = false): Promise<{
     results: ScholarSearchResult[];
     fromCache: boolean;
     count: number;
     requiresApify?: boolean;
     message: string;
+    tokenUsage?: ApifyTokenUsage | null;
   }> {
-    return this.request(`/search/google-scholar?q=${encodeURIComponent(query)}`);
+    const refreshParam = refresh ? '&refresh=true' : '';
+    return this.request(`/search/google-scholar?q=${encodeURIComponent(query)}${refreshParam}`);
   }
 
   // 6. Claims
@@ -197,6 +209,13 @@ class ApiService {
   }
 
   // 7. Apify Token Management
+  async getActiveTokenUsage(): Promise<{
+    hasActiveToken: boolean;
+    tokenUsage: ApifyTokenUsage | null;
+  }> {
+    return this.request('/apify/tokens/active/usage');
+  }
+
   async getApifyTokens(): Promise<ApifyToken[]> {
     return this.request<ApifyToken[]>('/apify/tokens');
   }
@@ -241,6 +260,24 @@ class ApiService {
   }
 }
 
+export interface ApifyTokenUsage {
+  tokenId: string;
+  tokenName: string;
+  username: string | null;
+  plan: string;
+  actorId: string;
+  limitUsd: number;
+  usedUsd: number;
+  remainingUsd: number;
+  usedPercentage: number;
+  cycleEndAt: string | null;
+  totalRuns: number | null;
+  searchesCount: number;
+  status: 'valid' | 'invalid' | 'untested';
+  isActive: boolean;
+  lastUpdated: string;
+}
+
 export interface ApifyToken {
   id: string;
   name: string;
@@ -252,6 +289,11 @@ export interface ApifyToken {
   createdAt: string;
   lastTestedAt?: string | null;
   maskedToken: string;
+  searchCount?: number;
+  monthlyUsageUsd?: number;
+  maxMonthlyUsageUsd?: number;
+  cycleEndAt?: string | null;
+  totalRuns?: number | null;
 }
 
 export const apiService = new ApiService();

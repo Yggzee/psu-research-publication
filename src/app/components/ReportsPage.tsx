@@ -83,6 +83,77 @@ export function ReportsPage() {
   });
 
   const handleDownload = () => {
+    const escapeCell = (value: string | number | undefined | null) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    const escapeAttr = (value: string | number | undefined | null) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    const formatCitationsCell = (row: {
+      citations: number;
+      citedByLink?: string;
+      citingPapers?: Array<{
+        title: string;
+        authors?: string;
+        year?: number;
+        link?: string;
+      }>;
+    }) => {
+      const citing = Array.isArray(row.citingPapers) ? row.citingPapers : [];
+      const totalCitations = Number(row.citations) || 0;
+      const citedByLink = row.citedByLink || "";
+
+      if (citing.length === 0 && !citedByLink && totalCitations === 0) {
+        return `<span style="color: #64748b;">0</span>`;
+      }
+
+      const items: string[] = [];
+
+      if (citing.length > 0) {
+        citing.forEach((cp, idx) => {
+          const num = idx + 1;
+          const title = cp.title || "Untitled Paper";
+          const yearStr = cp.year ? ` (${cp.year})` : "";
+          const paperLink = cp.link || (citedByLink || "");
+
+          let itemHtml = "";
+          if (paperLink) {
+            itemHtml = `<div><strong>${num}. </strong><a href="${escapeAttr(paperLink)}" target="_blank" style="color: #1a0dab; text-decoration: underline;">${escapeCell(title)}${escapeCell(yearStr)}</a><br style="mso-data-placement:same-cell;"/><span style="font-size: 9.5pt; color: #047857;">Link: </span><a href="${escapeAttr(paperLink)}" target="_blank" style="color: #047857; font-size: 9.5pt; text-decoration: underline;">${escapeCell(paperLink)}</a></div>`;
+          } else {
+            itemHtml = `<div><strong>${num}. </strong>${escapeCell(title)}${escapeCell(yearStr)}</div>`;
+          }
+          items.push(itemHtml);
+        });
+
+        if (totalCitations > citing.length && citedByLink) {
+          items.push(`
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #cbd5e1;">
+              <strong><a href="${escapeAttr(citedByLink)}" target="_blank" style="color: #1a0dab; text-decoration: underline;">View all ${totalCitations} citations on Google Scholar &rarr;</a></strong><br style="mso-data-placement:same-cell;"/>
+              <span style="font-size: 9.5pt; color: #047857;">Link: </span><a href="${escapeAttr(citedByLink)}" target="_blank" style="color: #047857; font-size: 9.5pt; text-decoration: underline;">${escapeCell(citedByLink)}</a>
+            </div>
+          `);
+        }
+      } else if (citedByLink) {
+        items.push(`
+          <div>
+            <a href="${escapeAttr(citedByLink)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">Google Scholar Citations (${totalCitations} citation${totalCitations === 1 ? "" : "s"})</a><br style="mso-data-placement:same-cell;"/>
+            <span style="font-size: 9.5pt; color: #047857;">Link: </span><a href="${escapeAttr(citedByLink)}" target="_blank" style="color: #047857; font-size: 9.5pt; text-decoration: underline;">${escapeCell(citedByLink)}</a>
+          </div>
+        `);
+      } else {
+        items.push(`<span>${totalCitations} citation${totalCitations === 1 ? "" : "s"}</span>`);
+      }
+
+      return items.join('<br style="mso-data-placement:same-cell;"/><br style="mso-data-placement:same-cell;"/>');
+    };
+
     const rows = publicationsList
       .filter((pub: any) => exportYear === "all" || pub.year?.toString() === exportYear)
       .filter((pub: any) => {
@@ -98,35 +169,102 @@ export function ReportsPage() {
         );
         return {
           title: pub.title,
+          url: pub.url || "",
           authors: Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors,
           researcher: pub.owner_name || pub.ownerName || researcher?.name || "Unknown",
           department: researcher?.department || "Unassigned",
           journal: pub.journal || "",
           year: pub.year,
           citations: pub.citations || 0,
+          citedByLink: pub.citedByLink || pub.cited_by_link || "",
+          citingPapers: pub.citingPapers || [],
         };
       });
 
-    const escapeCell = (value: string | number) =>
-      String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const tableRows = rows.map((row) => `
       <tr>
-        <td>${escapeCell(row.title)}</td>
+        <td>${row.url ? `<a href="${escapeAttr(row.url)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">${escapeCell(row.title)}</a>` : escapeCell(row.title)}</td>
         <td>${escapeCell(row.authors)}</td>
         <td>${escapeCell(row.researcher)}</td>
         <td>${escapeCell(row.department)}</td>
         <td>${escapeCell(row.journal)}</td>
-        <td>${row.year}</td>
-        <td>${row.citations}</td>
+        <td class="year-col">${escapeCell(row.year)}</td>
+        <td class="citation-cell">${formatCitationsCell(row)}</td>
       </tr>`).join("");
+
     const workbook = `
-      <html><head><meta charset="UTF-8"></head><body>
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <!--[if gte mso 9]>
+        <xml>
+          <x:ExcelWorkbook>
+            <x:ExcelWorksheets>
+              <x:ExcelWorksheet>
+                <x:Name>Research Publications</x:Name>
+                <x:WorksheetOptions>
+                  <x:DisplayGridlines/>
+                </x:WorksheetOptions>
+              </x:ExcelWorksheet>
+            </x:ExcelWorksheets>
+          </x:ExcelWorkbook>
+        </xml>
+        <![endif]-->
+        <style>
+          body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
+          table { border-collapse: collapse; width: 100%; }
+          th {
+            background-color: #1e40af;
+            color: #ffffff;
+            font-weight: bold;
+            border: 1px solid #94a3b8;
+            padding: 10px 12px;
+            text-align: left;
+            vertical-align: middle;
+            font-size: 11pt;
+          }
+          td {
+            border: 1px solid #cbd5e1;
+            padding: 10px 12px;
+            vertical-align: top;
+            font-size: 10.5pt;
+            mso-number-format: "\\@";
+          }
+          .year-col {
+            text-align: center;
+            mso-number-format: "0";
+          }
+          .citation-cell {
+            vertical-align: top;
+          }
+          a {
+            color: #1d4ed8;
+            text-decoration: underline;
+          }
+          br {
+            mso-data-placement: same-cell;
+          }
+        </style>
+      </head>
+      <body>
         <table>
-          <thead><tr><th>Title</th><th>Authors</th><th>Researcher</th><th>Department</th><th>Journal</th><th>Year</th><th>Citations</th></tr></thead>
+          <thead>
+            <tr>
+              <th style="min-width: 250px;">Title</th>
+              <th style="min-width: 180px;">Authors</th>
+              <th style="min-width: 160px;">Researcher</th>
+              <th style="min-width: 110px;">Department</th>
+              <th style="min-width: 160px;">Journal</th>
+              <th style="min-width: 70px; text-align: center;">Year</th>
+              <th style="min-width: 320px;">Citations / Cited Papers</th>
+            </tr>
+          </thead>
           <tbody>${tableRows}</tbody>
         </table>
-      </body></html>`;
-    const blob = new Blob([workbook], { type: "application/vnd.ms-excel" });
+      </body>
+      </html>`;
+
+    const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;

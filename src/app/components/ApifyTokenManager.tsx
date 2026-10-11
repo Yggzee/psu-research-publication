@@ -353,6 +353,24 @@ export function ApifyTokenManager({ onTokenChanged, compact = false }: ApifyToke
                       <span>Actor: {tok.actorId}</span>
                     </div>
 
+                    <div className="flex items-center gap-3 text-xs text-gray-600 pt-0.5 flex-wrap">
+                      {tok.monthlyUsageUsd !== undefined && (
+                        <span>
+                          Usage: <strong className="text-gray-800">${(tok.monthlyUsageUsd || 0).toFixed(3)}</strong> / ${(tok.maxMonthlyUsageUsd || 5).toFixed(2)}
+                        </span>
+                      )}
+                      {tok.searchCount !== undefined && tok.searchCount > 0 && (
+                        <span>
+                          • <strong className="text-gray-800">{tok.searchCount}</strong> searches in app
+                        </span>
+                      )}
+                      {tok.totalRuns !== undefined && tok.totalRuns !== null && tok.totalRuns > 0 && (
+                        <span>
+                          • <strong className="text-gray-800">{tok.totalRuns}</strong> actor runs
+                        </span>
+                      )}
+                    </div>
+
                     {tok.lastTestedAt && (
                       <p className="text-[11px] text-gray-400">
                         Tested: {new Date(tok.lastTestedAt).toLocaleString()}

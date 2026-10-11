@@ -35,6 +35,13 @@ export interface StoredPublication {
   researchStatus: ResearchStatus;
   isPublic: boolean;
   fileName?: string;
+  citedByLink?: string;
+  citingPapers?: Array<{
+    title: string;
+    authors?: string;
+    year?: number;
+    link?: string;
+  }>;
   createdAt: string;
 }
 

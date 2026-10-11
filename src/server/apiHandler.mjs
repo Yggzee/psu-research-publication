@@ -1,4 +1,5 @@
 import { db } from './db.mjs';
+import { scrapeGoogleScholarDirect, scrapeGoogleScholarCitations } from './scholarScraper.mjs';
 
 /**
  * Handle incoming API requests
@@ -347,23 +348,104 @@ export async function handleApiRequest(req, res) {
     // ----------------------------------------------------
     if (pathname === '/api/publications' && method === 'GET') {
       const rows = db.prepare('SELECT * FROM publications ORDER BY year DESC, citations DESC').all();
-      const pubs = rows.map((p) => ({
-        ...p,
-        authors: JSON.parse(p.authors || '[]'),
-        isPublic: Boolean(p.is_public),
-      }));
+
+      // Batch-fetch all citing papers
+      const allCiting = db.prepare('SELECT publication_id, title, authors, year, link FROM citing_papers').all();
+      const citingByPubId = {};
+      for (const cp of allCiting) {
+        if (!citingByPubId[cp.publication_id]) {
+          citingByPubId[cp.publication_id] = [];
+        }
+        citingByPubId[cp.publication_id].push({
+          title: cp.title,
+          authors: cp.authors,
+          year: cp.year,
+          link: cp.link,
+        });
+      }
+
+      const pubs = rows.map((p) => {
+        const rawId = p.id.replace(/^(admin-|claim-)/, '');
+        const citing = citingByPubId[p.id] || citingByPubId[rawId] || [];
+
+        let citedByLink = p.cited_by_link;
+        if (!citedByLink) {
+          const scraped = db.prepare('SELECT cited_by_link FROM scraped_publications WHERE id = ? OR id = ?').get(p.id, rawId);
+          if (scraped?.cited_by_link) {
+            citedByLink = scraped.cited_by_link;
+          }
+        }
+
+        return {
+          ...p,
+          authors: JSON.parse(p.authors || '[]'),
+          isPublic: Boolean(p.is_public),
+          citedByLink: citedByLink || null,
+          citingPapers: citing,
+        };
+      });
       return sendJson(200, pubs);
     }
 
     if (pathname.startsWith('/api/publications/') && method === 'GET') {
       const id = pathname.replace('/api/publications/', '');
-      const p = db.prepare('SELECT * FROM publications WHERE id = ?').get(id);
+      const rawId = id.replace(/^(admin-|claim-)/, '');
+      let p = db.prepare('SELECT * FROM publications WHERE id = ?').get(id);
+      let isScraped = false;
+
+      // Also check scraped_publications if not found in main table
+      if (!p) {
+        const scraped = db.prepare('SELECT * FROM scraped_publications WHERE id = ? OR id = ?').get(id, rawId);
+        if (scraped) {
+          isScraped = true;
+          p = {
+            id: scraped.id,
+            title: scraped.title,
+            authors: scraped.authors,
+            journal: scraped.journal,
+            year: scraped.year,
+            citations: scraped.citations,
+            abstract: scraped.abstract,
+            url: scraped.url,
+            cited_by_link: scraped.cited_by_link,
+            impact_score: 0,
+            is_public: 1,
+          };
+        }
+      }
+
       if (!p) {
         return sendJson(404, { error: 'Publication not found' });
       }
 
-      const trends = db.prepare('SELECT year, citations, id FROM citation_trends WHERE publication_id = ? ORDER BY year ASC').all(id);
-      const citing = db.prepare('SELECT title, authors, year, link FROM citing_papers WHERE publication_id = ?').all(id);
+      // If cited_by_link is empty on the publication, attempt fallback lookup in scraped_publications
+      let citedByLink = p.cited_by_link;
+      if (!citedByLink) {
+        const scraped = db.prepare('SELECT cited_by_link FROM scraped_publications WHERE id = ? OR id = ?').get(id, rawId);
+        if (scraped?.cited_by_link) {
+          citedByLink = scraped.cited_by_link;
+        }
+      }
+
+      const trends = db.prepare('SELECT year, citations, id FROM citation_trends WHERE publication_id = ? OR publication_id = ? ORDER BY year ASC').all(id, rawId);
+      let citing = db.prepare('SELECT title, authors, year, link FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+
+      // Auto-fetch citing papers if none cached yet and paper has citations / cited_by_link
+      if (citing.length === 0 && citedByLink) {
+        try {
+          const fetchedCiting = await scrapeGoogleScholarCitations(citedByLink, 3);
+          if (fetchedCiting.length > 0) {
+            const insertStmt = db.prepare('INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link) VALUES (?, ?, ?, ?, ?, ?)');
+            for (let i = 0; i < fetchedCiting.length; i++) {
+              const cp = fetchedCiting[i];
+              insertStmt.run(`cite-${id}-${i + 1}`, id, cp.title, cp.authors, cp.year, cp.link);
+            }
+            citing = db.prepare('SELECT title, authors, year, link FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+          }
+        } catch (err) {
+          console.warn('[AutoFetchCitations] Error scraping citing papers:', err.message);
+        }
+      }
 
       return sendJson(200, {
         ...p,
@@ -371,6 +453,7 @@ export async function handleApiRequest(req, res) {
         isPublic: Boolean(p.is_public),
         citationTrend: trends,
         citingPapers: citing,
+        citedByLink: citedByLink || null,
       });
     }
 
@@ -383,8 +466,8 @@ export async function handleApiRequest(req, res) {
         INSERT INTO publications (
           id, title, authors, journal, year, citations, abstract, url,
           impact_score, owner_id, owner_name, source, approval_status,
-          research_status, is_public, file_name, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          research_status, is_public, file_name, cited_by_link, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         data.title,
@@ -402,8 +485,28 @@ export async function handleApiRequest(req, res) {
         data.researchStatus || 'Published',
         data.isPublic !== undefined ? (data.isPublic ? 1 : 0) : 1,
         data.fileName || null,
+        data.citedByLink || null,
         now
       );
+
+      // If citing papers were provided, save them too
+      if (Array.isArray(data.citingPapers)) {
+        const insertCiting = db.prepare(`
+          INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (const cp of data.citingPapers) {
+          if (!cp.title) continue;
+          insertCiting.run(
+            cp.id || `cite-${id}-${Math.random().toString(36).slice(2, 7)}`,
+            id,
+            cp.title,
+            typeof cp.authors === 'string' ? cp.authors : JSON.stringify(cp.authors || []),
+            cp.year || null,
+            cp.link || null
+          );
+        }
+      }
 
       return sendJson(201, { success: true, id, message: 'Publication saved to database' });
     }
@@ -441,14 +544,108 @@ export async function handleApiRequest(req, res) {
       return sendJson(200, { success: true, message: 'Publication updated' });
     }
 
+    // Helper to get active Apify token row
+    const getActiveApifyTokenRow = () => {
+      let row = db.prepare('SELECT * FROM apify_tokens WHERE is_active = 1 LIMIT 1').get();
+      if (!row) {
+        row = db.prepare('SELECT * FROM apify_tokens ORDER BY created_at DESC LIMIT 1').get();
+      }
+      if (!row && (process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN)) {
+        return {
+          id: 'env',
+          name: 'Environment Token',
+          token: process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN,
+          actor_id: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-api').replace('/', '~'),
+          is_active: 1,
+          status: 'valid',
+          username: 'Env User',
+          plan: 'FREE',
+          search_count: 0,
+          monthly_usage_usd: 0,
+          max_monthly_usage_usd: 5,
+          cycle_end_at: null,
+          total_runs: null,
+        };
+      }
+      return row || null;
+    };
+
+    // Helper to fetch live Apify token limits & usage
+    const fetchApifyTokenUsage = async (tokenRow, forceLive = false) => {
+      if (!tokenRow || !tokenRow.token) return null;
+      const headers = { Authorization: `Bearer ${tokenRow.token}` };
+
+      let limitsData = null;
+      let runsData = null;
+
+      try {
+        const [limitsRes, runsRes] = await Promise.all([
+          fetch('https://api.apify.com/v2/users/me/limits', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          fetch('https://api.apify.com/v2/actor-runs?limit=1', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        ]);
+        limitsData = limitsRes?.data;
+        runsData = runsRes?.data;
+      } catch (err) {
+        console.warn('[ApifyUsage] Live fetch error:', err.message);
+      }
+
+      const maxMonthlyUsageUsd = Number(limitsData?.limits?.maxMonthlyUsageUsd) || Number(tokenRow.max_monthly_usage_usd) || 5;
+      const monthlyUsageUsd =
+        limitsData?.current?.monthlyUsageUsd !== undefined
+          ? Number(limitsData.current.monthlyUsageUsd)
+          : Number(tokenRow.monthly_usage_usd) || 0;
+      const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
+      const usedPercentage = maxMonthlyUsageUsd > 0 ? (monthlyUsageUsd / maxMonthlyUsageUsd) * 100 : 0;
+      const totalRuns = runsData?.total !== undefined ? runsData.total : (Number(tokenRow.total_runs) || 0);
+      const cycleEndAt = limitsData?.monthlyUsageCycle?.endAt || tokenRow.cycle_end_at || null;
+
+      if (tokenRow.id && tokenRow.id !== 'env') {
+        try {
+          db.prepare(`
+            UPDATE apify_tokens 
+            SET monthly_usage_usd = ?, max_monthly_usage_usd = ?, cycle_end_at = ?, total_runs = ?
+            WHERE id = ?
+          `).run(monthlyUsageUsd, maxMonthlyUsageUsd, cycleEndAt, totalRuns, tokenRow.id);
+        } catch {}
+      }
+
+      return {
+        tokenId: tokenRow.id,
+        tokenName: tokenRow.name,
+        username: tokenRow.username || null,
+        plan: tokenRow.plan || 'FREE',
+        actorId: tokenRow.actor_id || 'johnvc~google-scholar-api',
+        limitUsd: Number(maxMonthlyUsageUsd.toFixed(2)),
+        usedUsd: Number(monthlyUsageUsd.toFixed(3)),
+        remainingUsd: Number(remainingUsd.toFixed(3)),
+        usedPercentage: Math.min(100, Number(usedPercentage.toFixed(1))),
+        cycleEndAt,
+        totalRuns,
+        searchesCount: Number(tokenRow.search_count) || 0,
+        status: tokenRow.status || 'valid',
+        isActive: Boolean(tokenRow.is_active),
+        lastUpdated: new Date().toISOString(),
+      };
+    };
+
+    const attachTokenUsage = async (payload, didLiveScrape = false) => {
+      const active = getActiveApifyTokenRow();
+      const tokenUsage = active ? await fetchApifyTokenUsage(active, didLiveScrape) : null;
+      return {
+        ...payload,
+        tokenUsage,
+      };
+    };
+
     // ----------------------------------------------------
     // 5. GOOGLE SCHOLAR SEARCH & PERSISTENT SCRAPING CACHE
     // ----------------------------------------------------
     if (pathname === '/api/search/google-scholar' && method === 'GET') {
       const query = (url.searchParams.get('q') || '').trim();
+      const forceRefresh = url.searchParams.get('refresh') === 'true';
 
       if (!query) {
-        return sendJson(200, { results: [], fromCache: true });
+        return sendJson(200, await attachTokenUsage({ results: [], fromCache: true }));
       }
 
       // Query normalization for smart searching (e.g. "Lastname, Firstname" -> "Firstname Lastname")
@@ -462,22 +659,20 @@ export async function handleApiRequest(req, res) {
 
       // STEP 1: Check database cache FIRST (exact or like match on title, authors, or query)
       const cached = db.prepare(`
-        SELECT id, title, authors, journal, year, citations, abstract, url 
+        SELECT id, title, authors, journal, year, citations, abstract, url, cited_by_link 
         FROM scraped_publications 
         WHERE LOWER(title) LIKE LOWER(?) 
            OR LOWER(authors) LIKE LOWER(?) 
            OR LOWER(search_query) LIKE LOWER(?)
-        LIMIT 30
       `).all(`%${cleanQuery}%`, `%${cleanQuery}%`, `%${cleanQuery}%`);
 
       // Also check local institutional publications database
       const localPubs = db.prepare(`
-        SELECT id, title, authors, journal, year, citations, abstract, url 
+        SELECT id, title, authors, journal, year, citations, abstract, url, cited_by_link
         FROM publications 
         WHERE LOWER(title) LIKE LOWER(?) 
            OR LOWER(authors) LIKE LOWER(?) 
            OR LOWER(owner_name) LIKE LOWER(?)
-        LIMIT 30
       `).all(`%${cleanQuery}%`, `%${cleanQuery}%`, `%${cleanQuery}%`);
 
       const combinedCached = [];
@@ -498,21 +693,83 @@ export async function handleApiRequest(req, res) {
         combinedCached.push({
           ...p,
           authors: parsedAuthors,
+          citedByLink: p.cited_by_link || null,
           fromCache: true,
         });
       }
 
-      if (combinedCached.length > 0) {
-        // Cache HIT! Zero API calls or Apify scraping needed!
-        return sendJson(200, {
+      // If we have 10 or more cached results and no force-refresh requested, return immediately
+      if (!forceRefresh && combinedCached.length >= 10) {
+        return sendJson(200, await attachTokenUsage({
           results: combinedCached,
           fromCache: true,
           count: combinedCached.length,
-          message: `Loaded ${combinedCached.length} publications instantly from local database cache (0 scraper credits used)`,
-        });
+          message: `Loaded ${combinedCached.length} publications instantly from local database cache`,
+        }));
       }
 
-      // STEP 2: Apify Google Scholar Scraper Integration with Multi-Token Failover
+      // STEP 2: Live Fetch from Google Scholar (Direct + Apify if needed)
+      // First try direct Google Scholar fetch to get the full 10-20 results without free-tier limitations
+      let liveResults = [];
+      try {
+        liveResults = await scrapeGoogleScholarDirect(cleanQuery, 2);
+      } catch (err) {
+        console.warn('[ScholarSearch] Direct search fallback:', err.message);
+      }
+
+      // If direct scraping gave good results, save and return
+      if (liveResults.length > 0) {
+        const insertScraped = db.prepare(`
+          INSERT OR REPLACE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        const now = new Date().toISOString();
+
+        for (const item of liveResults) {
+          insertScraped.run(
+            item.id,
+            item.title,
+            JSON.stringify(item.authors),
+            item.journal,
+            item.year,
+            item.citations,
+            item.abstract,
+            item.url,
+            item.citedByLink,
+            cleanQuery,
+            now
+          );
+        }
+
+        // Merge with existing local publications
+        for (const p of localPubs) {
+          const normTitle = (p.title || '').trim().toLowerCase();
+          if (!seenTitles.has(normTitle)) {
+            seenTitles.add(normTitle);
+            let parsedAuthors = [];
+            try {
+              parsedAuthors = Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]');
+            } catch {
+              parsedAuthors = typeof p.authors === 'string' ? p.authors.split(',').map((a) => a.trim()) : [];
+            }
+            liveResults.push({
+              ...p,
+              authors: parsedAuthors,
+              citedByLink: p.cited_by_link || null,
+              fromCache: true,
+            });
+          }
+        }
+
+        return sendJson(200, await attachTokenUsage({
+          results: liveResults,
+          fromCache: false,
+          count: liveResults.length,
+          message: `Retrieved ${liveResults.length} publications directly from Google Scholar`,
+        }));
+      }
+
+      // STEP 3: Fallback to Apify Google Scholar Scraper Integration with Multi-Token Failover
       const tokenRows = db.prepare(`
         SELECT * FROM apify_tokens ORDER BY is_active DESC, created_at DESC
       `).all();
@@ -521,7 +778,7 @@ export async function handleApiRequest(req, res) {
         id: r.id,
         name: r.name,
         token: r.token,
-        actorId: (r.actor_id || 'johnvc~google-scholar-api').replace('/', '~')
+        actorId: (r.actor_id || 'johnvc~google-scholar-lite-api').replace('/', '~')
       }));
 
       if (candidateTokens.length === 0 && (process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN)) {
@@ -529,74 +786,104 @@ export async function handleApiRequest(req, res) {
           id: 'env',
           name: 'Environment Token',
           token: process.env.APIFY_TOKEN || process.env.VITE_APIFY_TOKEN,
-          actorId: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-api').replace('/', '~')
+          actorId: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-lite-api').replace('/', '~')
         });
       }
 
       if (candidateTokens.length === 0) {
-        return sendJson(200, {
+        // If no Apify tokens, return whatever cache we had
+        if (combinedCached.length > 0) {
+          return sendJson(200, await attachTokenUsage({
+            results: combinedCached,
+            fromCache: true,
+            count: combinedCached.length,
+            message: `Loaded ${combinedCached.length} publications from local database cache`,
+          }));
+        }
+        return sendJson(200, await attachTokenUsage({
           results: [],
           fromCache: false,
           count: 0,
           requiresApify: true,
-          message: 'Apify Google Scholar Scraper is not connected yet. Add your token in the Apify Scraper tab or in .env.',
-        });
+          message: 'Google Scholar search returned 0 results. Connect an Apify token for additional redundancy.',
+        }));
       }
 
       let lastError = null;
       let rawItems = null;
       let usedTokenName = '';
 
-      // Try tokens in order (active token first, then auto-failover to backup tokens)
+      // Try tokens in order
       for (const cand of candidateTokens) {
         try {
-          // Normalize actor id (redirect older broken defaults like dan.k to working johnvc)
-          const targetActor = cand.actorId.includes('dan.k') ? 'johnvc~google-scholar-api' : cand.actorId;
+          const targetActor = cand.actorId.includes('lite')
+            ? 'johnvc~google-scholar-lite-api'
+            : cand.actorId;
           const actorUrlSegment = targetActor.replace('/', '~');
+
+          const isLite = targetActor.includes('lite');
+          const bodyPayload = isLite
+            ? { searchTerms: [cleanQuery], maxResults: 100 }
+            : { q: cleanQuery, query: cleanQuery, queries: [cleanQuery], max_pages: 5, maxResults: 100 };
 
           const apifyRes = await fetch(
             `https://api.apify.com/v2/acts/${actorUrlSegment}/run-sync-get-dataset-items?token=${cand.token}`,
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                q: cleanQuery,
-                query: cleanQuery,
-                queries: [cleanQuery],
-                max_pages: 1,
-                maxResults: 20,
-              }),
+              body: JSON.stringify(bodyPayload),
             }
           );
 
           if (!apifyRes.ok) {
             const errText = await apifyRes.text();
             lastError = `Token "${cand.name}" failed (${apifyRes.status}): ${errText}`;
-            continue; // Failover to next token!
+            continue;
           }
 
           rawItems = await apifyRes.json();
           usedTokenName = cand.name;
-          break; // Success!
+
+          if (cand.id && cand.id !== 'env') {
+            try {
+              db.prepare('UPDATE apify_tokens SET search_count = COALESCE(search_count, 0) + 1 WHERE id = ?').run(cand.id);
+            } catch {}
+          }
+          break;
         } catch (err) {
           lastError = err.message;
         }
       }
 
       if (!rawItems) {
-        return sendJson(502, {
-          error: `Apify scraping failed across ${candidateTokens.length} token(s): ${lastError}`,
+        // Fallback to cache if Apify failed
+        if (combinedCached.length > 0) {
+          return sendJson(200, await attachTokenUsage({
+            results: combinedCached,
+            fromCache: true,
+            count: combinedCached.length,
+            message: `Loaded ${combinedCached.length} publications from local cache`,
+          }));
+        }
+        return sendJson(502, await attachTokenUsage({
+          error: `Google Scholar scraping failed: ${lastError}`,
           results: [],
           fromCache: false,
-        });
+        }));
       }
 
       const items = Array.isArray(rawItems) ? rawItems : [];
 
       // Save every scraped publication to SQLite cache so we never scrape it again!
       const insertScraped = db.prepare(`
-        INSERT OR IGNORE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, search_query, scraped_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      // Also save citing papers when available
+      const insertCitingPaper = db.prepare(`
+        INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link)
+        VALUES (?, ?, ?, ?, ?, ?)
       `);
 
       const formattedResults = [];
@@ -656,6 +943,10 @@ export async function handleApiRequest(req, res) {
         const paperUrl = raw.link || raw.url || raw.resources?.[0]?.link || '';
         const id = raw.result_id || raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+        // Extract cited_by link early so we can save it with the scraped publication
+        const citedByLink = raw.inline_links?.cited_by?.link || raw.inline_links?.cited_by_link || '';
+        const citedByTotal = parseInt(raw.inline_links?.cited_by_total ?? raw.inline_links?.cited_by?.total ?? 0, 10) || 0;
+
         insertScraped.run(
           id,
           title,
@@ -665,9 +956,27 @@ export async function handleApiRequest(req, res) {
           citations,
           abstract,
           paperUrl,
+          citedByLink,
           cleanQuery,
           now
         );
+
+        // Extract and save citing papers (papers that cite this one)
+
+        // Some scrapers return related_articles or cited_by_results directly
+        const citingResults = raw.cited_by_results || raw.inline_links?.cited_by_results || [];
+        if (Array.isArray(citingResults)) {
+          for (const cite of citingResults) {
+            if (!cite || !cite.title) continue;
+            const citeId = cite.result_id || cite.id || `cite-${id}-${Math.random().toString(36).slice(2, 7)}`;
+            const citeAuthors = Array.isArray(cite.authors)
+              ? cite.authors.map(a => typeof a === 'string' ? a : a?.name || '').filter(Boolean).join(', ')
+              : (cite.publication_info?.summary?.split('-')?.[0]?.trim() || cite.authors || '');
+            const citeYear = parseInt(cite.year || '', 10) || null;
+            const citeLink = cite.link || cite.url || '';
+            insertCitingPaper.run(citeId, id, cite.title, citeAuthors, citeYear, citeLink);
+          }
+        }
 
         formattedResults.push({
           id,
@@ -678,16 +987,18 @@ export async function handleApiRequest(req, res) {
           citations,
           abstract,
           url: paperUrl,
+          citedByLink,
+          citedByTotal,
           fromCache: false,
         });
       }
 
-      return sendJson(200, {
+      return sendJson(200, await attachTokenUsage({
         results: formattedResults,
         fromCache: false,
         count: formattedResults.length,
         message: `Scraped ${formattedResults.length} publications via Google Scholar (${usedTokenName}) and cached to database.`,
-      });
+      }, true));
     }
 
     // ----------------------------------------------------
@@ -715,9 +1026,19 @@ export async function handleApiRequest(req, res) {
     // ----------------------------------------------------
     // 7. APIFY TOKENS MANAGEMENT (Multi-Token support)
     // ----------------------------------------------------
+    if (pathname === '/api/apify/tokens/active/usage' && method === 'GET') {
+      const active = getActiveApifyTokenRow();
+      if (!active) {
+        return sendJson(200, { hasActiveToken: false, tokenUsage: null });
+      }
+      const usage = await fetchApifyTokenUsage(active, true);
+      return sendJson(200, { hasActiveToken: true, tokenUsage: usage });
+    }
+
     if (pathname === '/api/apify/tokens' && method === 'GET') {
       const rows = db.prepare(`
         SELECT id, name, actor_id, is_active, status, username, plan, created_at, last_tested_at,
+               search_count, monthly_usage_usd, max_monthly_usage_usd, cycle_end_at, total_runs,
                SUBSTR(token, 1, 10) || '...' || SUBSTR(token, -4) as masked_token
         FROM apify_tokens
         ORDER BY created_at DESC
@@ -734,6 +1055,11 @@ export async function handleApiRequest(req, res) {
         createdAt: r.created_at,
         lastTestedAt: r.last_tested_at,
         maskedToken: r.masked_token,
+        searchCount: Number(r.search_count) || 0,
+        monthlyUsageUsd: Number(r.monthly_usage_usd) || 0,
+        maxMonthlyUsageUsd: Number(r.max_monthly_usage_usd) || 5,
+        cycleEndAt: r.cycle_end_at || null,
+        totalRuns: r.total_runs !== null ? Number(r.total_runs) : null,
       })));
     }
 

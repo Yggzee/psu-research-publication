@@ -8,13 +8,15 @@ export interface Publication {
   year: number;
   citations: number;
   abstract?: string;
+  url?: string;
+  citedByLink?: string;
   citationTrend?: { year: number; citations: number; id: string }[];
   impactScore?: number;
   citingPapers?: {
     title: string;
-    authors: string;
-    year: number;
-    link: string;
+    authors?: string;
+    year?: number;
+    link?: string;
   }[];
 }
 
@@ -26,6 +28,7 @@ export interface Researcher {
   totalPublications: number;
   totalCitations: number;
   publications: Publication[];
+  isFaculty?: boolean;
 }
 
 export const mockResearchers: Researcher[] = [

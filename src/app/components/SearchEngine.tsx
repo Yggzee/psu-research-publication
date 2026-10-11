@@ -1,11 +1,11 @@
 import { useState, useEffect, type FormEvent } from "react";
-import { Search, User, FileText, Quote, Shield, AlertCircle, CheckCircle2, Eye, Save, Hand, Database, Sparkles, KeyRound, X } from "lucide-react";
+import { Search, User, FileText, Quote, Shield, AlertCircle, CheckCircle2, Eye, Save, Hand, Database, Sparkles, KeyRound, X, RefreshCw, Zap, Plus, ExternalLink } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { isPSUPaper, getFacultyList } from "../utils/facultyUtils";
 import { getCurrentUser, getResearchRecords, addResearchRecord } from "../utils/researchStore";
-import { apiService, type ScholarSearchResult } from "../services/api.service";
+import { apiService, type ScholarSearchResult, type ApifyTokenUsage } from "../services/api.service";
 import { ApifyTokenManager } from "./ApifyTokenManager";
 
 export function SearchEngine() {
@@ -21,6 +21,8 @@ export function SearchEngine() {
   const [showTokenManager, setShowTokenManager] = useState(false);
   const [searchMode, setSearchMode] = useState<"smart" | "author">("smart");
   const [facultyNames, setFacultyNames] = useState<string[]>([]);
+  const [tokenUsage, setTokenUsage] = useState<ApifyTokenUsage | null>(null);
+  const [isLoadingTokenUsage, setIsLoadingTokenUsage] = useState(false);
 
   const currentUser = getCurrentUser();
   const isInstructor = currentUser.role === "instructor";
@@ -48,11 +50,40 @@ export function SearchEngine() {
         .map((record) => record.id.replace(/^claim-/, ""))
     );
 
+    const refreshActiveUsage = async (showLoading = false) => {
+      if (showLoading) setIsLoadingTokenUsage(true);
+      try {
+        const res = await apiService.getActiveTokenUsage();
+        if (res?.tokenUsage) {
+          setTokenUsage(res.tokenUsage);
+        }
+      } catch (err) {
+        console.warn("Could not load initial token usage:", err);
+      } finally {
+        if (showLoading) setIsLoadingTokenUsage(false);
+      }
+    };
+    refreshActiveUsage(false);
+
     window.addEventListener("storage", updateFaculty);
     return () => window.removeEventListener("storage", updateFaculty);
   }, [currentUser.instructorId]);
 
-  const executeSearch = async (textToSearch?: string, modeToUse?: "smart" | "author") => {
+  const refreshActiveUsage = async (showLoading = true) => {
+    if (showLoading) setIsLoadingTokenUsage(true);
+    try {
+      const res = await apiService.getActiveTokenUsage();
+      if (res?.tokenUsage) {
+        setTokenUsage(res.tokenUsage);
+      }
+    } catch (err) {
+      console.warn("Could not refresh token usage:", err);
+    } finally {
+      if (showLoading) setIsLoadingTokenUsage(false);
+    }
+  };
+
+  const executeSearch = async (textToSearch?: string, modeToUse?: "smart" | "author", forceRefresh = false) => {
     const q = (textToSearch !== undefined ? textToSearch : searchQuery).trim();
     if (!q) return;
 
@@ -70,12 +101,15 @@ export function SearchEngine() {
     setRequiresApify(false);
 
     try {
-      // Calls SQLite Search API - checks cached scraped table first!
-      const data = await apiService.searchGoogleScholar(finalQuery);
+      // Calls SQLite Search API - retrieves full list with optional force-refresh
+      const data = await apiService.searchGoogleScholar(finalQuery, forceRefresh);
       setSearchResults(data.results || []);
       setIsFromCache(Boolean(data.fromCache));
       setRequiresApify(Boolean(data.requiresApify));
       setCacheNotice(data.message || (data.fromCache ? "Loaded from database cache" : ""));
+      if (data.tokenUsage) {
+        setTokenUsage(data.tokenUsage);
+      }
     } catch (err: any) {
       console.warn("API Search failed:", err);
       setSearchResults([]);
@@ -102,6 +136,7 @@ export function SearchEngine() {
         citations: result.citations,
         abstract: result.abstract,
         url: result.url,
+        citedByLink: result.citedByLink,
         ownerId: "admin",
         ownerName: result.authors[0] || "PSU Researcher",
         source: "admin" as const,
@@ -129,6 +164,7 @@ export function SearchEngine() {
       citations: result.citations,
       abstract: result.abstract,
       url: result.url,
+      citedByLink: result.citedByLink,
       ownerId: currentUser.instructorId || "",
       ownerName: currentUser.name,
       source: "claim" as const,
@@ -188,28 +224,142 @@ export function SearchEngine() {
         </CardContent>
       </Card>
 
-      {/* Scraper Settings Header Action */}
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          Google Scholar scraping is cached permanently in your SQLite database.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setShowTokenManager((prev) => !prev)}
-          className="text-xs flex items-center gap-1.5"
-        >
-          <KeyRound className="w-3.5 h-3.5 text-orange-600" />
-          {showTokenManager ? "Close Scraper Settings" : "Apify Scraper Settings"}
-        </Button>
-      </div>
+      {/* Active Apify Scraper Token & Limit Tracker */}
+      <Card className="border border-slate-200 bg-gradient-to-r from-slate-50 via-white to-blue-50/20 shadow-sm overflow-hidden">
+        <CardContent className="p-4 sm:p-5">
+          {tokenUsage ? (
+            <div className="space-y-3.5">
+              {/* Header row: Token Identity & Controls */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative p-2.5 bg-blue-100/70 text-blue-700 rounded-lg">
+                    <KeyRound className="w-4 h-4" />
+                    <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-gray-900">{tokenUsage.tokenName}</span>
+                      {tokenUsage.username && (
+                        <span className="text-xs text-gray-500 font-mono">@{tokenUsage.username}</span>
+                      )}
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {tokenUsage.plan} Plan (${tokenUsage.limitUsd.toFixed(2)} limit)
+                      </span>
+                      <span className="text-[11px] text-gray-400 hidden md:inline">
+                        • Actor: {tokenUsage.actorId.replace("~", "/")}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Active scraper token • Usage limits auto-refresh after every search
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refreshActiveUsage(true)}
+                    disabled={isLoadingTokenUsage}
+                    className="h-8 text-xs text-gray-600 hover:text-blue-700 flex items-center gap-1.5"
+                    title="Refresh Token Limits from Apify"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTokenUsage ? "animate-spin text-blue-600" : ""}`} />
+                    <span>Sync Limits</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowTokenManager((prev) => !prev)}
+                    className="h-8 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-1.5"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-orange-600" />
+                    <span>{showTokenManager ? "Close Settings" : "Switch Token"}</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Progress Bar & Breakdown */}
+              <div className="space-y-1.5 bg-white/80 border border-slate-100 p-3 rounded-lg shadow-2xs">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-700 font-medium">
+                    Credit Used: <strong className="text-gray-900">${tokenUsage.usedUsd.toFixed(3)}</strong> of ${tokenUsage.limitUsd.toFixed(2)} limit
+                  </span>
+                  <span className="font-semibold text-emerald-700">
+                    ${tokenUsage.remainingUsd.toFixed(3)} remaining ({(100 - tokenUsage.usedPercentage).toFixed(1)}% free)
+                  </span>
+                </div>
+
+                <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 ${
+                      tokenUsage.usedPercentage >= 90
+                        ? "bg-rose-500"
+                        : tokenUsage.usedPercentage >= 70
+                        ? "bg-amber-500"
+                        : "bg-emerald-500"
+                    }`}
+                    style={{ width: `${Math.min(100, Math.max(3, tokenUsage.usedPercentage))}%` }}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-gray-500">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center gap-1">
+                      <Zap className="w-3 h-3 text-amber-500" />
+                      <strong>{tokenUsage.searchesCount}</strong> searches made via app
+                    </span>
+                    {tokenUsage.totalRuns !== null && (
+                      <span className="inline-flex items-center gap-1">
+                        <Database className="w-3 h-3 text-blue-500" />
+                        <strong>{tokenUsage.totalRuns}</strong> total Apify actor runs
+                      </span>
+                    )}
+                  </div>
+                  {tokenUsage.cycleEndAt && (
+                    <span className="text-slate-500">
+                      Cycle resets: {new Date(tokenUsage.cycleEndAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-900">No Active Apify Scraper Token</h4>
+                  <p className="text-xs text-gray-500">
+                    Connect a free Apify token ($5 free monthly credits) for live scraping fallback.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setShowTokenManager(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-xs self-start sm:self-center"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" /> Connect Apify Token
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {showTokenManager && (
         <div className="transition-all">
           <ApifyTokenManager
             onTokenChanged={() => {
               setRequiresApify(false);
+              refreshActiveUsage(true);
             }}
           />
         </div>
@@ -340,13 +490,23 @@ export function SearchEngine() {
             <h2 className="text-xl text-gray-900">
               {searchResults.length} result{searchResults.length !== 1 ? "s" : ""} found
             </h2>
-            {searchResults.length > 0 && (
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-gray-600">
+            <div className="flex items-center gap-3">
+              {searchResults.length > 0 && (
+                <span className="text-sm text-gray-600 hidden sm:inline">
                   {searchResults.filter((r) => isPSUPaper(r.authors)).length} PSU papers
                 </span>
-              </div>
-            )}
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => executeSearch(undefined, undefined, true)}
+                disabled={isSearching}
+                className="text-xs flex items-center gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSearching ? "animate-spin" : ""}`} />
+                Live Refresh from Google Scholar
+              </Button>
+            </div>
           </div>
 
           {searchResults.map((result) => {

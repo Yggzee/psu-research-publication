@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Ensure data directory exists in project root
-const dataDir = path.resolve(__dirname, '../../data');
+// Ensure data directory exists (support custom mount via DATA_DIR)
+const dataDir = process.env.DATA_DIR || path.resolve(__dirname, '../../data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -96,10 +96,23 @@ export function initDatabase() {
       citations INTEGER DEFAULT 0,
       abstract TEXT,
       url TEXT,
+      cited_by_link TEXT,
       search_query TEXT,
       scraped_at TEXT NOT NULL
     );
   `);
+
+  // Migration: add cited_by_link column to scraped_publications & publications if missing
+  try {
+    db.exec(`ALTER TABLE scraped_publications ADD COLUMN cited_by_link TEXT`);
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    db.exec(`ALTER TABLE publications ADD COLUMN cited_by_link TEXT`);
+  } catch {
+    // Column already exists — ignore
+  }
 
   // 5. Citation Trends Table (yearly citations per publication)
   db.exec(`
@@ -141,6 +154,12 @@ export function initDatabase() {
     );
     UPDATE apify_tokens SET actor_id = 'johnvc~google-scholar-api' WHERE actor_id LIKE '%dan.k%';
   `);
+
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN search_count INTEGER DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN monthly_usage_usd REAL DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN max_monthly_usage_usd REAL DEFAULT 5`); } catch {}
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN cycle_end_at TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN total_runs INTEGER`); } catch {}
 
   // Seed default admin account ONLY if no admin exists
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
