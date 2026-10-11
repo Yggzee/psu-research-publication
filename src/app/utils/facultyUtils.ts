@@ -101,12 +101,14 @@ export function isPSUPaper(authors: string[]): boolean {
 export function filterFacultyResearchers<T extends { name: string }>(
   researchers: T[]
 ): T[] {
-  const facultyList = getFacultyList();
-  // If faculty list is empty, show all researchers (default behavior)
-  if (facultyList.length === 0) {
-    return researchers;
-  }
-  return researchers.filter(r => facultyList.includes(r.name));
+  return researchers.filter((r) => {
+    if (typeof (r as any).isFaculty === 'boolean') {
+      return (r as any).isFaculty;
+    }
+    const facultyList = getFacultyList();
+    if (facultyList.length === 0) return true;
+    return facultyList.includes(r.name);
+  });
 }
 
 /**
@@ -120,7 +122,13 @@ export function filterFacultyPublications<T extends { authors: string[] }>(
   if (facultyList.length === 0) {
     return publications;
   }
-  return publications.filter(pub => hasFacultyAuthor(pub.authors));
+  // Include publications that have a registered faculty author or are already marked approved
+  return publications.filter(
+    (pub) =>
+      hasFacultyAuthor(pub.authors) ||
+      (pub as any).approvalStatus === 'approved' ||
+      (pub as any).approval_status === 'approved'
+  );
 }
 
 /**

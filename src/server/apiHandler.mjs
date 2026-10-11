@@ -2,6 +2,67 @@ import { db } from './db.mjs';
 import { scrapeGoogleScholarDirect, scrapeGoogleScholarCitations, scrapeGoogleScholarProfile } from './scholarScraper.mjs';
 
 /**
+ * Check if a publication belongs to a researcher (by instructorId, user id, full name, or surname/initial in authors)
+ */
+export function matchesResearcher(p, r) {
+  if (!r) return false;
+  const pOwnerId = (p.owner_id || '').trim().toLowerCase();
+  const rInstId = (r.instructor_id || '').trim().toLowerCase();
+  const rId = (r.id || '').trim().toLowerCase();
+  if (pOwnerId && (pOwnerId === rInstId || pOwnerId === rId)) return true;
+
+  const rName = (r.name || '').trim().toLowerCase();
+  const rFirst = (r.first_name || '').trim().toLowerCase();
+  const rLast = (r.last_name || '').trim().toLowerCase();
+  const pOwnerName = (p.owner_name || '').trim().toLowerCase();
+
+  if (pOwnerName) {
+    if (pOwnerName === rName) return true;
+    if (rLast && rLast.length >= 3 && pOwnerName.includes(rLast)) return true;
+  }
+
+  let authors = [];
+  try {
+    authors = Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]');
+  } catch {
+    authors = [p.authors || ''];
+  }
+
+  for (const a of authors) {
+    const aLower = (typeof a === 'string' ? a : (a?.name || '')).trim().toLowerCase();
+    if (!aLower) continue;
+    if (aLower === rName || aLower.includes(rName) || rName.includes(aLower)) return true;
+    if (rLast && rLast.length >= 3 && aLower.includes(rLast)) {
+      const firstInitial = rFirst[0];
+      if (!firstInitial || aLower.includes(firstInitial) || aLower.replace(/[^a-z]/g, '') === rLast) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Synchronize publication count and citation sum for a researcher
+ */
+export function updateResearcherStats(dbInstance, researcherId) {
+  const researcher = dbInstance.prepare('SELECT * FROM researchers WHERE id = ? OR instructor_id = ?').get(researcherId, researcherId);
+  if (!researcher) return;
+
+  const allApproved = dbInstance.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
+  const matching = allApproved.filter((p) => matchesResearcher(p, researcher));
+  const pubCount = matching.length;
+  const citCount = matching.reduce((sum, p) => sum + (p.citations || 0), 0);
+
+  dbInstance.prepare(`
+    UPDATE researchers 
+    SET total_publications = ?, total_citations = ?
+    WHERE id = ?
+  `).run(pubCount, citCount, researcher.id);
+}
+
+/**
  * Handle incoming API requests
  * Compatible with Vite dev server middleware and standalone Node http server
  */
@@ -92,6 +153,8 @@ export async function handleApiRequest(req, res) {
     // ----------------------------------------------------
     // 2. DASHBOARD STATS: GET /api/dashboard/stats
     // ----------------------------------------------------
+    // 2. DASHBOARD STATS: GET /api/dashboard/stats
+    // ----------------------------------------------------
     if (pathname === '/api/dashboard/stats' && method === 'GET') {
       const researchersCount = db.prepare('SELECT COUNT(*) as count FROM researchers').get().count;
       const pubStats = db.prepare(`
@@ -103,32 +166,47 @@ export async function handleApiRequest(req, res) {
         WHERE approval_status = 'approved'
       `).get();
 
-      // Top researchers by citations
-      const topResearchers = db.prepare(`
-        SELECT 
-          r.id, r.name, r.department, r.instructor_id,
-          COALESCE(SUM(p.citations), 0) as citations,
-          COUNT(p.id) as publications
-        FROM researchers r
-        LEFT JOIN publications p ON (p.owner_id = r.instructor_id OR p.authors LIKE '%' || r.name || '%') AND p.approval_status = 'approved'
-        GROUP BY r.id
-        ORDER BY citations DESC
-        LIMIT 10
-      `).all();
+      // Ensure all researchers have up-to-date counts
+      const allResearchers = db.prepare('SELECT * FROM researchers').all();
+      const allApprovedPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
+
+      const calculatedResearchers = allResearchers.map((r) => {
+        const pubs = allApprovedPubs.filter((p) => matchesResearcher(p, r));
+        const pubCount = pubs.length;
+        const citCount = pubs.reduce((sum, p) => sum + (p.citations || 0), 0);
+        if (r.total_publications !== pubCount || r.total_citations !== citCount) {
+          db.prepare('UPDATE researchers SET total_publications = ?, total_citations = ? WHERE id = ?')
+            .run(pubCount, citCount, r.id);
+        }
+        return {
+          id: r.id,
+          name: r.name,
+          department: r.department,
+          instructor_id: r.instructor_id,
+          citations: citCount,
+          publications: pubCount,
+        };
+      });
+
+      const topResearchers = [...calculatedResearchers]
+        .sort((a, b) => b.citations - a.citations)
+        .slice(0, 10);
 
       // Citations and publications grouped by department & year
-      const deptYearStats = db.prepare(`
-        SELECT 
-          r.department,
-          p.year,
-          COUNT(p.id) as publications,
-          COALESCE(SUM(p.citations), 0) as citations
-        FROM publications p
-        JOIN researchers r ON p.owner_id = r.instructor_id
-        WHERE p.approval_status = 'approved'
-        GROUP BY r.department, p.year
-        ORDER BY p.year ASC
-      `).all();
+      const deptYearMap = {};
+      for (const p of allApprovedPubs) {
+        if (!p.year) continue;
+        // Find matching researcher to get department
+        const matchedR = allResearchers.find((r) => matchesResearcher(p, r));
+        const dept = matchedR ? matchedR.department : 'General';
+        const key = `${dept}-${p.year}`;
+        if (!deptYearMap[key]) {
+          deptYearMap[key] = { department: dept, year: p.year, publications: 0, citations: 0 };
+        }
+        deptYearMap[key].publications += 1;
+        deptYearMap[key].citations += (p.citations || 0);
+      }
+      const deptYearStats = Object.values(deptYearMap).sort((a, b) => a.year - b.year);
 
       return sendJson(200, {
         totalResearchers: researchersCount,
@@ -144,24 +222,18 @@ export async function handleApiRequest(req, res) {
     // 3. RESEARCHERS CRUD
     // ----------------------------------------------------
     if (pathname === '/api/researchers' && method === 'GET') {
-      const rows = db.prepare(`
-        SELECT 
-          r.*,
-          COALESCE(COUNT(p.id), 0) as totalPublications,
-          COALESCE(SUM(p.citations), 0) as totalCitations
-        FROM researchers r
-        LEFT JOIN publications p ON (p.owner_id = r.instructor_id OR p.authors LIKE '%' || r.name || '%') AND p.approval_status = 'approved'
-        GROUP BY r.id
-        ORDER BY r.name ASC
-      `).all();
+      const rows = db.prepare('SELECT * FROM researchers ORDER BY name ASC').all();
+      const allApprovedPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved' ORDER BY year DESC").all();
 
       const researchers = rows.map((r) => {
-        // Fetch publications for each researcher
-        const pubs = db.prepare(`
-          SELECT * FROM publications
-          WHERE (owner_id = ? OR authors LIKE '%' || ? || '%') AND approval_status = 'approved'
-          ORDER BY year DESC
-        `).all(r.instructor_id, r.name);
+        const pubs = allApprovedPubs.filter((p) => matchesResearcher(p, r));
+        const pubCount = pubs.length;
+        const citCount = pubs.reduce((sum, p) => sum + (p.citations || 0), 0);
+
+        if (r.total_publications !== pubCount || r.total_citations !== citCount) {
+          db.prepare('UPDATE researchers SET total_publications = ?, total_citations = ? WHERE id = ?')
+            .run(pubCount, citCount, r.id);
+        }
 
         return {
           id: r.id,
@@ -175,11 +247,11 @@ export async function handleApiRequest(req, res) {
           photoUrl: r.photo_url,
           scholarUrl: r.scholar_url || null,
           googleScholarId: r.google_scholar_id || null,
-          totalPublications: pubs.length,
-          totalCitations: pubs.reduce((sum, p) => sum + p.citations, 0),
+          totalPublications: pubCount,
+          totalCitations: citCount,
           publications: pubs.map((p) => ({
             ...p,
-            authors: JSON.parse(p.authors || '[]'),
+            authors: Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]'),
           })),
         };
       });
@@ -194,11 +266,15 @@ export async function handleApiRequest(req, res) {
         return sendJson(404, { error: 'Researcher not found' });
       }
 
-      const pubs = db.prepare(`
-        SELECT * FROM publications
-        WHERE (owner_id = ? OR authors LIKE '%' || ? || '%') AND approval_status = 'approved'
-        ORDER BY year DESC
-      `).all(r.instructor_id, r.name);
+      const allApprovedPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved' ORDER BY year DESC").all();
+      const pubs = allApprovedPubs.filter((p) => matchesResearcher(p, r));
+      const pubCount = pubs.length;
+      const citCount = pubs.reduce((sum, p) => sum + (p.citations || 0), 0);
+
+      if (r.total_publications !== pubCount || r.total_citations !== citCount) {
+        db.prepare('UPDATE researchers SET total_publications = ?, total_citations = ? WHERE id = ?')
+          .run(pubCount, citCount, r.id);
+      }
 
       return sendJson(200, {
         id: r.id,
@@ -212,11 +288,11 @@ export async function handleApiRequest(req, res) {
         photoUrl: r.photo_url,
         scholarUrl: r.scholar_url || null,
         googleScholarId: r.google_scholar_id || null,
-        totalPublications: pubs.length,
-        totalCitations: pubs.reduce((sum, p) => sum + p.citations, 0),
+        totalPublications: pubCount,
+        totalCitations: citCount,
         publications: pubs.map((p) => ({
           ...p,
-          authors: JSON.parse(p.authors || '[]'),
+          authors: Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]'),
         })),
       });
     }
@@ -280,8 +356,8 @@ export async function handleApiRequest(req, res) {
 
       // 2. Insert into researchers table
       db.prepare(`
-        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, photo_url, scholar_url, google_scholar_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, photo_url, scholar_url, google_scholar_id, total_publications, total_citations, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
       `).run(
         researcherId,
         userId,
@@ -298,6 +374,10 @@ export async function handleApiRequest(req, res) {
         now
       );
 
+      // Synchronize any pre-existing matching publications
+      updateResearcherStats(db, researcherId);
+      const savedResearcher = db.prepare('SELECT * FROM researchers WHERE id = ?').get(researcherId);
+
       return sendJson(201, {
         success: true,
         message: 'Researcher created and login credentials generated successfully.',
@@ -305,10 +385,15 @@ export async function handleApiRequest(req, res) {
           id: researcherId,
           instructorId: trimmedInstId,
           name: fullName,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
           department,
-          isFaculty,
+          isFaculty: Boolean(isFaculty),
+          photoUrl: photoUrl || null,
           scholarUrl: scholarUrl || null,
           googleScholarId: parsedScholarId || null,
+          totalPublications: savedResearcher.total_publications || 0,
+          totalCitations: savedResearcher.total_citations || 0,
         }
       });
     }
@@ -532,6 +617,12 @@ export async function handleApiRequest(req, res) {
             cp.link || null
           );
         }
+      }
+
+      // Keep researcher totals synchronized
+      const allRes = db.prepare('SELECT id FROM researchers').all();
+      for (const resRow of allRes) {
+        updateResearcherStats(db, resRow.id);
       }
 
       return sendJson(201, { success: true, id, message: 'Publication saved to database' });
@@ -841,6 +932,12 @@ export async function handleApiRequest(req, res) {
         scholarUrl,
         scholarId,
         photoUrl,
+        firstName,
+        lastName,
+        department = 'BSIT',
+        password,
+        email,
+        isFaculty = true,
         publications = [],
       } = await readJsonBody();
 
@@ -848,11 +945,99 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'Instructor ID and selected publications are required.' });
       }
 
-      const researcher = db.prepare('SELECT * FROM researchers WHERE instructor_id = ? OR id = ?').get(instructorId, instructorId);
-      const targetInstId = researcher?.instructor_id || instructorId;
-      const targetName = researcherName || researcher?.name || targetInstId;
+      const trimmedInstId = instructorId.trim();
+      let researcher = db.prepare('SELECT * FROM researchers WHERE instructor_id = ? OR id = ?').get(trimmedInstId, trimmedInstId);
+
+      // Extract scholar ID if URL passed
+      let parsedScholarId = scholarId || null;
+      if (!parsedScholarId && scholarUrl) {
+        const uMatch = scholarUrl.match(/[?&]user=([a-zA-Z0-9_-]+)/);
+        if (uMatch) parsedScholarId = uMatch[1];
+      }
 
       const now = new Date().toISOString();
+
+      // AUTO-CREATE RESEARCHER PROFILE IF NOT YET SAVED IN DATABASE
+      if (!researcher) {
+        const nameParts = (researcherName || trimmedInstId).trim().split(/\s+/).filter(Boolean);
+        const fName = firstName ? firstName.trim() : (nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : nameParts[0] || 'Researcher');
+        const lName = lastName ? lastName.trim() : (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
+        const fullName = `${fName} ${lName}`.trim() || researcherName || trimmedInstId;
+        const resUserId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const resId = `res-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const userEmail = email ? email.trim() : `${trimmedInstId.toLowerCase()}@psu.edu.ph`;
+        const userPassword = password || 'psu12345';
+        const userDept = department || 'BSIT';
+        const userIsFaculty = isFaculty !== false ? 1 : 0;
+
+        const existingUser = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(trimmedInstId);
+        if (!existingUser) {
+          db.prepare(`
+            INSERT INTO users (id, username, email, password, name, role, department, is_faculty, photo_url, scholar_url, google_scholar_id, created_at)
+            VALUES (?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?, ?, ?)
+          `).run(
+            resUserId,
+            trimmedInstId,
+            userEmail,
+            userPassword,
+            fullName,
+            userDept,
+            userIsFaculty,
+            photoUrl || null,
+            scholarUrl || null,
+            parsedScholarId || null,
+            now
+          );
+        }
+
+        db.prepare(`
+          INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, photo_url, scholar_url, google_scholar_id, total_publications, total_citations, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+        `).run(
+          resId,
+          existingUser ? existingUser.id : resUserId,
+          trimmedInstId,
+          fName,
+          lName,
+          fullName,
+          userEmail,
+          userDept,
+          userIsFaculty,
+          photoUrl || null,
+          scholarUrl || null,
+          parsedScholarId || null,
+          now
+        );
+
+        researcher = db.prepare('SELECT * FROM researchers WHERE id = ?').get(resId);
+      } else {
+        if (scholarUrl || parsedScholarId) {
+          db.prepare(`
+            UPDATE researchers 
+            SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
+            WHERE id = ?
+          `).run(scholarUrl || null, parsedScholarId || null, researcher.id);
+
+          if (researcher.user_id) {
+            db.prepare(`
+              UPDATE users 
+              SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
+              WHERE id = ?
+            `).run(scholarUrl || null, parsedScholarId || null, researcher.user_id);
+          }
+        }
+
+        if (photoUrl && (!researcher.photo_url || researcher.photo_url === '')) {
+          db.prepare('UPDATE researchers SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.id);
+          if (researcher.user_id) {
+            db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.user_id);
+          }
+        }
+      }
+
+      const targetInstId = researcher.instructor_id;
+      const targetName = researcher.name;
+
       let importedCount = 0;
       let updatedCount = 0;
 
@@ -922,55 +1107,29 @@ export async function handleApiRequest(req, res) {
           item.abstract || '',
           item.url || '',
           item.citedByLink || null,
-          scholarId || targetName,
+          parsedScholarId || targetName,
           now
         );
       }
 
-      // Update researcher's profile
-      if (researcher) {
-        if (scholarUrl || scholarId) {
-          db.prepare(`
-            UPDATE researchers 
-            SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
-            WHERE id = ?
-          `).run(scholarUrl || null, scholarId || null, researcher.id);
-
-          if (researcher.user_id) {
-            db.prepare(`
-              UPDATE users 
-              SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
-              WHERE id = ?
-            `).run(scholarUrl || null, scholarId || null, researcher.user_id);
-          }
-        }
-
-        if (photoUrl && (!researcher.photo_url || researcher.photo_url === '')) {
-          db.prepare('UPDATE researchers SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.id);
-          if (researcher.user_id) {
-            db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.user_id);
-          }
-        }
-
-        const stats = db.prepare(`
-          SELECT COUNT(*) as pubCount, COALESCE(SUM(citations), 0) as citCount
-          FROM publications
-          WHERE owner_id = ? AND approval_status = 'approved'
-        `).get(targetInstId);
-
-        db.prepare(`
-          UPDATE researchers 
-          SET total_publications = ?, total_citations = ?
-          WHERE id = ?
-        `).run(stats.pubCount, stats.citCount, researcher.id);
-      }
+      // Synchronize researcher totals across all approved publications
+      updateResearcherStats(db, researcher.id);
+      const updatedRes = db.prepare('SELECT * FROM researchers WHERE id = ?').get(researcher.id);
 
       return sendJson(200, {
         success: true,
         importedCount,
         updatedCount,
         totalSelected: publications.length,
-        message: `Successfully saved ${importedCount} new publication(s) and updated ${updatedCount} existing record(s) for ${targetName}.`,
+        researcher: {
+          id: updatedRes.id,
+          instructorId: updatedRes.instructor_id,
+          name: updatedRes.name,
+          department: updatedRes.department,
+          totalPublications: updatedRes.total_publications,
+          totalCitations: updatedRes.total_citations,
+        },
+        message: `Successfully saved ${importedCount} new publication(s) and recorded ${targetName} as a researcher with ${updatedRes.total_publications} publications.`,
       });
     }
 

@@ -255,6 +255,12 @@ class ApiService {
   async importScholarPublications(data: {
     instructorId: string;
     researcherName?: string;
+    firstName?: string;
+    lastName?: string;
+    department?: string;
+    password?: string;
+    email?: string;
+    isFaculty?: boolean;
     scholarUrl?: string;
     scholarId?: string;
     photoUrl?: string;

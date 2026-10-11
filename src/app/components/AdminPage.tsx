@@ -42,13 +42,20 @@ export function AdminPage() {
     instructorId: string;
     name: string;
     scholarUrl?: string;
+    details?: Partial<ManagedResearcher>;
   } | null>(null);
 
-  const openScholarReview = (instId: string, name: string, url?: string) => {
+  const openScholarReview = (
+    instId: string,
+    name: string,
+    url?: string,
+    details?: Partial<ManagedResearcher>
+  ) => {
     setModalTargetResearcher({
       instructorId: instId,
       name,
       scholarUrl: url,
+      details,
     });
     setScholarModalOpen(true);
   };
@@ -358,7 +365,17 @@ export function AdminPage() {
                       openScholarReview(
                         form.instructorId,
                         `${form.firstName.trim()} ${form.lastName.trim()}`,
-                        form.scholarUrl
+                        form.scholarUrl,
+                        {
+                          firstName: form.firstName.trim(),
+                          lastName: form.lastName.trim(),
+                          instructorId: form.instructorId.trim(),
+                          password: form.password,
+                          department: form.isFaculty ? form.department : "Non Teaching",
+                          email: form.email.trim(),
+                          isFaculty: form.isFaculty,
+                          photoUrl: form.photoUrl,
+                        }
                       );
                     }}
                     disabled={!form.scholarUrl.trim()}
@@ -486,8 +503,10 @@ export function AdminPage() {
           instructorId={modalTargetResearcher.instructorId}
           researcherName={modalTargetResearcher.name}
           initialScholarUrl={modalTargetResearcher.scholarUrl}
+          researcherDetails={modalTargetResearcher.details}
           onImportSuccess={async () => {
             await loadData();
+            resetForm();
           }}
         />
       )}

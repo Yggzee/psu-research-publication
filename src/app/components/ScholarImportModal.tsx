@@ -32,6 +32,8 @@ import {
   type ScholarProfilePublication,
 } from "../services/api.service";
 
+import { type ManagedResearcher } from "../utils/researchStore";
+
 interface ScholarImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -39,6 +41,7 @@ interface ScholarImportModalProps {
   researcherName: string;
   initialScholarUrl?: string;
   onImportSuccess: (count: number) => void;
+  researcherDetails?: Partial<ManagedResearcher>;
 }
 
 export function ScholarImportModal({
@@ -48,6 +51,7 @@ export function ScholarImportModal({
   researcherName,
   initialScholarUrl = "",
   onImportSuccess,
+  researcherDetails,
 }: ScholarImportModalProps) {
   const [scholarUrl, setScholarUrl] = useState(initialScholarUrl);
   const [loading, setLoading] = useState(false);
@@ -163,8 +167,14 @@ export function ScholarImportModal({
         researcherName,
         scholarUrl: profile.scholarUrl,
         scholarId: profile.userId,
-        photoUrl: useScholarPhoto && profile.photoUrl ? profile.photoUrl : undefined,
+        photoUrl: useScholarPhoto && profile.photoUrl ? profile.photoUrl : researcherDetails?.photoUrl,
         publications: selectedPubs,
+        firstName: researcherDetails?.firstName,
+        lastName: researcherDetails?.lastName,
+        department: researcherDetails?.department,
+        password: researcherDetails?.password,
+        email: researcherDetails?.email,
+        isFaculty: researcherDetails?.isFaculty,
       });
 
       if (!res.success) {
