@@ -35,6 +35,51 @@ export interface ScholarSearchResult {
   fromCache?: boolean;
 }
 
+export interface ScholarAuthorDetail {
+  name: string;
+  isPsu: boolean;
+  department?: string | null;
+}
+
+export interface ScholarProfilePublication {
+  id: string;
+  title: string;
+  authors: string[];
+  authorDetails?: ScholarAuthorDetail[];
+  psuAuthors?: string[];
+  nonPsuAuthors?: string[];
+  isPsuPaper?: boolean;
+  hasCollaborators?: boolean;
+  journal: string;
+  year: number;
+  citations: number;
+  url?: string;
+  citedByLink?: string;
+  abstract?: string;
+}
+
+export interface ScholarProfileData {
+  userId: string;
+  scholarUrl: string;
+  name: string;
+  affiliation: string;
+  verifiedEmail: string;
+  photoUrl?: string;
+  totalCitations: number;
+  hIndex: number;
+  i10Index: number;
+  isPsuAffiliated: boolean;
+}
+
+export interface FetchScholarProfileResponse {
+  success: boolean;
+  profile: ScholarProfileData;
+  publications: ScholarProfilePublication[];
+  totalFound: number;
+  usedApify: boolean;
+  error?: string;
+}
+
 /**
  * Base API Service
  * Handles all HTTP requests to the SQLite Database API
@@ -117,6 +162,8 @@ class ApiService {
     isFaculty: boolean;
     photoUrl?: string;
     email?: string;
+    scholarUrl?: string;
+    googleScholarId?: string;
   }) {
     return this.request('/researchers', {
       method: 'POST',
@@ -131,6 +178,8 @@ class ApiService {
     department: string;
     isFaculty: boolean;
     photoUrl?: string;
+    scholarUrl?: string;
+    googleScholarId?: string;
   }>) {
     return this.request(`/researchers/${id}`, {
       method: 'PUT',
@@ -194,6 +243,33 @@ class ApiService {
   }> {
     const refreshParam = refresh ? '&refresh=true' : '';
     return this.request(`/search/google-scholar?q=${encodeURIComponent(query)}${refreshParam}`);
+  }
+
+  async fetchScholarProfile(scholarUrl: string): Promise<FetchScholarProfileResponse> {
+    return this.request<FetchScholarProfileResponse>('/scholar/fetch-profile', {
+      method: 'POST',
+      body: JSON.stringify({ scholarUrl }),
+    });
+  }
+
+  async importScholarPublications(data: {
+    instructorId: string;
+    researcherName?: string;
+    scholarUrl?: string;
+    scholarId?: string;
+    photoUrl?: string;
+    publications: ScholarProfilePublication[];
+  }): Promise<{
+    success: boolean;
+    importedCount: number;
+    updatedCount: number;
+    totalSelected: number;
+    message: string;
+  }> {
+    return this.request('/scholar/import', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   // 6. Claims

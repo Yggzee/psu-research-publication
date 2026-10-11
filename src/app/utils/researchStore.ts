@@ -14,6 +14,8 @@ export interface ManagedResearcher {
   department: string;
   isFaculty: boolean;
   photoUrl?: string;
+  scholarUrl?: string;
+  googleScholarId?: string;
   totalPublications?: number;
   totalCitations?: number;
 }

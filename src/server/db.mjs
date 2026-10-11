@@ -113,6 +113,18 @@ export function initDatabase() {
   } catch {
     // Column already exists — ignore
   }
+  try {
+    db.exec(`ALTER TABLE researchers ADD COLUMN scholar_url TEXT`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE researchers ADD COLUMN google_scholar_id TEXT`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN scholar_url TEXT`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN google_scholar_id TEXT`);
+  } catch {}
 
   // 5. Citation Trends Table (yearly citations per publication)
   db.exec(`

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { Check, Edit2, KeyRound, Plus, Save, Shield, Trash2, Upload, UserCheck, X, RefreshCw } from "lucide-react";
+import { Check, Edit2, KeyRound, Plus, Save, Shield, Trash2, Upload, UserCheck, X, RefreshCw, GraduationCap, ExternalLink, BookOpen } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -13,6 +13,7 @@ import {
 } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
 import { ApifyTokenManager } from "./ApifyTokenManager";
+import { ScholarImportModal } from "./ScholarImportModal";
 
 const DEPARTMENTS = ["BSIT", "BSBA", "BSE", "BEE", "BTLED", "BIT", "Non Teaching"];
 
@@ -25,6 +26,7 @@ const emptyForm = {
   isFaculty: true,
   photoUrl: "",
   email: "",
+  scholarUrl: "",
 };
 
 export function AdminPage() {
@@ -35,6 +37,21 @@ export function AdminPage() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [scholarModalOpen, setScholarModalOpen] = useState(false);
+  const [modalTargetResearcher, setModalTargetResearcher] = useState<{
+    instructorId: string;
+    name: string;
+    scholarUrl?: string;
+  } | null>(null);
+
+  const openScholarReview = (instId: string, name: string, url?: string) => {
+    setModalTargetResearcher({
+      instructorId: instId,
+      name,
+      scholarUrl: url,
+    });
+    setScholarModalOpen(true);
+  };
 
   // Load from SQLite database on mount
   const loadData = async () => {
@@ -55,6 +72,8 @@ export function AdminPage() {
           department: r.department,
           isFaculty: r.isFaculty ?? true,
           photoUrl: r.photoUrl,
+          scholarUrl: r.scholarUrl || r.scholar_url,
+          googleScholarId: r.googleScholarId || r.google_scholar_id,
           totalPublications: r.totalPublications || 0,
           totalCitations: r.totalCitations || 0,
         }));
@@ -118,6 +137,7 @@ export function AdminPage() {
       department: form.isFaculty ? form.department : "Non Teaching",
       isFaculty: form.isFaculty,
       photoUrl: form.photoUrl || undefined,
+      scholarUrl: form.scholarUrl.trim() || undefined,
     };
 
     try {
@@ -144,6 +164,7 @@ export function AdminPage() {
       isFaculty: researcher.isFaculty,
       photoUrl: researcher.photoUrl || "",
       email: researcher.email || "",
+      scholarUrl: researcher.scholarUrl || "",
     });
     setEditingId(researcher.instructorId);
     setIsAdding(true);
@@ -315,6 +336,43 @@ export function AdminPage() {
                 </Select>
               </div>
               <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="scholar-url" className="flex items-center gap-1.5">
+                  <GraduationCap className="w-4 h-4 text-blue-600" />
+                  Google Scholar Profile URL or User ID (Optional)
+                </Label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    id="scholar-url"
+                    value={form.scholarUrl}
+                    onChange={(e) => setForm({ ...form, scholarUrl: e.target.value })}
+                    placeholder="e.g. https://scholar.google.com/citations?user=... or User ID"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (!form.instructorId || !form.firstName) {
+                        setFormError("Please enter First Name, Last Name, and Instructor ID first.");
+                        return;
+                      }
+                      openScholarReview(
+                        form.instructorId,
+                        `${form.firstName.trim()} ${form.lastName.trim()}`,
+                        form.scholarUrl
+                      );
+                    }}
+                    disabled={!form.scholarUrl.trim()}
+                    className="whitespace-nowrap border-blue-600 text-blue-600 hover:bg-blue-50"
+                  >
+                    <BookOpen className="w-4 h-4 mr-1.5" />
+                    Fetch & Review Publications
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Import verified publications with automatic PSU faculty vs Non-PSU external collaborator detection.
+                </p>
+              </div>
+              <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="profile-photo">Profile Photo</Label>
                 <div className="flex items-center gap-4">
                   {form.photoUrl && <img src={form.photoUrl} alt="Profile preview" className="h-16 w-16 rounded-full object-cover border" />}
@@ -366,16 +424,36 @@ export function AdminPage() {
                       </div>
                     )}
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-gray-900">{researcher.name}</p>
                         <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
                           {researcher.isFaculty ? "Faculty" : "Non-Teaching"}
                         </span>
+                        {researcher.scholarUrl && (
+                          <a
+                            href={researcher.scholarUrl.startsWith("http") ? researcher.scholarUrl : `https://scholar.google.com/citations?user=${researcher.scholarUrl}&hl=en`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full border border-blue-200"
+                            title="View Google Scholar Profile"
+                          >
+                            <GraduationCap className="w-3 h-3" /> Scholar Linked <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
                       </div>
                       <p className="mt-1 text-sm text-gray-600">ID: {researcher.instructorId} • {researcher.department}</p>
                     </div>
                   </div>
-                  <div className="flex gap-2 self-end sm:self-center">
+                  <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openScholarReview(researcher.instructorId, researcher.name, researcher.scholarUrl)}
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50 text-xs h-8"
+                      title="Import & Review publications from Google Scholar"
+                    >
+                      <GraduationCap className="w-3.5 h-3.5 mr-1" /> Import Scholar
+                    </Button>
                     <Button variant="ghost" size="sm" onClick={() => editResearcher(researcher)}><Edit2 className="h-4 w-4" /></Button>
                     <Button variant="ghost" size="sm" onClick={() => deleteResearcher(researcher.instructorId)} className="text-red-600 hover:text-red-700">
                       <Trash2 className="h-4 w-4" />
@@ -396,6 +474,23 @@ export function AdminPage() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Option B: Google Scholar Review & Import Modal */}
+      {modalTargetResearcher && (
+        <ScholarImportModal
+          isOpen={scholarModalOpen}
+          onClose={() => {
+            setScholarModalOpen(false);
+            setModalTargetResearcher(null);
+          }}
+          instructorId={modalTargetResearcher.instructorId}
+          researcherName={modalTargetResearcher.name}
+          initialScholarUrl={modalTargetResearcher.scholarUrl}
+          onImportSuccess={async () => {
+            await loadData();
+          }}
+        />
+      )}
     </div>
   );
 }

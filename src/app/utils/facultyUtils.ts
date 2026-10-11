@@ -130,3 +130,49 @@ export function getFacultyPhoto(name: string): string | undefined {
   const member = getFacultyMember(name);
   return member?.photoUrl;
 }
+
+export interface AuthorCategory {
+  name: string;
+  isPsu: boolean;
+}
+
+/**
+ * Categorize each author in an author array as PSU faculty vs Non-PSU collaborator
+ */
+export function categorizeAuthors(authors: string[]): AuthorCategory[] {
+  const facultyList = getFacultyList();
+
+  return authors.map((author) => {
+    const cleanAuthor = author.toLowerCase().trim();
+    if (!cleanAuthor) return { name: author, isPsu: false };
+
+    const isMatch = facultyList.some((fac) => {
+      const cleanFac = fac.toLowerCase().trim();
+      if (cleanAuthor === cleanFac || cleanAuthor.includes(cleanFac)) return true;
+
+      const facParts = cleanFac.split(/\s+/).filter(Boolean);
+      const lastName = facParts[facParts.length - 1];
+      if (lastName && lastName.length > 2 && cleanAuthor.includes(lastName)) {
+        const firstInitial = facParts[0]?.[0];
+        if (!firstInitial || cleanAuthor.includes(firstInitial) || cleanAuthor === lastName) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    return {
+      name: author,
+      isPsu: isMatch,
+    };
+  });
+}
+
+/**
+ * Check if a publication has non-PSU co-authors (collaborative paper)
+ */
+export function hasExternalCollaborators(authors: string[]): boolean {
+  const categorized = categorizeAuthors(authors);
+  return categorized.some((a) => !a.isPsu);
+}
+

@@ -29,6 +29,9 @@ export interface Researcher {
   totalCitations: number;
   publications: Publication[];
   isFaculty?: boolean;
+  scholarUrl?: string;
+  googleScholarId?: string;
+  photoUrl?: string;
 }
 
 export const mockResearchers: Researcher[] = [

@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Quote, TrendingUp, ExternalLink, Calendar, Users, BookOpen, Loader2 } from "lucide-react";
+import { ArrowLeft, Quote, TrendingUp, ExternalLink, Calendar, Users, BookOpen, Loader2, Shield, UserCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { apiService } from "../services/api.service";
 import type { Publication } from "../data/mockData";
+import { categorizeAuthors, hasExternalCollaborators, isPSUPaper } from "../utils/facultyUtils";
 
 export function PublicationDetail() {
   const { id } = useParams();
@@ -78,7 +79,18 @@ export function PublicationDetail() {
       <Card>
         <CardContent className="p-8">
           <div className="mb-4">
-            <Badge className="bg-blue-600 mb-3">Research Publication</Badge>
+            <div className="flex items-center gap-2 flex-wrap mb-3">
+              <Badge className="bg-blue-600">Research Publication</Badge>
+              {Array.isArray(publication.authors) && hasExternalCollaborators(publication.authors) ? (
+                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
+                  PSU + External Collaboration
+                </Badge>
+              ) : Array.isArray(publication.authors) && isPSUPaper(publication.authors) ? (
+                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">
+                  Pure PSU Research Paper
+                </Badge>
+              ) : null}
+            </div>
             <h1 className="text-3xl text-gray-900 mb-4">{publication.title}</h1>
           </div>
 
@@ -87,12 +99,38 @@ export function PublicationDetail() {
             <div className="flex items-start gap-3">
               <Users className="w-5 h-5 text-gray-500 mt-0.5" />
               <div>
-                <p className="text-sm text-gray-600 mb-1">Authors</p>
-                <p className="text-gray-900">
-                  {Array.isArray(publication.authors)
-                    ? publication.authors.join(", ")
-                    : publication.authors}
-                </p>
+                <p className="text-sm text-gray-600 mb-1.5">Authors & Affiliation Breakdown</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {Array.isArray(publication.authors) ? (
+                    categorizeAuthors(publication.authors).map((cat, aIdx) => (
+                      <span
+                        key={aIdx}
+                        className={`text-xs px-2.5 py-1 rounded-md font-medium inline-flex items-center gap-1.5 ${
+                          cat.isPsu
+                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            : "bg-slate-100 text-slate-700 border border-slate-200"
+                        }`}
+                        title={
+                          cat.isPsu
+                            ? "PSU Faculty Member"
+                            : "External / Non-PSU Collaborator"
+                        }
+                      >
+                        {cat.isPsu ? (
+                          <UserCheck className="w-3 h-3 text-emerald-600" />
+                        ) : (
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        )}
+                        <span>{cat.name}</span>
+                        <span className="text-[10px] opacity-75">
+                          ({cat.isPsu ? "PSU" : "External"})
+                        </span>
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-gray-900">{publication.authors}</p>
+                  )}
+                </div>
               </div>
             </div>
 

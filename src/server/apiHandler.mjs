@@ -1,5 +1,5 @@
 import { db } from './db.mjs';
-import { scrapeGoogleScholarDirect, scrapeGoogleScholarCitations } from './scholarScraper.mjs';
+import { scrapeGoogleScholarDirect, scrapeGoogleScholarCitations, scrapeGoogleScholarProfile } from './scholarScraper.mjs';
 
 /**
  * Handle incoming API requests
@@ -173,6 +173,8 @@ export async function handleApiRequest(req, res) {
           isFaculty: Boolean(r.is_faculty),
           affiliation: r.affiliation,
           photoUrl: r.photo_url,
+          scholarUrl: r.scholar_url || null,
+          googleScholarId: r.google_scholar_id || null,
           totalPublications: pubs.length,
           totalCitations: pubs.reduce((sum, p) => sum + p.citations, 0),
           publications: pubs.map((p) => ({
@@ -208,6 +210,8 @@ export async function handleApiRequest(req, res) {
         isFaculty: Boolean(r.is_faculty),
         affiliation: r.affiliation,
         photoUrl: r.photo_url,
+        scholarUrl: r.scholar_url || null,
+        googleScholarId: r.google_scholar_id || null,
         totalPublications: pubs.length,
         totalCitations: pubs.reduce((sum, p) => sum + p.citations, 0),
         publications: pubs.map((p) => ({
@@ -229,6 +233,8 @@ export async function handleApiRequest(req, res) {
         isFaculty = true,
         photoUrl,
         email,
+        scholarUrl,
+        googleScholarId,
       } = data;
 
       if (!firstName || !lastName || !instructorId || !password) {
@@ -242,6 +248,13 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'That Instructor ID is already registered.' });
       }
 
+      // Extract scholar ID if URL passed
+      let parsedScholarId = googleScholarId || null;
+      if (!parsedScholarId && scholarUrl) {
+        const uMatch = scholarUrl.match(/[?&]user=([a-zA-Z0-9_-]+)/);
+        if (uMatch) parsedScholarId = uMatch[1];
+      }
+
       const userId = `user-${Date.now()}`;
       const researcherId = `res-${Date.now()}`;
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
@@ -249,8 +262,8 @@ export async function handleApiRequest(req, res) {
 
       // 1. Insert into users table so researcher can immediately log in
       db.prepare(`
-        INSERT INTO users (id, username, email, password, name, role, department, is_faculty, photo_url, created_at)
-        VALUES (?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?)
+        INSERT INTO users (id, username, email, password, name, role, department, is_faculty, photo_url, scholar_url, google_scholar_id, created_at)
+        VALUES (?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?, ?, ?)
       `).run(
         userId,
         trimmedInstId,
@@ -260,13 +273,15 @@ export async function handleApiRequest(req, res) {
         department,
         isFaculty ? 1 : 0,
         photoUrl || null,
+        scholarUrl || null,
+        parsedScholarId || null,
         now
       );
 
       // 2. Insert into researchers table
       db.prepare(`
-        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, photo_url, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, photo_url, scholar_url, google_scholar_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         researcherId,
         userId,
@@ -278,6 +293,8 @@ export async function handleApiRequest(req, res) {
         department,
         isFaculty ? 1 : 0,
         photoUrl || null,
+        scholarUrl || null,
+        parsedScholarId || null,
         now
       );
 
@@ -290,6 +307,8 @@ export async function handleApiRequest(req, res) {
           name: fullName,
           department,
           isFaculty,
+          scholarUrl: scholarUrl || null,
+          googleScholarId: parsedScholarId || null,
         }
       });
     }
@@ -309,21 +328,28 @@ export async function handleApiRequest(req, res) {
       const department = data.department || current.department;
       const isFaculty = data.isFaculty !== undefined ? (data.isFaculty ? 1 : 0) : current.is_faculty;
       const photoUrl = data.photoUrl !== undefined ? data.photoUrl : current.photo_url;
+      let scholarUrl = data.scholarUrl !== undefined ? data.scholarUrl : current.scholar_url;
+      let googleScholarId = data.googleScholarId !== undefined ? data.googleScholarId : current.google_scholar_id;
+
+      if (scholarUrl && !googleScholarId) {
+        const uMatch = scholarUrl.match(/[?&]user=([a-zA-Z0-9_-]+)/);
+        if (uMatch) googleScholarId = uMatch[1];
+      }
 
       db.prepare(`
         UPDATE researchers 
-        SET first_name = ?, last_name = ?, name = ?, department = ?, is_faculty = ?, photo_url = ?
+        SET first_name = ?, last_name = ?, name = ?, department = ?, is_faculty = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
         WHERE id = ?
-      `).run(firstName, lastName, fullName, department, isFaculty, photoUrl, current.id);
+      `).run(firstName, lastName, fullName, department, isFaculty, photoUrl, scholarUrl || null, googleScholarId || null, current.id);
 
       // Update associated user record if password or details changed
       if (current.user_id) {
         if (data.password) {
-          db.prepare('UPDATE users SET name = ?, department = ?, is_faculty = ?, photo_url = ?, password = ? WHERE id = ?')
-            .run(fullName, department, isFaculty, photoUrl, data.password, current.user_id);
+          db.prepare('UPDATE users SET name = ?, department = ?, is_faculty = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?, password = ? WHERE id = ?')
+            .run(fullName, department, isFaculty, photoUrl, scholarUrl || null, googleScholarId || null, data.password, current.user_id);
         } else {
-          db.prepare('UPDATE users SET name = ?, department = ?, is_faculty = ?, photo_url = ? WHERE id = ?')
-            .run(fullName, department, isFaculty, photoUrl, current.user_id);
+          db.prepare('UPDATE users SET name = ?, department = ?, is_faculty = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ? WHERE id = ?')
+            .run(fullName, department, isFaculty, photoUrl, scholarUrl || null, googleScholarId || null, current.user_id);
         }
       }
 
@@ -636,6 +662,317 @@ export async function handleApiRequest(req, res) {
         tokenUsage,
       };
     };
+
+    // ----------------------------------------------------
+    // 5A. GOOGLE SCHOLAR PROFILE FETCH & PSU/NON-PSU REVIEW
+    // ----------------------------------------------------
+    if (pathname === '/api/scholar/fetch-profile' && method === 'POST') {
+      const { scholarUrl } = await readJsonBody();
+      if (!scholarUrl) {
+        return sendJson(400, { error: 'Google Scholar profile URL or user ID is required.' });
+      }
+
+      let profileResult = null;
+      let usedApify = false;
+
+      // Tier 1: Direct Profile Fetch
+      try {
+        profileResult = await scrapeGoogleScholarProfile(scholarUrl);
+      } catch (directErr) {
+        console.warn('[ScholarProfile] Direct fetch failed, trying Apify fallback:', directErr.message);
+
+        // Tier 2: Apify fallback if direct scrape got blocked
+        const candidateTokens = db.prepare(`
+          SELECT * FROM apify_tokens ORDER BY is_active DESC, created_at DESC
+        `).all();
+
+        if (candidateTokens.length > 0 || process.env.APIFY_TOKEN) {
+          let userId = scholarUrl.trim();
+          const userMatch = userId.match(/[?&]user=([a-zA-Z0-9_-]+)/);
+          if (userMatch) userId = userMatch[1];
+
+          const cand = candidateTokens[0] || {
+            name: 'EnvToken',
+            token: process.env.APIFY_TOKEN,
+            actorId: 'johnvc~google-scholar-api'
+          };
+
+          try {
+            const targetActor = cand.actor_id || cand.actorId || 'johnvc~google-scholar-api';
+            const actorUrlSegment = targetActor.replace('/', '~');
+            const targetProfileUrl = `https://scholar.google.com/citations?user=${encodeURIComponent(userId)}&hl=en&pagesize=100`;
+
+            const apifyRes = await fetch(
+              `https://api.apify.com/v2/acts/${actorUrlSegment}/run-sync-get-dataset-items?token=${cand.token}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  startUrls: [{ url: targetProfileUrl }],
+                  queries: [targetProfileUrl],
+                  maxResults: 100
+                })
+              }
+            );
+
+            if (apifyRes.ok) {
+              const apifyItems = await apifyRes.json();
+              if (Array.isArray(apifyItems) && apifyItems.length > 0) {
+                usedApify = true;
+                const parsedPubs = apifyItems.map((item, idx) => ({
+                  id: `gsp-${userId}-${idx + 1}`,
+                  title: item.title || item.name || '',
+                  authors: Array.isArray(item.authors) ? item.authors : (item.authors ? item.authors.split(',').map(a => a.trim()) : []),
+                  journal: item.journal || item.publication || item.venue || 'Academic Publication',
+                  year: parseInt(item.year, 10) || new Date().getFullYear(),
+                  citations: parseInt(item.citations || item.numCitations || 0, 10),
+                  url: item.url || item.link || '',
+                  citedByLink: item.citedByLink || '',
+                  abstract: item.abstract || item.snippet || ''
+                })).filter(p => p.title);
+
+                profileResult = {
+                  profile: {
+                    userId,
+                    scholarUrl: `https://scholar.google.com/citations?user=${userId}&hl=en`,
+                    name: apifyItems[0]?.authorName || 'Scholar Researcher',
+                    affiliation: apifyItems[0]?.affiliation || 'Academic Researcher',
+                    verifiedEmail: '',
+                    photoUrl: '',
+                    totalCitations: parsedPubs.reduce((sum, p) => sum + p.citations, 0),
+                    hIndex: 0,
+                    i10Index: 0,
+                    isPsuAffiliated: false
+                  },
+                  publications: parsedPubs
+                };
+              }
+            }
+          } catch (apifyErr) {
+            console.warn('[ScholarProfile] Apify fallback failed:', apifyErr.message);
+          }
+        }
+
+        if (!profileResult) {
+          return sendJson(500, {
+            error: `Failed to fetch profile: ${directErr.message}. If Google Scholar is blocking requests, configure an Apify token in Admin Panel.`
+          });
+        }
+      }
+
+      // Identify PSU vs Non-PSU authors across the fetched publications
+      const facultyList = db.prepare(`
+        SELECT id, name, first_name, last_name, department, instructor_id
+        FROM researchers
+        WHERE is_faculty = 1
+      `).all();
+
+      const profileName = profileResult.profile.name || '';
+      const profileParts = profileName.toLowerCase().split(/\s+/).filter(Boolean);
+      const profileLastName = profileParts[profileParts.length - 1] || '';
+
+      const checkAuthorPsu = (authorStr) => {
+        const cleanA = authorStr.toLowerCase().trim();
+        if (!cleanA) return { isPsu: false };
+
+        if (profileName && (cleanA === profileName.toLowerCase() || (profileLastName.length > 2 && cleanA.includes(profileLastName)))) {
+          return { isPsu: true, isTargetResearcher: true, department: 'Target Researcher' };
+        }
+
+        for (const fac of facultyList) {
+          const cleanFac = fac.name.toLowerCase().trim();
+          if (cleanA === cleanFac || cleanA.includes(cleanFac)) {
+            return { isPsu: true, facultyName: fac.name, department: fac.department };
+          }
+          const fParts = cleanFac.split(/\s+/).filter(Boolean);
+          const fLast = fParts[fParts.length - 1];
+          if (fLast && fLast.length > 2 && cleanA.includes(fLast)) {
+            const initial = fParts[0]?.[0];
+            if (!initial || cleanA.includes(initial) || cleanA === fLast) {
+              return { isPsu: true, facultyName: fac.name, department: fac.department };
+            }
+          }
+        }
+
+        return { isPsu: false };
+      };
+
+      const enrichedPublications = profileResult.publications.map((pub) => {
+        const authorDetails = pub.authors.map((a) => {
+          const match = checkAuthorPsu(a);
+          return {
+            name: a,
+            isPsu: match.isPsu,
+            department: match.department || null,
+          };
+        });
+
+        const psuAuthors = authorDetails.filter((a) => a.isPsu).map((a) => a.name);
+        const nonPsuAuthors = authorDetails.filter((a) => !a.isPsu).map((a) => a.name);
+        const isPsuPaper = psuAuthors.length > 0;
+        const hasCollaborators = nonPsuAuthors.length > 0;
+
+        return {
+          ...pub,
+          authorDetails,
+          psuAuthors,
+          nonPsuAuthors,
+          isPsuPaper,
+          hasCollaborators,
+        };
+      });
+
+      return sendJson(200, {
+        success: true,
+        profile: profileResult.profile,
+        publications: enrichedPublications,
+        totalFound: enrichedPublications.length,
+        usedApify,
+      });
+    }
+
+    // ----------------------------------------------------
+    // 5B. IMPORT SELECTED SCHOLAR PUBLICATIONS (Option B)
+    // ----------------------------------------------------
+    if (pathname === '/api/scholar/import' && method === 'POST') {
+      const {
+        instructorId,
+        researcherName,
+        scholarUrl,
+        scholarId,
+        photoUrl,
+        publications = [],
+      } = await readJsonBody();
+
+      if (!instructorId || !Array.isArray(publications) || publications.length === 0) {
+        return sendJson(400, { error: 'Instructor ID and selected publications are required.' });
+      }
+
+      const researcher = db.prepare('SELECT * FROM researchers WHERE instructor_id = ? OR id = ?').get(instructorId, instructorId);
+      const targetInstId = researcher?.instructor_id || instructorId;
+      const targetName = researcherName || researcher?.name || targetInstId;
+
+      const now = new Date().toISOString();
+      let importedCount = 0;
+      let updatedCount = 0;
+
+      const checkExisting = db.prepare(`
+        SELECT id, citations FROM publications 
+        WHERE LOWER(title) = LOWER(?) AND (owner_id = ? OR owner_name = ?)
+      `);
+
+      const insertPub = db.prepare(`
+        INSERT INTO publications (
+          id, title, authors, journal, year, citations, abstract, url, cited_by_link,
+          owner_id, owner_name, source, approval_status, research_status, is_public, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped', 'approved', 'Published', 1, ?)
+      `);
+
+      const updatePub = db.prepare(`
+        UPDATE publications
+        SET citations = MAX(citations, ?), url = COALESCE(?, url), cited_by_link = COALESCE(?, cited_by_link)
+        WHERE id = ?
+      `);
+
+      const insertScrapedCache = db.prepare(`
+        INSERT OR REPLACE INTO scraped_publications (
+          id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const item of publications) {
+        const title = (item.title || '').trim();
+        if (!title) continue;
+
+        const existing = checkExisting.get(title, targetInstId, targetName);
+        const authorsJson = JSON.stringify(Array.isArray(item.authors) ? item.authors : [item.authors || targetName]);
+        const citations = parseInt(item.citations, 10) || 0;
+        const year = parseInt(item.year, 10) || new Date().getFullYear();
+
+        if (existing) {
+          updatePub.run(citations, item.url || null, item.citedByLink || null, existing.id);
+          updatedCount++;
+        } else {
+          const newId = `pub-scholar-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          insertPub.run(
+            newId,
+            title,
+            authorsJson,
+            item.journal || 'Academic Publication',
+            year,
+            citations,
+            item.abstract || '',
+            item.url || '',
+            item.citedByLink || null,
+            targetInstId,
+            targetName,
+            now
+          );
+          importedCount++;
+        }
+
+        const cacheId = item.id || `scraped-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        insertScrapedCache.run(
+          cacheId,
+          title,
+          authorsJson,
+          item.journal || 'Academic Publication',
+          year,
+          citations,
+          item.abstract || '',
+          item.url || '',
+          item.citedByLink || null,
+          scholarId || targetName,
+          now
+        );
+      }
+
+      // Update researcher's profile
+      if (researcher) {
+        if (scholarUrl || scholarId) {
+          db.prepare(`
+            UPDATE researchers 
+            SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
+            WHERE id = ?
+          `).run(scholarUrl || null, scholarId || null, researcher.id);
+
+          if (researcher.user_id) {
+            db.prepare(`
+              UPDATE users 
+              SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
+              WHERE id = ?
+            `).run(scholarUrl || null, scholarId || null, researcher.user_id);
+          }
+        }
+
+        if (photoUrl && (!researcher.photo_url || researcher.photo_url === '')) {
+          db.prepare('UPDATE researchers SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.id);
+          if (researcher.user_id) {
+            db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.user_id);
+          }
+        }
+
+        const stats = db.prepare(`
+          SELECT COUNT(*) as pubCount, COALESCE(SUM(citations), 0) as citCount
+          FROM publications
+          WHERE owner_id = ? AND approval_status = 'approved'
+        `).get(targetInstId);
+
+        db.prepare(`
+          UPDATE researchers 
+          SET total_publications = ?, total_citations = ?
+          WHERE id = ?
+        `).run(stats.pubCount, stats.citCount, researcher.id);
+      }
+
+      return sendJson(200, {
+        success: true,
+        importedCount,
+        updatedCount,
+        totalSelected: publications.length,
+        message: `Successfully saved ${importedCount} new publication(s) and updated ${updatedCount} existing record(s) for ${targetName}.`,
+      });
+    }
 
     // ----------------------------------------------------
     // 5. GOOGLE SCHOLAR SEARCH & PERSISTENT SCRAPING CACHE

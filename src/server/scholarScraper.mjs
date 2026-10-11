@@ -193,3 +193,143 @@ export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 4) {
 
   return citingPapers;
 }
+
+/**
+ * Directly scrapes a Google Scholar researcher profile and all their indexed publications
+ */
+export async function scrapeGoogleScholarProfile(profileUrlOrId) {
+  if (!profileUrlOrId || typeof profileUrlOrId !== 'string') {
+    throw new Error('Google Scholar profile URL or user ID is required');
+  }
+
+  let userId = profileUrlOrId.trim();
+  const userMatch = userId.match(/[?&]user=([a-zA-Z0-9_-]+)/);
+  if (userMatch) {
+    userId = userMatch[1];
+  }
+
+  const url = `https://scholar.google.com/citations?user=${encodeURIComponent(userId)}&hl=en&cstart=0&pagesize=100`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': USER_AGENT,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Google Scholar profile request failed with status ${res.status}`);
+  }
+
+  const html = await res.text();
+  if (html.includes('detected unusual traffic') || html.includes('recaptcha')) {
+    throw new Error('Google Scholar detected unusual traffic (CAPTCHA triggered). An Apify token will be used as fallback.');
+  }
+
+  // Profile details
+  const nameMatch = html.match(/<div id="gsc_prf_in">([^<]+)<\/div>/);
+  const name = nameMatch ? cleanText(nameMatch[1]) : '';
+
+  const affilMatch = html.match(/<div class="gsc_prf_il"(?: id="[^"]*")?>([\s\S]*?)<\/div>/);
+  const affiliation = affilMatch ? cleanText(affilMatch[1]) : '';
+
+  const emailMatch = html.match(/<div[^>]*id="gsc_prf_ivh"[^>]*>([\s\S]*?)<\/div>/);
+  const verifiedEmail = emailMatch ? cleanText(emailMatch[1]) : '';
+
+  const imgTagMatch = html.match(/<img[^>]*id="gsc_prf_pup-img"[^>]*>/) || html.match(/<img[^>]*gsc_prf_pup[^>]*>/);
+  let photoUrl = '';
+  if (imgTagMatch) {
+    const srcMatch = imgTagMatch[0].match(/src="([^"]+)"/);
+    if (srcMatch) {
+      photoUrl = srcMatch[1].replace(/&amp;/g, '&');
+      if (photoUrl.startsWith('/')) {
+        photoUrl = `https://scholar.google.com${photoUrl}`;
+      }
+    }
+  }
+
+  // Citation stats from table #gsc_rsb_st
+  let totalCitations = 0;
+  let hIndex = 0;
+  let i10Index = 0;
+  const statsMatch = html.match(/<table id="gsc_rsb_st"[\s\S]*?<\/table>/);
+  if (statsMatch) {
+    const statNums = [...statsMatch[0].matchAll(/<td class="gsc_rsb_std">(\d+)<\/td>/g)].map((m) => parseInt(m[1], 10));
+    if (statNums.length >= 1) totalCitations = statNums[0];
+    if (statNums.length >= 3) hIndex = statNums[2];
+    if (statNums.length >= 5) i10Index = statNums[4];
+  }
+
+  const isPsuAffiliated = /pangasinan|psu\.edu\.ph|\bpsu\b/i.test(affiliation + ' ' + verifiedEmail);
+
+  // Publications
+  const publications = [];
+  const rows = [...html.matchAll(/<tr class="gsc_a_tr">([\s\S]*?)<\/tr>/g)];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i][1];
+    const titleMatch = row.match(/<a[^>]*class="gsc_a_at"[^>]*>([\s\S]*?)<\/a>/);
+    if (!titleMatch) continue;
+
+    const title = cleanText(titleMatch[1]);
+    if (!title) continue;
+
+    const hrefMatch =
+      row.match(/<a[^>]*href="([^"]+)"[^>]*class="gsc_a_at"/i) ||
+      row.match(/<a[^>]*class="gsc_a_at"[^>]*href="([^"]+)"/i);
+    let paperHref = hrefMatch ? hrefMatch[1].replace(/&amp;/g, '&') : '';
+    if (paperHref && paperHref.startsWith('/')) {
+      paperHref = `https://scholar.google.com${paperHref}`;
+    }
+
+    const grays = [...row.matchAll(/<div class="gs_gray">([\s\S]*?)<\/div>/g)];
+    const authorRaw = grays[0] ? cleanText(grays[0][1]) : '';
+    const authors = authorRaw
+      ? authorRaw.split(',').map((a) => a.trim()).filter(Boolean)
+      : [name || 'Author'];
+
+    const journalRaw = grays[1] ? cleanText(grays[1][1]) : '';
+    const citeMatch = row.match(/<a[^>]*class="gsc_a_ac[^"]*"[^>]*>(\d+)<\/a>/);
+    const citations = citeMatch ? parseInt(citeMatch[1], 10) : 0;
+
+    const citeHrefMatch =
+      row.match(/<a[^>]*href="([^"]+)"[^>]*class="gsc_a_ac/i) ||
+      row.match(/<a[^>]*class="gsc_a_ac[^"]*"[^>]*href="([^"]+)"/i);
+    const citedByLink =
+      citeHrefMatch && citeHrefMatch[1] && citeHrefMatch[1].startsWith('http')
+        ? citeHrefMatch[1].replace(/&amp;/g, '&')
+        : '';
+
+    const yearMatch = row.match(/<span[^>]*class="gsc_a_h[^"]*"[^>]*>(\d{4})<\/span>/);
+    const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+
+    publications.push({
+      id: `gsp-${userId}-${i + 1}`,
+      title,
+      authors,
+      journal: journalRaw || 'Academic Publication',
+      year,
+      citations,
+      url: paperHref,
+      citedByLink,
+      abstract: '',
+    });
+  }
+
+  return {
+    profile: {
+      userId,
+      scholarUrl: `https://scholar.google.com/citations?user=${userId}&hl=en`,
+      name,
+      affiliation,
+      verifiedEmail,
+      photoUrl,
+      totalCitations,
+      hIndex,
+      i10Index,
+      isPsuAffiliated,
+    },
+    publications,
+  };
+}
+
