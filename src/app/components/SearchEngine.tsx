@@ -483,8 +483,27 @@ export function SearchEngine() {
         </div>
       )}
 
+      {/* Loading Progress State */}
+      {isSearching && (
+        <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 shadow-xs">
+          <CardContent className="py-10 text-center space-y-4">
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-200 dark:border-blue-800 animate-ping opacity-25" />
+              <div className="w-14 h-14 rounded-full border-4 border-blue-600 border-t-transparent animate-spin flex items-center justify-center" />
+              <Search className="w-6 h-6 text-blue-600 absolute" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-semibold text-lg text-foreground">Searching Google Scholar...</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Connecting to academic indexes, retrieving publication metadata, citations, and matching with PSU faculty authors.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Search Results */}
-      {hasSearched && (
+      {hasSearched && !isSearching && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl text-gray-900">

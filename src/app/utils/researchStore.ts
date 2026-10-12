@@ -52,10 +52,13 @@ export interface SessionUser {
   role: UserRole;
   instructorId?: string;
   username?: string;
+  email?: string;
   name: string;
   department?: string;
   isFaculty?: boolean;
   photoUrl?: string;
+  scholarUrl?: string;
+  googleScholarId?: string;
 }
 
 export const FACULTY_DATA_KEY = "psu_faculty_data";
@@ -140,4 +143,12 @@ export function setCurrentUser(user: SessionUser) {
 
 export function clearCurrentUser() {
   sessionStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+export function updateCurrentUser(updates: Partial<SessionUser>): SessionUser {
+  const current = getCurrentUser();
+  const updated: SessionUser = { ...current, ...updates };
+  setCurrentUser(updated);
+  window.dispatchEvent(new Event("current-user-updated"));
+  return updated;
 }

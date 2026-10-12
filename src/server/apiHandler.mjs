@@ -1,4 +1,5 @@
 import { db } from './db.mjs';
+import { isTursoConfigured, rehydrateFromTurso, pushTableToTurso } from './turso.mjs';
 import { scrapeGoogleScholarDirect, scrapeGoogleScholarCitations, scrapeGoogleScholarProfile } from './scholarScraper.mjs';
 
 /**
@@ -146,12 +147,114 @@ export async function handleApiRequest(req, res) {
           department: user.department,
           isFaculty: Boolean(user.is_faculty),
           photoUrl: user.photo_url,
+          scholarUrl: user.scholar_url,
+          googleScholarId: user.google_scholar_id,
         }
       });
     }
 
     // ----------------------------------------------------
-    // 2. DASHBOARD STATS: GET /api/dashboard/stats
+    // 1b. CHANGE PASSWORD: POST /api/auth/change-password
+    // ----------------------------------------------------
+    if (pathname === '/api/auth/change-password' && method === 'POST') {
+      const { userId, username, currentPassword, newPassword } = await readJsonBody();
+      if (!newPassword || newPassword.length < 4) {
+        return sendJson(400, { error: 'New password must be at least 4 characters long.' });
+      }
+
+      const user = db.prepare(`
+        SELECT u.* FROM users u
+        WHERE (u.id = ? OR LOWER(u.username) = LOWER(?)) AND u.password = ?
+        LIMIT 1
+      `).get(userId || '', username || '', currentPassword);
+
+      if (!user) {
+        return sendJson(401, { error: 'Current password is incorrect.' });
+      }
+
+      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(newPassword, user.id);
+      return sendJson(200, { success: true, message: 'Password updated successfully!' });
+    }
+
+    // ----------------------------------------------------
+    // 1c. UPDATE PROFILE: PUT /api/auth/profile
+    // ----------------------------------------------------
+    if (pathname === '/api/auth/profile' && method === 'PUT') {
+      const { userId, username, name, email, department, photoUrl, scholarUrl, googleScholarId } = await readJsonBody();
+      
+      const user = db.prepare(`
+        SELECT u.* FROM users u
+        WHERE u.id = ? OR LOWER(u.username) = LOWER(?)
+        LIMIT 1
+      `).get(userId || '', username || '');
+
+      if (!user) {
+        return sendJson(404, { error: 'User not found.' });
+      }
+
+      const updatedName = name || user.name;
+      const updatedEmail = email !== undefined ? email : user.email;
+      const updatedDept = department !== undefined ? department : user.department;
+      const updatedPhoto = photoUrl !== undefined ? photoUrl : user.photo_url;
+      const updatedScholar = scholarUrl !== undefined ? scholarUrl : user.scholar_url;
+      const updatedScholarId = googleScholarId !== undefined ? googleScholarId : user.google_scholar_id;
+
+      db.prepare(`
+        UPDATE users 
+        SET name = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
+        WHERE id = ?
+      `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id);
+
+      db.prepare(`
+        UPDATE researchers
+        SET name = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
+        WHERE user_id = ? OR LOWER(instructor_id) = LOWER(?)
+      `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id, user.username);
+
+      return sendJson(200, {
+        success: true,
+        user: {
+          id: user.id,
+          role: user.role,
+          name: updatedName,
+          username: user.username,
+          email: updatedEmail,
+          department: updatedDept,
+          photoUrl: updatedPhoto,
+          scholarUrl: updatedScholar,
+          googleScholarId: updatedScholarId,
+        }
+      });
+    }
+
+    // ----------------------------------------------------
+    // 1d. TURSO STATUS & SYNC: GET /api/turso/status, POST /api/turso/sync
+    // ----------------------------------------------------
+    if (pathname === '/api/turso/status' && method === 'GET') {
+      const url = process.env.TURSO_DATABASE_URL || '';
+      const maskedUrl = url ? url.replace(/:\/\/[^@]+@/, '://***@').slice(0, 30) + '...' : '';
+      return sendJson(200, {
+        isConfigured: isTursoConfigured,
+        databaseUrl: maskedUrl,
+        mode: isTursoConfigured ? 'turso_cloud' : 'local_sqlite',
+      });
+    }
+
+    if (pathname === '/api/turso/sync' && method === 'POST') {
+      if (!isTursoConfigured) {
+        return sendJson(400, { error: 'Turso Cloud is not configured. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Render.' });
+      }
+      try {
+        const tables = ['users', 'researchers', 'publications', 'scraped_publications', 'citation_trends', 'citing_papers', 'apify_tokens'];
+        for (const t of tables) {
+          await pushTableToTurso(db, t);
+        }
+        return sendJson(200, { success: true, message: 'All local tables successfully pushed to Turso Cloud!' });
+      } catch (err) {
+        return sendJson(500, { error: `Failed to push to Turso: ${err.message}` });
+      }
+    }
+
     // ----------------------------------------------------
     // 2. DASHBOARD STATS: GET /api/dashboard/stats
     // ----------------------------------------------------
@@ -544,7 +647,7 @@ export async function handleApiRequest(req, res) {
       // Auto-fetch citing papers if none cached yet and paper has citations / cited_by_link
       if (citing.length === 0 && citedByLink) {
         try {
-          const fetchedCiting = await scrapeGoogleScholarCitations(citedByLink, 3);
+          const fetchedCiting = await scrapeGoogleScholarCitations(citedByLink, 50);
           if (fetchedCiting.length > 0) {
             const insertStmt = db.prepare('INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link) VALUES (?, ?, ?, ?, ?, ?)');
             for (let i = 0; i < fetchedCiting.length; i++) {

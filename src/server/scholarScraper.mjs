@@ -124,7 +124,7 @@ export async function scrapeGoogleScholarDirect(query, maxPages = 2) {
 /**
  * Directly scrapes all citing papers from Google Scholar
  */
-export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 4) {
+export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 50) {
   let targetUrl = '';
   if (citesIdOrUrl.startsWith('http')) {
     targetUrl = citesIdOrUrl;

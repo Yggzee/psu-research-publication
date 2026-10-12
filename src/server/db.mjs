@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso } from './turso.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,23 @@ export const db = new DatabaseSync(dbPath);
 // Enable foreign keys and WAL mode for better concurrency
 db.exec('PRAGMA foreign_keys = ON;');
 db.exec('PRAGMA journal_mode = WAL;');
+
+// Wrap db.prepare to replicate write queries to Turso Cloud SQLite automatically
+const originalPrepare = db.prepare.bind(db);
+db.prepare = (sql) => {
+  const statement = originalPrepare(sql);
+  const originalRun = statement.run.bind(statement);
+  statement.run = (...args) => {
+    const result = originalRun(...args);
+    if (isTursoConfigured && /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql)) {
+      executeOnTurso(sql, args).catch((err) => {
+        console.warn('[Turso Background Replicate Error]:', err.message);
+      });
+    }
+    return result;
+  };
+  return statement;
+};
 
 /**
  * Initialize Database Tables
@@ -196,3 +214,11 @@ export function initDatabase() {
 
 // Call on import to guarantee schema existence
 initDatabase();
+
+if (isTursoConfigured) {
+  initTursoSchema().then(() => {
+    rehydrateFromTurso(db);
+  }).catch((err) => {
+    console.warn('[Turso Startup Error]:', err.message);
+  });
+}

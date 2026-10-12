@@ -16,7 +16,8 @@ export function PublicationDetail() {
   const [publication, setPublication] = useState<Publication | null>(null);
   const [loading, setLoading] = useState(true);
   const [citationPage, setCitationPage] = useState(1);
-  const CITATIONS_PER_PAGE = 5;
+  const [citationsPerPage, setCitationsPerPage] = useState(10);
+  const CITATIONS_PER_PAGE = citationsPerPage;
 
   useEffect(() => {
     if (!id) return;
@@ -314,12 +315,31 @@ export function PublicationDetail() {
                   })}
                 </div>
 
-                {/* Pagination Controls (5 per page) */}
-                {totalCitationPages > 1 && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100">
-                    <p className="text-xs sm:text-sm text-gray-500">
+                {/* Pagination Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500">
+                    <span>
                       Showing {(citationPage - 1) * CITATIONS_PER_PAGE + 1}–{Math.min(citationPage * CITATIONS_PER_PAGE, citingPapers.length)} of {citingPapers.length} citing papers
-                    </p>
+                    </span>
+                    <span className="text-gray-300">|</span>
+                    <span className="flex items-center gap-1">
+                      Per page:
+                      {[10, 25, 50].map((sz) => (
+                        <button
+                          key={`sz-${sz}`}
+                          onClick={() => { setCitationsPerPage(sz); setCitationPage(1); }}
+                          className={`px-1.5 py-0.5 rounded text-xs transition-colors ${
+                            citationsPerPage === sz
+                              ? "bg-blue-100 text-blue-700 font-semibold"
+                              : "text-gray-500 hover:text-gray-900"
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                  {totalCitationPages > 1 && (
                     <div className="flex items-center gap-1.5">
                       <Button
                         variant="outline"
@@ -331,17 +351,35 @@ export function PublicationDetail() {
                         Previous
                       </Button>
                       <div className="flex items-center gap-1">
-                        {Array.from({ length: totalCitationPages }, (_, i) => i + 1).map((pageNum) => (
-                          <Button
-                            key={`page-${pageNum}`}
-                            variant={citationPage === pageNum ? "default" : "outline"}
-                            size="sm"
-                            className={`h-8 w-8 p-0 text-xs ${citationPage === pageNum ? "bg-blue-600 text-white" : ""}`}
-                            onClick={() => setCitationPage(pageNum)}
-                          >
-                            {pageNum}
-                          </Button>
-                        ))}
+                        {Array.from({ length: totalCitationPages }, (_, i) => i + 1)
+                          .filter(pageNum => 
+                            pageNum === 1 || 
+                            pageNum === totalCitationPages || 
+                            Math.abs(pageNum - citationPage) <= 1
+                          )
+                          .reduce<(number | string)[]>((acc, pageNum, idx, arr) => {
+                            if (idx > 0 && pageNum - (arr[idx - 1] as number) > 1) {
+                              acc.push(`dots-${pageNum}`);
+                            }
+                            acc.push(pageNum);
+                            return acc;
+                          }, [])
+                          .map((item) => {
+                            if (typeof item === 'string') {
+                              return <span key={item} className="px-1 text-gray-400 text-xs">...</span>;
+                            }
+                            return (
+                              <Button
+                                key={`page-${item}`}
+                                variant={citationPage === item ? "default" : "outline"}
+                                size="sm"
+                                className={`h-8 w-8 p-0 text-xs ${citationPage === item ? "bg-blue-600 text-white" : ""}`}
+                                onClick={() => setCitationPage(item)}
+                              >
+                                {item}
+                              </Button>
+                            );
+                          })}
                       </div>
                       <Button
                         variant="outline"
@@ -353,8 +391,8 @@ export function PublicationDetail() {
                         Next
                       </Button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ) : (
               <div className="text-center py-8 space-y-3">

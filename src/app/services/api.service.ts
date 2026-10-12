@@ -139,7 +139,52 @@ class ApiService {
     });
   }
 
-  // 2. Dashboard
+  async changePassword(data: { userId?: string; username?: string; currentPassword: string; newPassword: string }) {
+    return this.request<{ success: boolean; message: string }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateProfile(data: {
+    userId?: string;
+    username?: string;
+    name?: string;
+    email?: string;
+    department?: string;
+    photoUrl?: string;
+    scholarUrl?: string;
+    googleScholarId?: string;
+  }) {
+    return this.request<{
+      success: boolean;
+      user: {
+        id: string;
+        role: 'admin' | 'instructor';
+        name: string;
+        username: string;
+        email?: string;
+        department?: string;
+        photoUrl?: string;
+        scholarUrl?: string;
+        googleScholarId?: string;
+      };
+    }>('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getTursoStatus() {
+    return this.request<{ isConfigured: boolean; databaseUrl: string; mode: string }>('/turso/status');
+  }
+
+  async syncToTurso() {
+    return this.request<{ success: boolean; message: string }>('/turso/sync', {
+      method: 'POST',
+    });
+  }
+
   async getDashboardStats(): Promise<DashboardStatsResponse> {
     return this.request<DashboardStatsResponse>('/dashboard/stats');
   }

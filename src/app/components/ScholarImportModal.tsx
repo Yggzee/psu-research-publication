@@ -267,8 +267,25 @@ export function ScholarImportModal({
           )}
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="py-12 px-4 text-center space-y-4">
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-blue-200 dark:border-blue-800 animate-ping opacity-25" />
+              <div className="w-14 h-14 rounded-full border-4 border-blue-600 border-t-transparent animate-spin" />
+              <BookOpen className="w-6 h-6 text-blue-600 absolute" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="font-semibold text-base text-foreground">Scraping Google Scholar Profile...</h4>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                Extracting researcher profile, indexed papers, co-authors, and verified citation counts. This may take 5–15 seconds.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Profile Card & Publications List */}
-        {profile && (
+        {!loading && profile && (
           <div className="flex-1 overflow-y-auto space-y-4 pr-1 mt-2">
             {/* Researcher Profile Summary Card */}
             <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200 rounded-xl">

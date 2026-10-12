@@ -12,6 +12,8 @@ import { ImpactAnalysisPage } from "./components/ImpactAnalysisPage";
 import { ReportsPage } from "./components/ReportsPage";
 import { AdminPage } from "./components/AdminPage";
 import { InstructorPublicationsPage } from "./components/InstructorPublicationsPage";
+import { ProfilePage } from "./components/ProfilePage";
+import { SettingsPage } from "./components/SettingsPage";
 import { getCurrentUser } from "./utils/researchStore";
 
 function RoleAwarePublications() {
@@ -89,6 +91,14 @@ export const router = createBrowserRouter([
       {
         path: "publication/:id",
         element: <PublicationDetail />,
+      },
+      {
+        path: "profile",
+        element: <ProfilePage />,
+      },
+      {
+        path: "settings",
+        element: <SettingsPage />,
       },
     ],
   },
