@@ -19,9 +19,10 @@ ENV NODE_ENV=production
 ENV PORT=8080
 ENV DATA_DIR=/data
 
-# Copy built frontend assets and server handlers
+# Copy built frontend assets, server handlers, and dependencies
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/server ./src/server
+COPY --from=build /app/node_modules ./node_modules
 COPY package.json ./
 
 # Create default data directory for SQLite database
