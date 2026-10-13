@@ -176,7 +176,13 @@ export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 50) 
         const year = ym ? parseInt(ym[1], 10) : null;
         const authorPart = authorSummary.split('-')[0]?.trim() || '';
 
-        const paperUrl = linkMatch ? linkMatch[1].replace(/&amp;/g, '&') : '';
+        let paperUrl = linkMatch ? linkMatch[1].replace(/&amp;/g, '&') : '';
+        if (paperUrl.startsWith('/')) {
+          paperUrl = `https://scholar.google.com${paperUrl}`;
+        }
+        if (!paperUrl && cleanTitle) {
+          paperUrl = `https://scholar.google.com/scholar?q=${encodeURIComponent(cleanTitle)}`;
+        }
 
         citingPapers.push({
           title: cleanTitle,

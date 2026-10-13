@@ -6,10 +6,14 @@ import { getLastNYears, DEPARTMENT_COLORS, DEPARTMENTS } from "../utils/chartUti
 import { DepartmentLegend } from "./DepartmentLegend";
 import { Button } from "./ui/button";
 import { apiService, type DashboardStatsResponse } from "../services/api.service";
+import { useTheme } from "../utils/themeContext";
 
 type TopResearchTab = "overall" | "by-department";
 
 export function Dashboard() {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+
   const [yearRange, setYearRange] = useState(() => {
     const lastYears = getLastNYears(5);
     return { start: lastYears[0], end: lastYears[lastYears.length - 1] };
@@ -51,32 +55,32 @@ export function Dashboard() {
       title: "Total Researchers",
       value: dashboardData.totalResearchers,
       icon: Users,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
+      color: "text-blue-600 dark:text-blue-400",
+      bgColor: "bg-blue-50 dark:bg-blue-950/40",
     },
     {
       id: "total-publications",
       title: "Total Publications",
       value: dashboardData.totalPublications,
       icon: FileText,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
+      color: "text-emerald-600 dark:text-emerald-400",
+      bgColor: "bg-emerald-50 dark:bg-emerald-950/40",
     },
     {
       id: "total-citations",
       title: "Total Citations",
       value: dashboardData.totalCitations.toLocaleString(),
       icon: Quote,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
+      color: "text-purple-600 dark:text-purple-400",
+      bgColor: "bg-purple-50 dark:bg-purple-950/40",
     },
     {
       id: "avg-impact",
       title: "Avg. Impact Score",
       value: dashboardData.averageImpactScore.toFixed(1),
       icon: TrendingUp,
-      color: "text-orange-600",
-      bgColor: "bg-orange-50",
+      color: "text-orange-600 dark:text-orange-400",
+      bgColor: "bg-orange-50 dark:bg-orange-950/40",
     },
   ];
 
@@ -140,10 +144,10 @@ export function Dashboard() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl text-gray-900 mb-1">Dashboard</h1>
-          <p className="text-gray-600">Real-time research analytics from SQLite database</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-300">Real-time research analytics from SQLite database</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchStats} disabled={isLoading} className="self-start">
+        <Button variant="outline" size="sm" onClick={fetchStats} disabled={isLoading} className="self-start dark:border-gray-700">
           <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
           Refresh
         </Button>
@@ -152,14 +156,14 @@ export function Dashboard() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         {stats.map((stat) => (
-          <Card key={stat.id}>
+          <Card key={stat.id} className="dark:border-gray-800">
             <CardContent className="pt-6">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-gray-600 mb-1">{stat.title}</p>
-                  <p className="text-3xl text-gray-900 font-semibold">{stat.value}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1 font-medium">{stat.title}</p>
+                  <p className="text-3xl text-gray-900 dark:text-gray-100 font-bold">{stat.value}</p>
                 </div>
-                <div className={`${stat.bgColor} ${stat.color} p-3 rounded-lg`}>
+                <div className={`${stat.bgColor} ${stat.color} p-3 rounded-xl`}>
                   <stat.icon className="w-6 h-6" />
                 </div>
               </div>
@@ -169,11 +173,11 @@ export function Dashboard() {
       </div>
 
       {/* Year Range Controls */}
-      <Card className="bg-blue-50 border-blue-200">
+      <Card className="bg-blue-50/70 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50">
         <CardContent className="py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <span className="text-sm text-gray-700">
-              Showing data for years: <strong>{yearRange.start} - {yearRange.end}</strong>
+            <span className="text-sm text-gray-700 dark:text-gray-200">
+              Showing data for years: <strong className="text-gray-900 dark:text-gray-100">{yearRange.start} - {yearRange.end}</strong>
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -181,7 +185,7 @@ export function Dashboard() {
                 size="sm"
                 onClick={handleYearBack}
                 disabled={yearRange.start <= 2015}
-                className="bg-white"
+                className="bg-white dark:bg-card dark:border-gray-700 text-foreground"
               >
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 Back
@@ -191,7 +195,7 @@ export function Dashboard() {
                 size="sm"
                 onClick={handleYearForward}
                 disabled={yearRange.end >= new Date().getFullYear()}
-                className="bg-white"
+                className="bg-white dark:bg-card dark:border-gray-700 text-foreground"
               >
                 Forward
                 <ChevronRight className="w-4 h-4 ml-1" />
@@ -204,16 +208,16 @@ export function Dashboard() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Citation Growth by Department */}
-        <Card>
+        <Card className="dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Citation Growth by Department</CardTitle>
+            <CardTitle className="text-base text-gray-900 dark:text-gray-100">Citation Growth by Department</CardTitle>
           </CardHeader>
           <CardContent>
             {!hasChartData ? (
-              <div className="h-[300px] flex flex-col items-center justify-center text-center p-6 bg-gray-50 rounded-lg border border-dashed">
-                <AlertCircle className="w-10 h-10 text-gray-400 mb-2" />
-                <p className="text-sm font-medium text-gray-700">No citation data yet</p>
-                <p className="text-xs text-gray-500 mt-1 max-w-xs">
+              <div className="h-[300px] flex flex-col items-center justify-center text-center p-6 bg-gray-50 dark:bg-muted/20 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                <AlertCircle className="w-10 h-10 text-gray-400 dark:text-gray-500 mb-2" />
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">No citation data yet</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs">
                   Citations will automatically be tracked as researchers add or claim publications.
                 </p>
               </div>
@@ -221,14 +225,19 @@ export function Dashboard() {
               <>
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={citationDataByYear} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="year" stroke="#6b7280" style={{ fontSize: '12px' }} />
-                    <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "rgba(255,255,255,0.08)" : "#f0f0f0"} />
+                    <XAxis dataKey="year" stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: '12px' }} />
+                    <YAxis stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: '12px' }} />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: 'white',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px'
+                        backgroundColor: isDark ? "#18181b" : "#ffffff",
+                        border: isDark ? "1px solid #27272a" : "1px solid #e5e7eb",
+                        borderRadius: '8px',
+                        color: isDark ? "#f4f4f5" : "#111827",
+                        boxShadow: "0 10px 15px -3px rgba(0,0,0,0.3)"
+                      }}
+                      itemStyle={{
+                        color: isDark ? "#e4e4e7" : "#18181b"
                       }}
                     />
                     {DEPARTMENTS.map((dept) => (
@@ -251,16 +260,16 @@ export function Dashboard() {
         </Card>
 
         {/* Publications by Department */}
-        <Card>
+        <Card className="dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Publications by Department</CardTitle>
+            <CardTitle className="text-base text-gray-900 dark:text-gray-100">Publications by Department</CardTitle>
           </CardHeader>
           <CardContent>
             {!hasChartData ? (
-              <div className="h-[300px] flex flex-col items-center justify-center text-center p-6 bg-gray-50 rounded-lg border border-dashed">
-                <FileText className="w-10 h-10 text-gray-400 mb-2" />
-                <p className="text-sm font-medium text-gray-700">No publication data yet</p>
-                <p className="text-xs text-gray-500 mt-1 max-w-xs">
+              <div className="h-[300px] flex flex-col items-center justify-center text-center p-6 bg-gray-50 dark:bg-muted/20 rounded-xl border border-dashed border-gray-200 dark:border-gray-800">
+                <FileText className="w-10 h-10 text-gray-400 dark:text-gray-500 mb-2" />
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">No publication data yet</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-xs">
                   Publications will appear here once faculty members add approved research.
                 </p>
               </div>
@@ -268,14 +277,19 @@ export function Dashboard() {
               <>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={publicationDataByYear} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="year" stroke="#6b7280" style={{ fontSize: '12px' }} />
-                    <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "rgba(255,255,255,0.08)" : "#f0f0f0"} />
+                    <XAxis dataKey="year" stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: '12px' }} />
+                    <YAxis stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: '12px' }} />
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: 'white',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px'
+                        backgroundColor: isDark ? "#18181b" : "#ffffff",
+                        border: isDark ? "1px solid #27272a" : "1px solid #e5e7eb",
+                        borderRadius: '8px',
+                        color: isDark ? "#f4f4f5" : "#111827",
+                        boxShadow: "0 10px 15px -3px rgba(0,0,0,0.3)"
+                      }}
+                      itemStyle={{
+                        color: isDark ? "#e4e4e7" : "#18181b"
                       }}
                     />
                     {DEPARTMENTS.map((dept) => (
@@ -297,16 +311,16 @@ export function Dashboard() {
       </div>
 
       {/* Top Research Section with Tabs */}
-      <Card>
+      <Card className="dark:border-gray-800">
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle>Top Research</CardTitle>
+            <CardTitle className="text-gray-900 dark:text-gray-100">Top Research</CardTitle>
             <div className="flex gap-2">
               <Button
                 variant={topResearchTab === "overall" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setTopResearchTab("overall")}
-                className={topResearchTab === "overall" ? "bg-blue-600" : ""}
+                className={topResearchTab === "overall" ? "bg-blue-600 text-white" : "dark:border-gray-700 text-foreground"}
               >
                 Overall
               </Button>
@@ -314,7 +328,7 @@ export function Dashboard() {
                 variant={topResearchTab === "by-department" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setTopResearchTab("by-department")}
-                className={topResearchTab === "by-department" ? "bg-blue-600" : ""}
+                className={topResearchTab === "by-department" ? "bg-blue-600 text-white" : "dark:border-gray-700 text-foreground"}
               >
                 By Department
               </Button>
@@ -323,26 +337,26 @@ export function Dashboard() {
         </CardHeader>
         <CardContent>
           {topResearchersOverall.length === 0 ? (
-            <div className="py-8 text-center text-gray-500">
+            <div className="py-8 text-center text-gray-500 dark:text-gray-400">
               <p className="text-base font-medium">No researcher metrics recorded yet.</p>
-              <p className="text-sm mt-1 text-gray-400">Add researchers in the Admin Panel to display performance rankings.</p>
+              <p className="text-sm mt-1 text-gray-400 dark:text-gray-500">Add researchers in the Admin Panel to display performance rankings.</p>
             </div>
           ) : topResearchTab === "overall" ? (
             <div className="space-y-4">
               {topResearchersOverall.map((researcher, index) => (
                 <div key={researcher.id} className="flex items-center gap-4">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600 text-sm font-semibold">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-sm font-semibold">
                     {index + 1}
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm text-gray-900 font-medium">{researcher.name}</p>
-                    <p className="text-xs text-gray-600">{researcher.department}</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100 font-semibold">{researcher.name}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300">{researcher.department}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-600">{researcher.citations} citations</span>
-                    <div className="w-24 sm:w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">{researcher.citations} citations</span>
+                    <div className="w-24 sm:w-32 h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-600 rounded-full"
+                        className="h-full bg-blue-600 dark:bg-blue-500 rounded-full"
                         style={{ width: `${(researcher.citations / maxCitations) * 100}%` }}
                       />
                     </div>
@@ -362,18 +376,18 @@ export function Dashboard() {
                         border: deptData.department === "BIT" ? "1px solid #9CA3AF" : "none",
                       }}
                     />
-                    <h3 className="text-sm font-semibold text-gray-900">{deptData.department}</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{deptData.department}</h3>
                   </div>
                   <div className="space-y-3">
                     {deptData.researchers.map((researcher, index) => (
                       <div key={researcher.id} className="flex items-center gap-3 pl-6">
-                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs">
+                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-medium">
                           {index + 1}
                         </div>
                         <div className="flex-1">
-                          <p className="text-sm text-gray-900">{researcher.name}</p>
+                          <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{researcher.name}</p>
                         </div>
-                        <span className="text-sm text-gray-600">{researcher.citations} citations</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-300">{researcher.citations} citations</span>
                       </div>
                     ))}
                   </div>

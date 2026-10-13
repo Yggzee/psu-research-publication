@@ -6,7 +6,7 @@ interface DepartmentLegendProps {
 
 export function DepartmentLegend({ departments = DEPARTMENTS }: DepartmentLegendProps) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-4 border-t border-gray-200">
+    <div className="flex flex-wrap items-center justify-center gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
       {departments.map((dept) => (
         <div key={dept} className="flex items-center gap-2">
           <div
@@ -16,7 +16,7 @@ export function DepartmentLegend({ departments = DEPARTMENTS }: DepartmentLegend
               border: dept === "BIT" ? "1px solid #9CA3AF" : "none",
             }}
           />
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
             {dept === "BIT" ? `${dept} (White)` : dept}
           </span>
         </div>

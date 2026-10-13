@@ -20,7 +20,8 @@ import {
   Loader2, 
   ShieldCheck, 
   Save,
-  Sparkles
+  Sparkles,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,12 +45,12 @@ export function ProfilePage() {
     async function loadStats() {
       try {
         const pubs = await apiService.getPublications();
-        const userPubs = pubs.filter(p => {
-          const ownerId = (p.ownerId || "").trim().toLowerCase();
+        const userPubs = (pubs as any[]).filter(p => {
+          const ownerId = (p.ownerId || p.owner_id || "").trim().toLowerCase();
           const instId = (currentUser.instructorId || "").trim().toLowerCase();
           const username = (currentUser.username || "").trim().toLowerCase();
           const name = (currentUser.name || "").trim().toLowerCase();
-          return ownerId === instId || ownerId === username || (p.authors || []).some(a => a.toLowerCase().includes(name));
+          return ownerId === instId || ownerId === username || (p.authors || []).some((a: string) => a.toLowerCase().includes(name));
         });
         const totalPubs = userPubs.length;
         const totalCits = userPubs.reduce((sum, p) => sum + (p.citations || 0), 0);
@@ -60,6 +61,18 @@ export function ProfilePage() {
     }
     loadStats();
   }, [currentUser]);
+
+  const handleOpenEdit = () => {
+    setFormData({
+      name: currentUser.name || "",
+      email: currentUser.email || "",
+      department: currentUser.department || "Information Technology",
+      photoUrl: currentUser.photoUrl || "",
+      scholarUrl: currentUser.scholarUrl || "",
+      googleScholarId: currentUser.googleScholarId || "",
+    });
+    setIsEditing(true);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,53 +123,56 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header Banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-linear-to-r from-blue-700 via-indigo-700 to-blue-900 p-6 sm:p-8 text-white shadow-lg">
-        <div className="relative z-10 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          <Avatar className="w-24 h-24 sm:w-28 sm:h-28 border-4 border-white/20 shadow-xl bg-white/10 text-white">
-            {formData.photoUrl ? (
-              <AvatarImage src={formData.photoUrl} alt={currentUser.name} className="object-cover" />
-            ) : null}
-            <AvatarFallback className="bg-blue-800 text-white text-3xl font-bold">
-              {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
-            </AvatarFallback>
-          </Avatar>
+    <div className="space-y-6 max-w-5xl mx-auto pb-10">
+      {/* Profile Header Hero Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-900 p-6 sm:p-8 text-white shadow-xl">
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            <Avatar className="w-20 h-20 sm:w-24 sm:h-24 ring-4 ring-white/20 shadow-lg">
+              {currentUser.photoUrl ? (
+                <AvatarImage src={currentUser.photoUrl} alt={currentUser.name} />
+              ) : null}
+              <AvatarFallback className="bg-white/10 text-white font-bold text-2xl backdrop-blur-xs">
+                {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
+              </AvatarFallback>
+            </Avatar>
 
-          <div className="flex-1 text-center sm:text-left space-y-2">
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{currentUser.name}</h1>
-              <Badge className="bg-white/20 hover:bg-white/30 text-white border-0 text-xs">
-                {currentUser.role === "admin" ? (
-                  <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> Administrator</span>
-                ) : (
-                  <span className="flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5" /> Faculty Instructor</span>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{currentUser.name}</h1>
+                <Badge variant="secondary" className="bg-white/20 text-white hover:bg-white/30 border-none capitalize text-xs">
+                  {currentUser.role}
+                </Badge>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-blue-100/90 font-medium">
+                <span className="flex items-center gap-1.5">
+                  <Building className="w-4 h-4 text-blue-200" />
+                  {currentUser.department || "Faculty Department"}
+                </span>
+                {currentUser.email && (
+                  <span className="flex items-center gap-1.5">
+                    <Mail className="w-4 h-4 text-blue-200" />
+                    {currentUser.email}
+                  </span>
                 )}
-              </Badge>
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-blue-200" />
+                  ID: {currentUser.instructorId || currentUser.username || "PSU-FACULTY"}
+                </span>
+              </div>
             </div>
-
-            <p className="text-blue-100 text-sm flex items-center justify-center sm:justify-start gap-2">
-              <Building className="w-4 h-4 text-blue-200" />
-              {currentUser.department || "Pangasinan State University - Asingan Campus"}
-            </p>
-
-            {currentUser.email && (
-              <p className="text-blue-200 text-xs flex items-center justify-center sm:justify-start gap-2">
-                <Mail className="w-3.5 h-3.5" />
-                {currentUser.email}
-              </p>
-            )}
           </div>
 
           <div className="sm:self-center">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsEditing(!isEditing)}
+              onClick={handleOpenEdit}
               className="bg-white/10 hover:bg-white/20 text-white border-white/30 backdrop-blur-xs transition-all"
             >
               <Edit3 className="w-4 h-4 mr-2" />
-              {isEditing ? "Cancel Edit" : "Edit Profile"}
+              Edit Profile
             </Button>
           </div>
         </div>
@@ -204,14 +220,111 @@ export function ProfilePage() {
         </Card>
       </div>
 
-      {/* Edit Profile Form or Profile Details */}
-      {isEditing ? (
+      {/* Profile Overview Details */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Account Details Card */}
         <Card className="dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Edit Profile Information</CardTitle>
-            <CardDescription>Update your personal information and Google Scholar identifiers.</CardDescription>
+            <CardTitle className="text-base flex items-center gap-2">
+              <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              Account Overview
+            </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between py-2 border-b dark:border-gray-800 text-sm">
+              <span className="text-muted-foreground">Username / ID</span>
+              <span className="font-semibold text-foreground">{currentUser.username || currentUser.instructorId || "N/A"}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b dark:border-gray-800 text-sm">
+              <span className="text-muted-foreground">Department</span>
+              <span className="font-semibold text-foreground">{currentUser.department || "General Faculty"}</span>
+            </div>
+            <div className="flex justify-between py-2 border-b dark:border-gray-800 text-sm">
+              <span className="text-muted-foreground">Email</span>
+              <span className="font-semibold text-foreground">{currentUser.email || "No email provided"}</span>
+            </div>
+            <div className="flex justify-between py-2 text-sm">
+              <span className="text-muted-foreground">Account Role</span>
+              <Badge variant="outline" className="capitalize text-xs">
+                {currentUser.role}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Google Scholar Card */}
+        <Card className="dark:border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <GraduationCap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              Google Scholar Profile
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">Linked profile for citation tracking and publication discovery.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {currentUser.scholarUrl || currentUser.googleScholarId ? (
+              <div className="p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 space-y-2">
+                <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">Scholar ID / URL:</p>
+                <p className="text-sm font-mono font-semibold text-foreground break-all">
+                  {currentUser.googleScholarId || currentUser.scholarUrl}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                  onClick={() => {
+                    const url = currentUser.scholarUrl || `https://scholar.google.com/citations?user=${currentUser.googleScholarId}`;
+                    window.open(url, "_blank");
+                  }}
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Open Google Scholar
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground space-y-2">
+                <p className="text-sm">No Google Scholar profile linked yet.</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenEdit}
+                  className="text-xs text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-800"
+                >
+                  Add Scholar Link
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Edit Profile Popup Modal with Blurred Backdrop */}
+      {isEditing && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setIsEditing(false)}
+        >
+          <div
+            className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-card p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100 dark:border-gray-800">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Profile Information</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Update personal details and academic profile links</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsEditing(false)}
+                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
             <form onSubmit={handleSave} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -221,6 +334,7 @@ export function ProfilePage() {
                     required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="dark:border-gray-700"
                   />
                 </div>
 
@@ -231,6 +345,7 @@ export function ProfilePage() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="dark:border-gray-700"
                   />
                 </div>
 
@@ -240,6 +355,7 @@ export function ProfilePage() {
                     id="prof-dept"
                     value={formData.department}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="dark:border-gray-700"
                   />
                 </div>
 
@@ -250,6 +366,7 @@ export function ProfilePage() {
                     placeholder="https://example.com/photo.jpg"
                     value={formData.photoUrl}
                     onChange={(e) => setFormData({ ...formData, photoUrl: e.target.value })}
+                    className="dark:border-gray-700"
                   />
                 </div>
 
@@ -260,6 +377,7 @@ export function ProfilePage() {
                     placeholder="https://scholar.google.com/citations?user=..."
                     value={formData.scholarUrl}
                     onChange={(e) => setFormData({ ...formData, scholarUrl: e.target.value })}
+                    className="dark:border-gray-700"
                   />
                 </div>
 
@@ -270,12 +388,13 @@ export function ProfilePage() {
                     placeholder="e.g. jPzK12sAAAAJ"
                     value={formData.googleScholarId}
                     onChange={(e) => setFormData({ ...formData, googleScholarId: e.target.value })}
+                    className="dark:border-gray-700"
                   />
                 </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t dark:border-gray-800">
-                <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsEditing(false)} className="dark:border-gray-700">
                   Cancel
                 </Button>
                 <Button type="submit" disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white">
@@ -293,84 +412,7 @@ export function ProfilePage() {
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Account Details Card */}
-          <Card className="dark:border-gray-800">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <User className="w-4 h-4 text-blue-600" />
-                Account Overview
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between py-2 border-b dark:border-gray-800 text-sm">
-                <span className="text-muted-foreground">Username / ID</span>
-                <span className="font-semibold text-foreground">{currentUser.username || currentUser.instructorId || "N/A"}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b dark:border-gray-800 text-sm">
-                <span className="text-muted-foreground">Department</span>
-                <span className="font-semibold text-foreground">{currentUser.department || "General Faculty"}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b dark:border-gray-800 text-sm">
-                <span className="text-muted-foreground">Email</span>
-                <span className="font-semibold text-foreground">{currentUser.email || "No email provided"}</span>
-              </div>
-              <div className="flex justify-between py-2 text-sm">
-                <span className="text-muted-foreground">Account Role</span>
-                <Badge variant="outline" className="capitalize text-xs">
-                  {currentUser.role}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Google Scholar Card */}
-          <Card className="dark:border-gray-800">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-blue-600" />
-                Google Scholar Profile
-              </CardTitle>
-              <CardDescription>Linked profile for citation tracking and publication discovery.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {currentUser.scholarUrl || currentUser.googleScholarId ? (
-                <div className="p-4 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 space-y-2">
-                  <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">Scholar ID:</p>
-                  <p className="text-sm font-mono font-semibold text-foreground break-all">
-                    {currentUser.googleScholarId || currentUser.scholarUrl}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 text-blue-600 border-blue-300 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                    onClick={() => {
-                      const url = currentUser.scholarUrl || `https://scholar.google.com/citations?user=${currentUser.googleScholarId}`;
-                      window.open(url, "_blank");
-                    }}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Open Google Scholar
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-center py-6 text-muted-foreground space-y-2">
-                  <p className="text-sm">No Google Scholar profile linked yet.</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditing(true)}
-                    className="text-xs text-blue-600 border-blue-300"
-                  >
-                    Add Scholar Link
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          </div>
         </div>
       )}
     </div>

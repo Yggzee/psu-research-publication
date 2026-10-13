@@ -641,6 +641,18 @@ export async function handleApiRequest(req, res) {
         }
       }
 
+      if (!citedByLink && Number(p.citations) > 0 && p.title) {
+        try {
+          const directResults = await scrapeGoogleScholarDirect(p.title, 1);
+          if (directResults.length > 0 && directResults[0].citedByLink) {
+            citedByLink = directResults[0].citedByLink;
+            db.prepare('UPDATE publications SET cited_by_link = ? WHERE id = ?').run(citedByLink, id);
+          }
+        } catch (e) {
+          console.warn('[AutoFetchCitations] Fallback search error:', e.message);
+        }
+      }
+
       const trends = db.prepare('SELECT year, citations, id FROM citation_trends WHERE publication_id = ? OR publication_id = ? ORDER BY year ASC').all(id, rawId);
       let citing = db.prepare('SELECT title, authors, year, link FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
 

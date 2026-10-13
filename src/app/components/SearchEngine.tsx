@@ -330,40 +330,71 @@ export function SearchEngine() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-amber-100 text-amber-700 rounded-lg">
-                  <KeyRound className="w-4 h-4" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 rounded-lg">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">No Active Apify Scraper Token</h4>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Connect a free Apify token ($5 free monthly credits) for live scraping fallback.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-gray-900">No Active Apify Scraper Token</h4>
-                  <p className="text-xs text-gray-500">
-                    Connect a free Apify token ($5 free monthly credits) for live scraping fallback.
-                  </p>
-                </div>
+                <Button
+                  size="sm"
+                  onClick={() => setShowTokenManager(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-xs self-start sm:self-center text-white"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Connect Apify Token
+                </Button>
               </div>
-              <Button
-                size="sm"
-                onClick={() => setShowTokenManager(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-xs self-start sm:self-center"
-              >
-                <Plus className="w-3.5 h-3.5 mr-1" /> Connect Apify Token
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
 
-      {showTokenManager && (
-        <div className="transition-all">
-          <ApifyTokenManager
-            onTokenChanged={() => {
-              setRequiresApify(false);
-              refreshActiveUsage(true);
-            }}
-          />
-        </div>
-      )}
+        {showTokenManager && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+            onClick={() => setShowTokenManager(false)}
+          >
+            <div
+              className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-card p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100 dark:border-gray-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
+                    <KeyRound className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Connect Apify Token</h3>
+                    <p className="text-xs text-muted-foreground">Manage scraper tokens for Google Scholar fallback queries</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowTokenManager(false)}
+                  className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              <ApifyTokenManager
+                compact={true}
+                onTokenChanged={() => {
+                  setRequiresApify(false);
+                  refreshActiveUsage(true);
+                }}
+              />
+            </div>
+          </div>
+        )}
 
       {/* Search Bar */}
       <form onSubmit={handleSearch}>
@@ -506,12 +537,12 @@ export function SearchEngine() {
       {hasSearched && !isSearching && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl text-gray-900">
+            <h2 className="text-xl text-gray-900 dark:text-gray-100 font-semibold">
               {searchResults.length} result{searchResults.length !== 1 ? "s" : ""} found
             </h2>
             <div className="flex items-center gap-3">
               {searchResults.length > 0 && (
-                <span className="text-sm text-gray-600 hidden sm:inline">
+                <span className="text-sm text-gray-600 dark:text-gray-300 hidden sm:inline">
                   {searchResults.filter((r) => isPSUPaper(r.authors)).length} PSU papers
                 </span>
               )}
@@ -520,7 +551,7 @@ export function SearchEngine() {
                 size="sm"
                 onClick={() => executeSearch(undefined, undefined, true)}
                 disabled={isSearching}
-                className="text-xs flex items-center gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+                className="text-xs flex items-center gap-1.5 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-950/30"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSearching ? "animate-spin" : ""}`} />
                 Live Refresh from Google Scholar
@@ -533,14 +564,14 @@ export function SearchEngine() {
             return (
               <Card
                 key={result.id}
-                className={`hover:shadow-md transition-shadow ${
+                className={`hover:shadow-md transition-shadow dark:border-gray-800 ${
                   isPSU ? "border-l-4 border-l-green-500" : "border-l-4 border-l-orange-500"
                 }`}
               >
                 <CardContent className="pt-6">
                   <div className="space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                      <h3 className="text-lg text-gray-900 font-medium">{result.title}</h3>
+                      <h3 className="text-lg text-gray-900 dark:text-gray-100 font-medium">{result.title}</h3>
                       <span className={`inline-flex items-center gap-1 px-3 py-1 rounded border text-sm font-medium self-start ${getPaperTypeColor(result.authors)}`}>
                         {isPSU ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                         {getPaperType(result.authors)}
@@ -548,11 +579,11 @@ export function SearchEngine() {
                     </div>
 
                     <div className="flex items-start gap-2">
-                      <User className="w-4 h-4 text-gray-500 mt-0.5" />
-                      <p className="text-sm text-gray-700">
+                      <User className="w-4 h-4 text-gray-500 dark:text-gray-400 mt-0.5" />
+                      <p className="text-sm text-gray-700 dark:text-gray-200">
                         {result.authors.map((author, idx) => (
                           <span key={idx}>
-                            <span className={isPSUPaper([author]) ? "font-semibold text-blue-600" : ""}>
+                            <span className={isPSUPaper([author]) ? "font-semibold text-blue-600 dark:text-blue-400" : ""}>
                               {author}
                             </span>
                             {idx < result.authors.length - 1 && ", "}
@@ -561,24 +592,24 @@ export function SearchEngine() {
                       </p>
                     </div>
 
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
                       {result.journal} • {result.year}
                     </p>
 
                     {result.abstract && (
-                      <p className="text-sm text-gray-700 line-clamp-2">{result.abstract}</p>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">{result.abstract}</p>
                     )}
 
                     <div className="flex items-center gap-6 text-sm pt-1">
                       <div className="flex items-center gap-1">
-                        <Quote className="w-4 h-4 text-blue-600" />
-                        <span className="text-gray-700">{result.citations} citations</span>
+                        <Quote className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                        <span className="text-gray-700 dark:text-gray-200">{result.citations} citations</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                    <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-800">
                       {result.url && (
-                        <Button variant="outline" size="sm" onClick={() => window.open(result.url, "_blank")}>
+                        <Button variant="outline" size="sm" onClick={() => window.open(result.url, "_blank")} className="dark:border-gray-700">
                           <Eye className="w-4 h-4 mr-2" /> View Paper
                         </Button>
                       )}
@@ -587,7 +618,7 @@ export function SearchEngine() {
                           size="sm"
                           onClick={() => handleClaimPublication(result)}
                           disabled={claimedIds.includes(result.id)}
-                          className="bg-blue-600 hover:bg-blue-700"
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           <Hand className="w-4 h-4 mr-2" />
                           {claimedIds.includes(result.id) ? "Claim Pending" : "Claim Research"}
@@ -597,7 +628,7 @@ export function SearchEngine() {
                           variant={isPSU ? "default" : "outline"}
                           size="sm"
                           onClick={() => handleSavePublication(result)}
-                          className={isPSU ? "bg-green-600 hover:bg-green-700" : ""}
+                          className={isPSU ? "bg-green-600 hover:bg-green-700 text-white" : "dark:border-gray-700"}
                           disabled={!isPSU}
                         >
                           <Save className="w-4 h-4 mr-2" />
@@ -612,11 +643,11 @@ export function SearchEngine() {
           })}
 
           {searchResults.length === 0 && !isSearching && !requiresApify && (
-            <Card>
-              <CardContent className="py-12 text-center text-gray-500">
-                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <Card className="dark:border-gray-800">
+              <CardContent className="py-12 text-center text-gray-500 dark:text-gray-400">
+                <FileText className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
                 <p>No publications found</p>
-                <p className="text-xs text-gray-400 mt-1">Try other search terms or researcher names</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try other search terms or researcher names</p>
               </CardContent>
             </Card>
           )}

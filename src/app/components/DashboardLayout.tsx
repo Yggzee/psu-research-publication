@@ -9,22 +9,21 @@ import {
   LogOut,
   Search,
   User,
-  GraduationCap,
   Shield,
   Settings,
   Menu,
   X,
   Sun,
   Moon,
-  Laptop
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import psuLogo from "figma:asset/0f3e65de85ff26584e9a3039d47bcf17ff6e6368.png";
 import { clearCurrentUser, getCurrentUser } from "../utils/researchStore";
 import { useTheme } from "../utils/themeContext";
+import { ConfirmModal } from "./ConfirmModal";
 
-const adminNavigation = [
+const adminPrimaryNavigation = [
   { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard, exact: true },
   { name: "Search", path: "/dashboard/search-engine", icon: Search, exact: false },
   { name: "Researchers", path: "/dashboard/researchers", icon: Users, exact: false },
@@ -32,14 +31,15 @@ const adminNavigation = [
   { name: "Impact Analysis", path: "/dashboard/impact", icon: TrendingUp, exact: false },
   { name: "Reports", path: "/dashboard/reports", icon: FileBarChart, exact: false },
   { name: "Admin", path: "/dashboard/admin", icon: Shield, exact: false },
-  { name: "My Profile", path: "/dashboard/profile", icon: User, exact: false },
-  { name: "Settings", path: "/dashboard/settings", icon: Settings, exact: false },
 ];
 
-const instructorNavigation = [
+const instructorPrimaryNavigation = [
   { name: "Search", path: "/dashboard/search-engine", icon: Search, exact: false },
   { name: "Researchers", path: "/dashboard/researchers", icon: Users, exact: false },
   { name: "Publications", path: "/dashboard/publications", icon: FileText, exact: false },
+];
+
+const bottomUtilityNavigation = [
   { name: "My Profile", path: "/dashboard/profile", icon: User, exact: false },
   { name: "Settings", path: "/dashboard/settings", icon: Settings, exact: false },
 ];
@@ -50,10 +50,13 @@ export function DashboardLayout() {
   const currentUser = getCurrentUser();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const navigation = currentUser.role === "instructor" ? instructorNavigation : adminNavigation;
+  const primaryNavigation =
+    currentUser.role === "instructor" ? instructorPrimaryNavigation : adminPrimaryNavigation;
 
   const handleLogout = () => {
+    setShowLogoutConfirm(false);
     clearCurrentUser();
     navigate("/login");
   };
@@ -83,15 +86,12 @@ export function DashboardLayout() {
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Primary Navigation */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {navigation.map((item) => {
-            let isActive = false;
-            if (item.exact) {
-              isActive = location.pathname === item.path;
-            } else {
-              isActive = location.pathname === item.path || (location.pathname.startsWith(item.path + "/"));
-            }
+          {primaryNavigation.map((item) => {
+            const isActive = item.exact
+              ? location.pathname === item.path
+              : location.pathname === item.path || location.pathname.startsWith(item.path + "/");
             
             return (
               <button
@@ -110,16 +110,42 @@ export function DashboardLayout() {
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-          <Button
-            variant="ghost"
-            onClick={handleLogout}
-            className="w-full justify-start text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30"
-          >
-            <LogOut className="w-4 h-4 mr-3" />
-            Logout
-          </Button>
+        {/* Bottom Section: My Profile, Settings & Compact Logout */}
+        <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-1">
+          {bottomUtilityNavigation.map((item) => {
+            const isActive =
+              location.pathname === item.path || location.pathname.startsWith(item.path + "/");
+            return (
+              <button
+                key={item.name}
+                onClick={() => navigate(item.path)}
+                className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
+                  isActive
+                    ? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-accent"
+                }`}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                {item.name}
+              </button>
+            );
+          })}
+
+          <div className="pt-2.5 mt-1 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between px-2">
+            <span className="text-xs text-muted-foreground truncate max-w-[110px]" title={currentUser.name}>
+              {currentUser.role === "admin" ? "Admin" : currentUser.instructorId || "Instructor"}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowLogoutConfirm(true)}
+              className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors gap-1.5"
+              title="Logout"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Logout</span>
+            </Button>
+          </div>
         </div>
       </aside>
 
@@ -153,13 +179,10 @@ export function DashboardLayout() {
             </div>
 
             <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-              {navigation.map((item) => {
-                let isActive = false;
-                if (item.exact) {
-                  isActive = location.pathname === item.path;
-                } else {
-                  isActive = location.pathname === item.path || (location.pathname.startsWith(item.path + "/"));
-                }
+              {primaryNavigation.map((item) => {
+                const isActive = item.exact
+                  ? location.pathname === item.path
+                  : location.pathname === item.path || location.pathname.startsWith(item.path + "/");
                 return (
                   <button
                     key={item.name}
@@ -167,7 +190,7 @@ export function DashboardLayout() {
                       navigate(item.path);
                       setMobileMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-all ${
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-all ${
                       isActive
                         ? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold"
                         : "text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-accent"
@@ -180,15 +203,47 @@ export function DashboardLayout() {
               })}
             </nav>
 
-            <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-              <Button
-                variant="ghost"
-                onClick={handleLogout}
-                className="w-full justify-start text-red-600 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-              >
-                <LogOut className="w-5 h-5 mr-3" />
-                Logout
-              </Button>
+            {/* Mobile Bottom Utility Navigation */}
+            <div className="p-3 border-t border-gray-200 dark:border-gray-800 space-y-1">
+              {bottomUtilityNavigation.map((item) => {
+                const isActive =
+                  location.pathname === item.path || location.pathname.startsWith(item.path + "/");
+                return (
+                  <button
+                    key={item.name}
+                    onClick={() => {
+                      navigate(item.path);
+                      setMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm transition-all ${
+                      isActive
+                        ? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-gray-100 dark:hover:bg-accent"
+                    }`}
+                  >
+                    <item.icon className="w-4 h-4 shrink-0" />
+                    {item.name}
+                  </button>
+                );
+              })}
+
+              <div className="pt-2.5 mt-1 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-between px-2">
+                <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                  {currentUser.name}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setShowLogoutConfirm(true);
+                  }}
+                  className="h-7 px-2 text-xs font-medium text-muted-foreground hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Logout
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -265,6 +320,19 @@ export function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Logout Confirmation Dialog with Blur Background */}
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Confirm Logout"
+        message="Are you sure you want to log out of your session? You will need to sign in again to access your account."
+        confirmText="Yes, Logout"
+        cancelText="Cancel"
+        variant="danger"
+        icon="logout"
+        onConfirm={handleLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 }

@@ -288,14 +288,14 @@ export function ScholarImportModal({
         {!loading && profile && (
           <div className="flex-1 overflow-y-auto space-y-4 pr-1 mt-2">
             {/* Researcher Profile Summary Card */}
-            <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 border border-blue-200 rounded-xl">
+            <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-slate-50 dark:from-blue-950/40 dark:via-indigo-950/30 dark:to-slate-900/40 border border-blue-200 dark:border-blue-900/50 rounded-xl">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   {profile.photoUrl ? (
                     <img
                       src={profile.photoUrl}
                       alt={profile.name}
-                      className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm"
+                      className="w-16 h-16 rounded-full object-cover border-2 border-white dark:border-gray-700 shadow-sm"
                     />
                   ) : (
                     <div className="w-16 h-16 rounded-full bg-blue-600 text-white font-bold text-xl flex items-center justify-center shadow-sm">
@@ -305,56 +305,56 @@ export function ScholarImportModal({
 
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-lg font-bold text-gray-900">{profile.name}</h3>
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{profile.name}</h3>
                       {profile.isPsuAffiliated ? (
                         <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
                           <Shield className="w-3 h-3 mr-1" /> PSU Affiliated
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="border-amber-400 text-amber-700 text-xs bg-amber-50">
+                        <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-400 text-xs bg-amber-50 dark:bg-amber-950/40">
                           External / Non-PSU
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-gray-600 mt-0.5 flex items-center gap-1">
-                      <Building className="w-3.5 h-3.5 text-gray-500" />
+                    <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 flex items-center gap-1">
+                      <Building className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400" />
                       {profile.affiliation || "Academic Researcher"}
                     </p>
                     {profile.verifiedEmail && (
-                      <p className="text-xs text-gray-500 mt-0.5">{profile.verifiedEmail}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{profile.verifiedEmail}</p>
                     )}
                   </div>
                 </div>
 
                 {/* Metrics */}
-                <div className="flex items-center gap-4 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-blue-100 shadow-2xs">
+                <div className="flex items-center gap-4 bg-white/80 dark:bg-card/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-blue-100 dark:border-gray-800 shadow-2xs">
                   <div className="text-center">
-                    <p className="text-xs text-gray-500">Citations</p>
-                    <p className="text-base font-bold text-blue-600">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Citations</p>
+                    <p className="text-base font-bold text-blue-600 dark:text-blue-400">
                       {profile.totalCitations.toLocaleString()}
                     </p>
                   </div>
-                  <div className="h-6 w-px bg-gray-200" />
+                  <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
                   <div className="text-center">
-                    <p className="text-xs text-gray-500">h-index</p>
-                    <p className="text-base font-bold text-gray-900">{profile.hIndex}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">h-index</p>
+                    <p className="text-base font-bold text-gray-900 dark:text-gray-100">{profile.hIndex}</p>
                   </div>
-                  <div className="h-6 w-px bg-gray-200" />
+                  <div className="h-6 w-px bg-gray-200 dark:bg-gray-700" />
                   <div className="text-center">
-                    <p className="text-xs text-gray-500">i10-index</p>
-                    <p className="text-base font-bold text-gray-900">{profile.i10Index}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">i10-index</p>
+                    <p className="text-base font-bold text-gray-900 dark:text-gray-100">{profile.i10Index}</p>
                   </div>
                 </div>
               </div>
 
               {profile.photoUrl && (
-                <div className="mt-3 pt-3 border-t border-blue-100 flex items-center gap-2">
+                <div className="mt-3 pt-3 border-t border-blue-100 dark:border-gray-800 flex items-center gap-2">
                   <Checkbox
                     id="use-photo"
                     checked={useScholarPhoto}
                     onCheckedChange={(c) => setUseScholarPhoto(Boolean(c))}
                   />
-                  <label htmlFor="use-photo" className="text-xs text-gray-600 cursor-pointer">
+                  <label htmlFor="use-photo" className="text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
                     Apply Google Scholar profile photo as researcher's account avatar
                   </label>
                 </div>
