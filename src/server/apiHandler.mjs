@@ -656,11 +656,14 @@ export async function handleApiRequest(req, res) {
       const trends = db.prepare('SELECT year, citations, id FROM citation_trends WHERE publication_id = ? OR publication_id = ? ORDER BY year ASC').all(id, rawId);
       let citing = db.prepare('SELECT title, authors, year, link FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
 
-      // Auto-fetch citing papers if none cached yet and paper has citations / cited_by_link
-      if (citing.length === 0 && citedByLink) {
+      const totalPaperCitations = Number(p.citations) || 0;
+      // Auto-fetch or backfill citing papers if cached count is less than recorded citations
+      if ((citing.length === 0 || citing.length < totalPaperCitations) && citedByLink) {
         try {
           const fetchedCiting = await scrapeGoogleScholarCitations(citedByLink, 50);
-          if (fetchedCiting.length > 0) {
+          if (fetchedCiting.length > citing.length) {
+            // Delete old partial preview citations and insert complete set
+            db.prepare('DELETE FROM citing_papers WHERE publication_id = ? OR publication_id = ?').run(id, rawId);
             const insertStmt = db.prepare('INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link) VALUES (?, ?, ?, ?, ?, ?)');
             for (let i = 0; i < fetchedCiting.length; i++) {
               const cp = fetchedCiting[i];

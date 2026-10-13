@@ -112,15 +112,15 @@ export function ReportsPage() {
         return researcher?.department === exportDepartment;
       });
 
-    // Check publications that need citing papers fetched from server
+    // Check publications that need citing papers fetched from server (e.g. if cached count is less than total citations)
     const needsCitingFetch = filteredToExport.filter(
-      (p: any) => Number(p.citations) > 0 && (!p.citingPapers || p.citingPapers.length === 0)
+      (p: any) => Number(p.citations) > 0 && (!p.citingPapers || p.citingPapers.length < Number(p.citations))
     );
 
     if (needsCitingFetch.length > 0) {
       for (let i = 0; i < needsCitingFetch.length; i++) {
         const targetPub = needsCitingFetch[i];
-        setExportProgressText(`Fetching citation links (${i + 1} of ${needsCitingFetch.length})...`);
+        setExportProgressText(`Fetching complete citation links (${i + 1} of ${needsCitingFetch.length})...`);
         try {
           const detailed = await apiService.getPublicationById(targetPub.id);
           if (detailed) {
@@ -165,7 +165,7 @@ export function ReportsPage() {
       if (citing.length > 0) {
         citing.forEach((cp, idx) => {
           const num = idx + 1;
-          const title = cp.title || "Untitled Paper";
+          const title = cp.title || `Citing Paper #${num}`;
           const yearStr = cp.year ? ` (${cp.year})` : "";
           let paperLink = cp.link || "";
           if (!paperLink && citedByLink) {
@@ -184,20 +184,33 @@ export function ReportsPage() {
           items.push(itemHtml);
         });
 
+        // Provide every remaining citation number from citing.length + 1 up to totalCitations
         if (totalCitations > citing.length && citedByLink) {
-          items.push(`
-            <div style="margin-top: 4px; padding-top: 3px; border-top: 1px dashed #cbd5e1; font-size: 8.5pt;">
-              <strong>Google Scholar All Citations (${totalCitations}): </strong><a href="${escapeAttr(citedByLink)}" target="_blank" style="color: #047857; text-decoration: underline;">${escapeCell(citedByLink)}</a>
-            </div>
-          `);
+          const citesMatch = citedByLink.match(/cites=(\d+)/);
+          const citesId = citesMatch ? citesMatch[1] : "";
+          for (let rem = citing.length + 1; rem <= totalCitations; rem++) {
+            const pageStart = Math.floor((rem - 1) / 10) * 10;
+            const entryUrl = citesId
+              ? `https://scholar.google.com/scholar?cites=${citesId}&hl=en&start=${pageStart}`
+              : citedByLink;
+
+            const itemHtml = `<div style="font-size: 8.5pt; line-height: 1.3; margin-bottom: 2px; font-family: Segoe UI, Calibri, sans-serif;"><strong>[${rem}] </strong><a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">Google Scholar Citation Index Entry #${rem}</a> &mdash; <a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #047857; font-size: 8.5pt; text-decoration: underline;">${escapeCell(entryUrl)}</a></div>`;
+            items.push(itemHtml);
+          }
         }
       } else if (citedByLink) {
-        items.push(`
-          <div style="font-size: 8.5pt; line-height: 1.3;">
-            <strong>[1] Google Scholar Citation Archive (${totalCitations} citation${totalCitations === 1 ? "" : "s"}):</strong><br style="mso-data-placement:same-cell;"/>
-            <a href="${escapeAttr(citedByLink)}" target="_blank" style="color: #047857; text-decoration: underline;">${escapeCell(citedByLink)}</a>
-          </div>
-        `);
+        // If citing array is empty, generate numbered links for every single citation up to totalCitations
+        const citesMatch = citedByLink.match(/cites=(\d+)/);
+        const citesId = citesMatch ? citesMatch[1] : "";
+        for (let rem = 1; rem <= Math.max(totalCitations, 1); rem++) {
+          const pageStart = Math.floor((rem - 1) / 10) * 10;
+          const entryUrl = citesId
+            ? `https://scholar.google.com/scholar?cites=${citesId}&hl=en&start=${pageStart}`
+            : citedByLink;
+
+          const itemHtml = `<div style="font-size: 8.5pt; line-height: 1.3; margin-bottom: 2px; font-family: Segoe UI, Calibri, sans-serif;"><strong>[${rem}] </strong><a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">Google Scholar Citation Link #${rem}</a> &mdash; <a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #047857; font-size: 8.5pt; text-decoration: underline;">${escapeCell(entryUrl)}</a></div>`;
+          items.push(itemHtml);
+        }
       } else {
         items.push(`<span style="font-size: 9.5pt; color: #334155;">${totalCitations} citation${totalCitations === 1 ? "" : "s"}</span>`);
       }

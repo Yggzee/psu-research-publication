@@ -133,10 +133,15 @@ export async function scrapeGoogleScholarDirect(query, maxPages = 2) {
  */
 export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 50) {
   let targetUrl = '';
-  if (citesIdOrUrl.startsWith('http')) {
+  const citesMatch = String(citesIdOrUrl).match(/cites=(\d+)/);
+  const citesId = citesMatch ? citesMatch[1] : String(citesIdOrUrl).replace(/[^0-9]/g, '');
+
+  if (citesId) {
+    targetUrl = `https://scholar.google.com/scholar?cites=${citesId}&hl=en&scipsc=&filter=0`;
+  } else if (String(citesIdOrUrl).startsWith('http')) {
     targetUrl = citesIdOrUrl;
   } else {
-    targetUrl = `https://scholar.google.com/scholar?cites=${encodeURIComponent(citesIdOrUrl)}&hl=en`;
+    targetUrl = `https://scholar.google.com/scholar?cites=${encodeURIComponent(citesIdOrUrl)}&hl=en&filter=0`;
   }
 
   const citingPapers = [];
