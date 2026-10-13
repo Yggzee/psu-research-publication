@@ -1314,21 +1314,25 @@ export async function handleApiRequest(req, res) {
         return sendJson(200, await attachTokenUsage({
           results: combinedCached,
           fromCache: true,
+          searchSource: 'cache',
+          sourceLabel: 'Local Database Cache',
           count: combinedCached.length,
-          message: `Loaded ${combinedCached.length} publications instantly from local database cache`,
+          message: `Loaded ${combinedCached.length} publications instantly from local database cache (0 token credits used)`,
         }));
       }
 
-      // STEP 2: Live Fetch from Google Scholar (Direct + Apify if needed)
-      // First try direct Google Scholar fetch to get the full 10-20 results without free-tier limitations
+      // STEP 2: Live Fetch from Google Scholar (Direct + Apify fallback)
+      // Prioritize the free built-in direct scraper first to preserve Apify token credits as much as possible
       let liveResults = [];
+      let captchaBlocked = false;
       try {
         liveResults = await scrapeGoogleScholarDirect(cleanQuery, 2);
+        captchaBlocked = Boolean(liveResults.captchaBlocked);
       } catch (err) {
         console.warn('[ScholarSearch] Direct search fallback:', err.message);
       }
 
-      // If direct scraping gave good results, save and return
+      // If direct scraping gave good results, save and return immediately without consuming any Apify token
       if (liveResults.length > 0) {
         const insertScraped = db.prepare(`
           INSERT OR REPLACE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at)
@@ -1375,12 +1379,14 @@ export async function handleApiRequest(req, res) {
         return sendJson(200, await attachTokenUsage({
           results: liveResults,
           fromCache: false,
+          searchSource: 'direct',
+          sourceLabel: 'Built-in Direct Search (Free)',
           count: liveResults.length,
-          message: `Retrieved ${liveResults.length} publications directly from Google Scholar`,
+          message: `Retrieved ${liveResults.length} publications directly from Google Scholar via built-in scraper (0 Apify token credits used)`,
         }));
       }
 
-      // STEP 3: Fallback to Apify Google Scholar Scraper Integration with Multi-Token Failover
+      // STEP 3: Fallback to Apify Google Scholar Scraper (Only used if direct scraping failed or hit CAPTCHA)
       const tokenRows = db.prepare(`
         SELECT * FROM apify_tokens ORDER BY is_active DESC, created_at DESC
       `).all();
@@ -1407,16 +1413,26 @@ export async function handleApiRequest(req, res) {
           return sendJson(200, await attachTokenUsage({
             results: combinedCached,
             fromCache: true,
+            searchSource: 'cache',
+            sourceLabel: 'Local Database Cache',
+            captchaDetected: captchaBlocked,
             count: combinedCached.length,
-            message: `Loaded ${combinedCached.length} publications from local database cache`,
+            message: captchaBlocked
+              ? `Google Scholar anti-bot CAPTCHA detected. Loaded ${combinedCached.length} publications from local database cache.`
+              : `Loaded ${combinedCached.length} publications from local database cache`,
           }));
         }
         return sendJson(200, await attachTokenUsage({
           results: [],
           fromCache: false,
+          searchSource: 'none',
+          sourceLabel: 'No Service Available',
           count: 0,
           requiresApify: true,
-          message: 'Google Scholar search returned 0 results. Connect an Apify token for additional redundancy.',
+          captchaDetected: captchaBlocked,
+          message: captchaBlocked
+            ? 'Google Scholar presented a CAPTCHA challenge ("unusual traffic"). Connect an Apify token to bypass the anti-bot lock.'
+            : 'Google Scholar search returned 0 results. Connect an Apify token for additional redundancy.',
         }));
       }
 
@@ -1607,8 +1623,10 @@ export async function handleApiRequest(req, res) {
       return sendJson(200, await attachTokenUsage({
         results: formattedResults,
         fromCache: false,
+        searchSource: 'apify',
+        sourceLabel: `Apify Token (${usedTokenName})`,
         count: formattedResults.length,
-        message: `Scraped ${formattedResults.length} publications via Google Scholar (${usedTokenName}) and cached to database.`,
+        message: `Direct search was challenged by Google CAPTCHA. Successfully routed through Apify Token "${usedTokenName}" to retrieve ${formattedResults.length} publications.`,
       }, true));
     }
 

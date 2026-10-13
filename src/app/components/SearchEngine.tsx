@@ -18,6 +18,9 @@ export function SearchEngine() {
   const [cacheNotice, setCacheNotice] = useState<string | null>(null);
   const [isFromCache, setIsFromCache] = useState(false);
   const [requiresApify, setRequiresApify] = useState(false);
+  const [captchaDetected, setCaptchaDetected] = useState(false);
+  const [searchSource, setSearchSource] = useState<"cache" | "direct" | "apify" | "none" | null>(null);
+  const [sourceLabel, setSourceLabel] = useState<string>("");
   const [showTokenManager, setShowTokenManager] = useState(false);
   const [searchMode, setSearchMode] = useState<"smart" | "author">("smart");
   const [facultyNames, setFacultyNames] = useState<string[]>([]);
@@ -99,6 +102,8 @@ export function SearchEngine() {
     setIsSearching(true);
     setCacheNotice(null);
     setRequiresApify(false);
+    setCaptchaDetected(false);
+    setSearchSource(null);
 
     try {
       // Calls SQLite Search API - retrieves full list with optional force-refresh
@@ -106,6 +111,9 @@ export function SearchEngine() {
       setSearchResults(data.results || []);
       setIsFromCache(Boolean(data.fromCache));
       setRequiresApify(Boolean(data.requiresApify));
+      setCaptchaDetected(Boolean(data.captchaDetected));
+      setSearchSource(data.searchSource || (data.fromCache ? "cache" : "direct"));
+      setSourceLabel(data.sourceLabel || (data.fromCache ? "Local Database Cache" : "Built-in Direct Search (Free)"));
       setCacheNotice(data.message || (data.fromCache ? "Loaded from database cache" : ""));
       if (data.tokenUsage) {
         setTokenUsage(data.tokenUsage);
@@ -114,6 +122,7 @@ export function SearchEngine() {
       console.warn("API Search failed:", err);
       setSearchResults([]);
       setRequiresApify(false);
+      setSearchSource("none");
       setCacheNotice("Could not contact search service. Please check network.");
     } finally {
       setIsSearching(false);
@@ -252,8 +261,8 @@ export function SearchEngine() {
                         • Actor: {tokenUsage.actorId.replace("~", "/")}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Active scraper token • Usage limits auto-refresh after every search
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      Standby failover shield • Built-in direct search is used first to save credits; this token activates only if Google CAPTCHA appears.
                     </p>
                   </div>
                 </div>
@@ -504,33 +513,113 @@ export function SearchEngine() {
         </div>
       )}
 
-      {/* Cache Status Badge */}
-      {cacheNotice && !requiresApify && searchResults.length > 0 && (
-        <div className={`p-3 rounded-lg border text-sm flex items-center gap-2 ${
-          isFromCache ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-blue-50 text-blue-800 border-blue-200"
-        }`}>
-          {isFromCache ? <Database className="w-4 h-4 text-emerald-600" /> : <Sparkles className="w-4 h-4 text-blue-600" />}
-          <span>{cacheNotice}</span>
-        </div>
+      {/* CAPTCHA / Anti-Bot Alert */}
+      {captchaDetected && requiresApify && searchResults.length === 0 && !isSearching && (
+        <Card className="border-amber-400 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800">
+          <CardContent className="pt-5 pb-5">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                  Google Scholar CAPTCHA / Rate-Limit Detected
+                </h4>
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  Google Scholar has challenged your direct server request with an anti-bot "unusual traffic" CAPTCHA. Built-in direct web scraping is temporarily paused by Google.
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  Connect an Apify token to activate the proxy failover shield and bypass the CAPTCHA lock.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Loading Progress State */}
+      {/* Loading Progress State - Clearly states Priority Mode */}
       {isSearching && (
         <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 shadow-xs">
-          <CardContent className="py-10 text-center space-y-4">
+          <CardContent className="py-8 text-center space-y-4">
             <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
               <div className="absolute inset-0 rounded-full border-4 border-blue-200 dark:border-blue-800 animate-ping opacity-25" />
               <div className="w-14 h-14 rounded-full border-4 border-blue-600 border-t-transparent animate-spin flex items-center justify-center" />
               <Search className="w-6 h-6 text-blue-600 absolute" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-2 max-w-lg mx-auto">
               <h3 className="font-semibold text-lg text-foreground">Searching Google Scholar...</h3>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                Connecting to academic indexes, retrieving publication metadata, citations, and matching with PSU faculty authors.
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Primary Mode: Built-in Direct Search (Free • 0 Token Credits)</span>
+              </div>
+              <p className="text-xs text-muted-foreground pt-1">
+                Checking local database cache and querying Google Scholar directly first to save your Apify token credits. Your Apify token will only be used if Google presents an anti-bot CAPTCHA.
               </p>
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Search Source Indicator Banner */}
+      {hasSearched && !isSearching && searchResults.length > 0 && (
+        <div
+          className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm transition-all ${
+            searchSource === "direct"
+              ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800/60"
+              : searchSource === "cache"
+              ? "bg-blue-50 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 border-blue-200 dark:border-blue-800/60"
+              : searchSource === "apify"
+              ? "bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800/60"
+              : "bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:text-slate-200 border-slate-200 dark:border-slate-800"
+          }`}
+        >
+          <div className="flex items-start sm:items-center gap-3">
+            <div
+              className={`p-2 rounded-lg shrink-0 ${
+                searchSource === "direct"
+                  ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
+                  : searchSource === "cache"
+                  ? "bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300"
+                  : "bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300"
+              }`}
+            >
+              {searchSource === "direct" && <Zap className="w-4 h-4" />}
+              {searchSource === "cache" && <Database className="w-4 h-4" />}
+              {searchSource === "apify" && <KeyRound className="w-4 h-4" />}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-xs tracking-wider uppercase opacity-75">
+                  Search Method
+                </span>
+                <span
+                  className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                    searchSource === "direct"
+                      ? "bg-emerald-200/70 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200"
+                      : searchSource === "cache"
+                      ? "bg-blue-200/70 dark:bg-blue-900/80 text-blue-800 dark:text-blue-200"
+                      : "bg-amber-200/70 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200"
+                  }`}
+                >
+                  {searchSource === "direct" && "✓ Built-in Direct Search (Free)"}
+                  {searchSource === "cache" && "✓ Local Database Cache (Instant)"}
+                  {searchSource === "apify" && `🛡️ Apify Token Fallback (${sourceLabel || "Active Token"})`}
+                </span>
+              </div>
+              <p className="text-xs mt-0.5 opacity-90">
+                {searchSource === "direct" &&
+                  "Retrieved live from Google Scholar using the server's built-in web scraper. 0 Apify token credits used."}
+                {searchSource === "cache" &&
+                  "Loaded instantly from internal SQLite database cache. Zero network latency and 0 Apify token credits used."}
+                {searchSource === "apify" &&
+                  "Direct search was met with Google's anti-bot CAPTCHA / rate-limit. Automatically routed through Apify token proxy so your search wouldn't fail."}
+              </p>
+            </div>
+          </div>
+
+          <div className="shrink-0 text-xs font-medium self-end sm:self-center opacity-80">
+            {searchResults.length} papers loaded
+          </div>
+        </div>
       )}
 
       {/* Search Results */}

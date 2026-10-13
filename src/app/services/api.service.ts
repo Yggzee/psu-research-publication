@@ -281,6 +281,9 @@ class ApiService {
   async searchGoogleScholar(query: string, refresh = false): Promise<{
     results: ScholarSearchResult[];
     fromCache: boolean;
+    searchSource?: 'cache' | 'direct' | 'apify' | 'none';
+    sourceLabel?: string;
+    captchaDetected?: boolean;
     count: number;
     requiresApify?: boolean;
     message: string;

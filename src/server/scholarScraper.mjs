@@ -25,6 +25,7 @@ function cleanText(str) {
 export async function scrapeGoogleScholarDirect(query, maxPages = 2) {
   const allResults = [];
   const seenTitles = new Set();
+  let captchaBlocked = false;
 
   for (let page = 0; page < maxPages; page++) {
     const start = page * 10;
@@ -37,10 +38,15 @@ export async function scrapeGoogleScholarDirect(query, maxPages = 2) {
           'Accept-Language': 'en-US,en;q=0.9',
         }
       });
+      if (res.status === 429) {
+        captchaBlocked = true;
+        break;
+      }
       if (!res.ok) break;
 
       const html = await res.text();
-      if (html.includes('detected unusual traffic') || html.includes('recaptcha')) {
+      if (html.includes('detected unusual traffic') || html.includes('recaptcha') || html.includes('captcha')) {
+        captchaBlocked = true;
         break;
       }
 
@@ -118,6 +124,7 @@ export async function scrapeGoogleScholarDirect(query, maxPages = 2) {
     }
   }
 
+  allResults.captchaBlocked = captchaBlocked;
   return allResults;
 }
 
