@@ -168,21 +168,131 @@ function retrieveRelevantPapers(publications, question, limit = 8) {
 }
 
 /**
- * Code-only router: decides whether a question can be answered from the database.
+ * Code-only router: determines the specific intent of the question.
  */
 function routeQuestion(q) {
-  const s = q.toLowerCase();
-  if (/\b(going on|system status|overview of (the )?system|system activity|system overview)\b/.test(s)) return 'stats';
-  if (/\bhow many\b|\b(number|total|count) of\b/.test(s) && /\b(publications?|papers?|researches|research|researchers?|faculty|profiles?|citations?)\b/.test(s)) return 'stats';
-  if (/\b(researchers?|researches|faculty|authors?|professors?)\b/.test(s) && /\b(registered|currently|tracked|in the system|in our system|all)\b/.test(s) && /\b(who|list|which|names?|show)\b/.test(s)) return 'stats';
-  if (/\b(what can you do|what features|list (the )?features|system features|what does (this|the) (system|app|tool|platform) do)\b/.test(s)) return 'features';
+  const s = q.toLowerCase().trim();
+
+  // 1. Casual Greetings
+  if (/^(hi|hello|hey|good\s*(morning|afternoon|evening)|greetings)[\s!.,?]*$/i.test(s)) {
+    return 'greeting';
+  }
+
+  const isPointSubject = /\b(nbc\s*461|points?|calculate|calculation|calculator|formula)\b/.test(s);
+  const isResearcherSubject = /\b(researchers?|researches|faculty|professors?)\b/.test(s);
+  const isPublicationSubject = /\b(publications?|papers?|articles?|works?)\b/.test(s);
+  const isCitationSubject = /\b(citations?|cited)\b/.test(s);
+
+  // 2. NBC 461 Points calculation & formulas, or direct query "show me numbers"
+  if ((isPointSubject && /\b(nbc\s*461|numbers?|formula|calculate|calculation|how|breakdown|rules?|points?|rate)\b/.test(s)) || /^show\s+me\s+(the\s+)?numbers?[\s.?!]*$/i.test(s)) {
+    return 'nbc461_calc';
+  }
+
+  // 3. Specific: Most cited / top paper ONLY
+  if (/\b(most cited|highest cited|top citation|most impact|highest impact)\b/.test(s) && (isPublicationSubject || isCitationSubject || s.includes('paper') || s.includes('research'))) {
+    return 'top_paper_only';
+  }
+
+  // 4. Specific: Researchers / Faculty ONLY (only if points are NOT the main subject)
+  if (isResearcherSubject && !isPublicationSubject && !isCitationSubject && !isPointSubject) {
+    if (/\b(how many|count|number|who|list|names?|show|all|currently|registered|i have|we have)\b/.test(s)) {
+      return 'researchers_only';
+    }
+  }
+
+  // 5. Specific: Publications count ONLY
+  if (isPublicationSubject && !isResearcherSubject && !isCitationSubject && !isPointSubject) {
+    if (/\b(how many|count|total|number|how much)\b/.test(s)) {
+      return 'publications_only';
+    }
+  }
+
+  // 6. Specific: Citations count ONLY
+  if (isCitationSubject && !isResearcherSubject && !isPublicationSubject && !isPointSubject) {
+    if (/\b(how many|count|total|sum|number)\b/.test(s)) {
+      return 'citations_only';
+    }
+  }
+
+  // 7. Overall system status / general overview
+  if (/\b(going on|system status|overview of (the )?system|system activity|system overview|summary of (the )?system)\b/.test(s)) {
+    return 'general_status';
+  }
+
+  // 8. System Features / Capabilities
+  if (/\b(what can you do|what features|list (the )?features|system features|what does (this|the) (system|app|tool|platform) do)\b/.test(s)) {
+    return 'features';
+  }
+
+  // 9. General count query mentioning multiple aspects (e.g. how many publications and researchers)
+  if (/\b(how many|number of|total count)\b/.test(s) && (isPublicationSubject || isResearcherSubject) && !isPointSubject) {
+    return 'general_status';
+  }
+
   return 'paper';
 }
 
-function buildStatsAnswer(publications, meta) {
+function handleRoutedQuestion(route, publications, meta) {
   const list = meta.researchersList || [];
-  const top = publications.slice(0, 3).map(p => `- "${p.title}" (${p.year}, ${p.citations || 0} citations)`);
-  return `Current Status of the PSU Asingan Research Publication Tracking System:\n\nTotal Approved Publications: ${meta.totalPublications ?? publications.length}\nTotal Registered Researchers: ${meta.totalResearchers ?? list.length}\nTotal Citations: ${meta.totalCitations ?? 0}${list.length ? '\n\nRegistered Researchers:\n' + list.map(r => `- ${r}`).join('\n') : ''}${top.length ? '\n\nMost Cited Publications:\n' + top.join('\n') : ''}`;
+
+  switch (route) {
+    case 'greeting':
+      return "Hello! I'm Campus AI for PSU Asingan. How can I help you today? You can ask me about our faculty researchers, publications, or how the system works.";
+
+    case 'nbc461_calc':
+      return `In this system, NBC 461 research publication points are calculated using Journal Indexing and Authorship Role:
+
+1. Base Points by Journal Tier:
+• Scopus / Web of Science (IEEE, Elsevier, Springer, Nature, etc.): 25 points
+• CHED Recognized / Refereed International (DOAJ, PLOS, etc.): 15 points
+• National / Institutional Refereed (PSU Journal, Philippine journals): 10 points
+• Institutional Refereed / Baseline Conference: 5 points
+
+2. Authorship Distribution Formula:
+• Sole Author: 100% of base points (e.g., 25 pts for Scopus)
+• Lead Author: 60% of base points (e.g., 15 pts for Scopus)
+• Co-Authors: Share the remaining 40% equally among themselves
+
+You can view and test this interactive calculation for any paper using the Research Inspector Drawer.`;
+
+    case 'researchers_only': {
+      const count = meta.totalResearchers ?? list.length;
+      if (list.length === 0) {
+        return `There are currently ${count} registered researchers in the system.`;
+      }
+      const formatted = list.map(r => `• ${r}`).join('\n');
+      return `There are currently ${count} registered researchers in the system:\n\n${formatted}`;
+    }
+
+    case 'publications_only': {
+      const count = meta.totalPublications ?? (publications || []).length;
+      return `There are currently ${count} approved research publications tracked in the system.`;
+    }
+
+    case 'citations_only': {
+      const count = meta.totalCitations ?? 0;
+      return `The system currently tracks a total of ${count} citations across all approved research papers.`;
+    }
+
+    case 'top_paper_only': {
+      if (!publications || publications.length === 0) {
+        return 'No research publications are currently stored in the system.';
+      }
+      const sorted = [...publications].sort((a, b) => (Number(b.citations) || 0) - (Number(a.citations) || 0));
+      const top = sorted[0];
+      const authors = Array.isArray(top.authors) ? top.authors.join(', ') : top.authors;
+      return `The most cited research paper in our system is:\n\n"${top.title}" (${top.year}) by ${authors}, with ${top.citations || 0} citations.`;
+    }
+
+    case 'features': {
+      return `Here are the key features of the Research Publication Tracking System:\n\n1. Google Scholar Search: Import published literature with automatic duplicate prevention.\n2. UN SDG Impact Matrix: Automatically categorizes publications into the 17 UN Sustainable Development Goals.\n3. Research Inspector: Evaluates citation metrics, NBC 461 points, and verifies journal indexing.\n4. Researcher Directory: Tracks faculty research outputs, citations, and co-authorship.\n5. Accreditation Reports: Generates export-ready reports for CHED, SUC Leveling, and AACCUP accreditation.`;
+    }
+
+    case 'general_status':
+    default: {
+      return `System Overview (PSU Asingan):\n\n• Approved Publications: ${meta.totalPublications ?? (publications || []).length}\n• Registered Researchers: ${meta.totalResearchers ?? list.length}\n• Total Citations: ${meta.totalCitations ?? 0}`;
+    }
+  }
 }
 
 /**
@@ -518,14 +628,11 @@ How may I assist you with our system or research repository today?`,
     };
   }
 
-  // Agent 1: code-only router. Stats and feature questions are answered from the database.
+  // Agent 1: code-only router for fast, 100% accurate, specific answers
   const route = routeQuestion(trimmedQ);
-  if (route === 'stats') {
-    return { answer: buildStatsAnswer(publications || [], systemMetadata), citedPapers: [], source: 'database' };
-  }
-  if (route === 'features' && (systemMetadata.features || []).length > 0) {
+  if (route !== 'paper') {
     return {
-      answer: `System Features Guide:\n\n${systemMetadata.features.map((f, i) => `${i + 1}. ${f}`).join('\n')}`,
+      answer: handleRoutedQuestion(route, publications || [], systemMetadata),
       citedPapers: [],
       source: 'database',
     };
@@ -533,7 +640,7 @@ How may I assist you with our system or research repository today?`,
 
   if (!publications || publications.length === 0) {
     return {
-      answer: 'No campus publications are currently stored in the system. Please search Google Scholar or add publications first to enable campus intelligence.',
+      answer: 'No campus publications are currently stored in the system. Please search Google Scholar or add publications first.',
       citedPapers: [],
     };
   }
@@ -557,19 +664,14 @@ How may I assist you with our system or research repository today?`,
     .map(p => `[Ref ${p.refId}] "${p.title}" (${p.year}) by ${p.authors} | Journal: ${p.journal} | Citations: ${p.citations}\nUN SDGs: ${p.sdg}\nAbstract: ${p.abstract}`)
     .join('\n\n');
 
-  const prompt = `You are the dedicated Academic AI Assistant for the Research Publication Tracking System of Pangasinan State University - Asingan Campus (PSU Asingan).
+  const prompt = `You are Campus AI for the Research Publication Tracking System of Pangasinan State University - Asingan Campus (PSU Asingan).
 
-STRICT SCOPE AND GUARDRAILS:
-You are an institutional academic assistant. You MUST ONLY answer questions that fall strictly within the following categories:
-1. "What is going on in the system?" -> Provide current system activity, repository counts, researcher numbers, citations, recent updates.
-2. "What does this do in my system?" -> Explain system features, workflows, and tools (e.g., Google Scholar search, duplicate prevention, UN SDG matrix, NBC 461 point calculator, Research Inspector drawer, admin management, accreditation reports).
-3. "What are the researches and their purposes?" -> Explain the academic research directions, key thematic clusters (Mathematics/STEM education, clinical health/orthopedics, resource austerity schemes, computer science/ML), and their societal/institutional purpose.
-4. "What does this specific research talk about?" -> Deeply explain a particular paper in the database (its authors, abstract, findings, citations, and SDG alignment).
-5. Other legitimate inquiries about this university research system, academic publications, faculty researchers, or CHED/SUC Leveling accreditation metrics.
-
-CRITICAL REFUSAL RULE:
-If the user asks ANY personal question (about personal life, feelings, private matters) OR ANY off-topic question unrelated to this system or university research (e.g., cooking, politics, pop culture, non-academic chit-chat, unrelated code):
-YOU MUST POLITELY AND FIRMLY DECLINE. State that you are PSU Asingan's Academic Intelligence Assistant and list the 4 allowed topics you can help with.
+CRITICAL INSTRUCTIONS (USER PREFERENCE):
+1. BE CONCISE & DIRECT: Answer ONLY what the user asked for. Never add unasked information, extra summaries, or unrelated topics.
+2. USE SIMPLE, PLAIN LANGUAGE: Explain concepts simply and clearly so any student or faculty member can understand immediately. Avoid bureaucratic or overly academic jargon.
+3. NO FORMAL FILLER: Never start with "Greetings! I am the PSU Asingan Academic Intelligence Assistant...". Get straight to the answer.
+4. CITATIONS: Only cite research papers (using [Ref X]) if the user's question is explicitly asking about research papers, authors, topics, or study results. DO NOT cite random research papers when answering general questions about how points or system features work.
+5. NO ASTERISK CLUTTER: Do not bold numbers or over-wrap terms in asterisks.
 
 CURRENT SYSTEM CONTEXT:
 - Total Approved Publications: ${systemMetadata.totalPublications || publications.length}
@@ -579,22 +681,22 @@ CURRENT SYSTEM CONTEXT:
 - Key System Features:
 ${(systemMetadata.features || []).map(f => '  * ' + f).join('\n')}
 
+NBC 461 RESEARCH POINT RULES IN THIS SYSTEM:
+- Journal Tiers: Scopus/Web of Science = 25 pts; CHED Recognized/International Refereed = 15 pts; National Refereed = 10 pts; Institutional Baseline = 5 pts.
+- Authorship Multipliers: Sole Author = 100% (full base points); Lead Author = 60%; Co-Authors = share remaining 40% equally.
+- Evaluated interactively in the Research Inspector Drawer.
+- Faculty Promotion: NBC 461 evaluates 4 main areas: (1) Instruction, (2) Research (tracked by this system), (3) Extension, and (4) Professional Development. Final promotion thresholds and requirements are administered by the university HRMO.
+
 CAMPUS RESEARCH PUBLICATIONS CONTEXT:
 ${contextText}
 
-USER QUESTION: "${trimmedQ}"
-
-INSTRUCTIONS:
-- Deliver an executive, insightful, and professional response in clean, readable prose.
-- Reference relevant publications explicitly using [Ref X] notation whenever discussing campus papers.
-- Avoid raw asterisk clutter (**): Do NOT bold numbers or wrap every phrase in asterisks. Avoid double-nested asterisks (e.g. never write ** **16** ** or **Total:** **16**). Use clean, natural formatting (e.g. "Total Approved Publications: 16").
-- If answering what is going on or what a feature does, provide a clear, step-by-step institutional explanation.`;
+USER QUESTION: "${trimmedQ}"`;
 
   try {
     const rawAnswer = await callLLM(
       prompt,
-      'You are PSU Asingan Academic Intelligence AI. Strictly adhere to system and research scope. Refuse personal or off-topic queries politely.',
-      0.25
+      'You are PSU Asingan Campus AI. Always answer concisely and in simple terms that anyone can understand. Answer only what is asked. Get straight to the point.',
+      0.2
     );
 
     // Clean up any double-nested or redundant asterisks like "** **" or "****"
