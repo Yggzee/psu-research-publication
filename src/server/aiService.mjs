@@ -187,8 +187,10 @@ function routeQuestion(q, publications = []) {
   }
 
   const isPointSubject = /\b(nbc\s*461|points?|pts|scores?|credits?|calculate|calculation|calculator|formula)\b/.test(s);
-  const isResearcherSubject = /\b(researchers?|researches|faculty|professors?)\b/.test(s);
-  const isPublicationSubject = /\b(publications?|papers?|articles?|works?)\b/.test(s);
+  const isResearcherSubject = /\b(researchers?|faculty|professors?)\b/.test(s);
+  const isPublicationSubject = /\b(publications?|papers?|articles?|works?|researches)\b/.test(s);
+  // Analytical / comparative questions need the LLM, not a canned list
+  const isAnalytical = /\b(most|least|best|top|highest|lowest|contribut\w*|compare|why|rank\w*|nbc|impact|productive)\b/.test(s);
   const isCitationSubject = /\b(citations?|cited)\b/.test(s);
 
   // 3. Specific: NBC 461 Points for a SPECIFIC paper mentioned in the question
@@ -219,7 +221,7 @@ function routeQuestion(q, publications = []) {
   }
 
   // 6. Specific: Researchers / Faculty ONLY (only if points are NOT the main subject)
-  if (isResearcherSubject && !isPublicationSubject && !isCitationSubject && !isPointSubject) {
+  if (isResearcherSubject && !isPublicationSubject && !isCitationSubject && !isPointSubject && !isAnalytical) {
     if (/\b(how many|count|number|who|list|names?|show|all|currently|registered|i have|we have)\b/.test(s)) {
       return 'researchers_only';
     }
