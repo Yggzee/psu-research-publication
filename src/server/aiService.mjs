@@ -75,6 +75,116 @@ async function callGemini(prompt, systemInstruction = '', temperature = 0.2) {
   throw lastError || new Error('All Gemini models failed');
 }
 
+let lastProvider = 'gemini';
+export function getLastProvider() {
+  return lastProvider;
+}
+
+/**
+ * Secondary provider: any OpenAI-compatible chat API (OpenAI, Groq, OpenRouter, Ollama...).
+ * Configure with OPENAI_API_KEY (optional for local Ollama if OPENAI_BASE_URL is set),
+ * OPENAI_BASE_URL (default https://api.openai.com/v1) and OPENAI_MODEL (default gpt-4o-mini).
+ */
+async function callOpenAICompat(prompt, systemInstruction = '', temperature = 0.2) {
+  const key = process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY || '';
+  const isGroq = Boolean(process.env.GROQ_API_KEY) || key.startsWith('gsk_');
+  const defaultBase = isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1';
+  const defaultModel = isGroq ? (process.env.GROQ_MODEL || 'qwen/qwen3.8-27b') : 'gpt-4o-mini';
+
+  const baseUrl = (process.env.OPENAI_BASE_URL || defaultBase).replace(/\/$/, '');
+  const model = process.env.OPENAI_MODEL || defaultModel;
+
+  if (!key && !process.env.OPENAI_BASE_URL) {
+    throw new Error('Secondary provider not configured (OPENAI_API_KEY or GROQ_API_KEY)');
+  }
+  const messages = [];
+  if (systemInstruction) messages.push({ role: 'system', content: systemInstruction });
+  messages.push({ role: 'user', content: prompt });
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(key ? { Authorization: `Bearer ${key}` } : {}),
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature,
+      max_tokens: 2048,
+    }),
+    signal: AbortSignal.timeout(25000),
+  });
+  const data = await response.json();
+  if (data.error) throw new Error(data.error.message || 'Secondary provider error');
+  const choice = data.choices?.[0]?.message;
+  const text = choice?.content?.trim() || choice?.reasoning?.trim();
+  if (!text) throw new Error('Secondary provider returned no text');
+  return { text, provider: isGroq ? 'groq' : 'openai' };
+}
+
+/**
+ * Try Gemini first, then the secondary provider. Throws only if all providers fail.
+ */
+async function callLLM(prompt, systemInstruction = '', temperature = 0.2) {
+  try {
+    const text = await callGemini(prompt, systemInstruction, temperature);
+    lastProvider = 'gemini';
+    return text;
+  } catch (geminiErr) {
+    try {
+      const res = await callOpenAICompat(prompt, systemInstruction, temperature);
+      lastProvider = res.provider;
+      return res.text;
+    } catch (secondaryErr) {
+      throw new Error(`Gemini: ${geminiErr.message}; Secondary: ${secondaryErr.message}`);
+    }
+  }
+}
+
+const RETRIEVAL_STOPWORDS = new Set(['the', 'what', 'does', 'about', 'talk', 'talks', 'study', 'this', 'that', 'with', 'from', 'using', 'and', 'for', 'are', 'how', 'who', 'which', 'research', 'paper', 'papers', 'tell', 'explain', 'summary', 'summarize', 'there', 'their', 'can', 'you']);
+
+/**
+ * Keyword retrieval: rank publications by overlap with the question (title weighted higher).
+ */
+function retrieveRelevantPapers(publications, question, limit = 8) {
+  const words = question.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 2 && !RETRIEVAL_STOPWORDS.has(w));
+  if (words.length === 0) return publications.slice(0, limit);
+
+  const scored = publications.map(p => {
+    const title = (p.title || '').toLowerCase();
+    const rest = `${p.abstract || ''} ${Array.isArray(p.authors) ? p.authors.join(' ') : p.authors || ''}`.toLowerCase();
+    let score = 0;
+    for (const w of words) {
+      if (title.includes(w)) score += 3;
+      else if (rest.includes(w)) score += 1;
+    }
+    return { p, score };
+  });
+
+  const matched = scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map(s => s.p);
+  // No keyword hits: fall back to most-cited papers so the model still has context
+  return matched.length > 0 ? matched : publications.slice(0, limit);
+}
+
+/**
+ * Code-only router: decides whether a question can be answered from the database.
+ */
+function routeQuestion(q) {
+  const s = q.toLowerCase();
+  if (/\b(going on|system status|overview of (the )?system|system activity|system overview)\b/.test(s)) return 'stats';
+  if (/\bhow many\b|\b(number|total|count) of\b/.test(s) && /\b(publications?|papers?|researches|research|researchers?|faculty|profiles?|citations?)\b/.test(s)) return 'stats';
+  if (/\b(researchers?|researches|faculty|authors?|professors?)\b/.test(s) && /\b(registered|currently|tracked|in the system|in our system|all)\b/.test(s) && /\b(who|list|which|names?|show)\b/.test(s)) return 'stats';
+  if (/\b(what can you do|what features|list (the )?features|system features|what does (this|the) (system|app|tool|platform) do)\b/.test(s)) return 'features';
+  return 'paper';
+}
+
+function buildStatsAnswer(publications, meta) {
+  const list = meta.researchersList || [];
+  const top = publications.slice(0, 3).map(p => `- "${p.title}" (${p.year}, ${p.citations || 0} citations)`);
+  return `Current Status of the PSU Asingan Research Publication Tracking System:\n\nTotal Approved Publications: ${meta.totalPublications ?? publications.length}\nTotal Registered Researchers: ${meta.totalResearchers ?? list.length}\nTotal Citations: ${meta.totalCitations ?? 0}${list.length ? '\n\nRegistered Researchers:\n' + list.map(r => `- ${r}`).join('\n') : ''}${top.length ? '\n\nMost Cited Publications:\n' + top.join('\n') : ''}`;
+}
+
 /**
  * High-Precision Academic Classifier for UN Sustainable Development Goals (SDGs 1-17)
  */
@@ -408,6 +518,19 @@ How may I assist you with our system or research repository today?`,
     };
   }
 
+  // Agent 1: code-only router. Stats and feature questions are answered from the database.
+  const route = routeQuestion(trimmedQ);
+  if (route === 'stats') {
+    return { answer: buildStatsAnswer(publications || [], systemMetadata), citedPapers: [], source: 'database' };
+  }
+  if (route === 'features' && (systemMetadata.features || []).length > 0) {
+    return {
+      answer: `System Features Guide:\n\n${systemMetadata.features.map((f, i) => `${i + 1}. ${f}`).join('\n')}`,
+      citedPapers: [],
+      source: 'database',
+    };
+  }
+
   if (!publications || publications.length === 0) {
     return {
       answer: 'No campus publications are currently stored in the system. Please search Google Scholar or add publications first to enable campus intelligence.',
@@ -415,8 +538,9 @@ How may I assist you with our system or research repository today?`,
     };
   }
 
-  // Build condensed context of top relevant papers
-  const paperSummaries = publications.slice(0, 40).map((p, idx) => ({
+  // Agent 2: retrieval-augmented paper answers using only the most relevant papers
+  const relevantPapers = retrieveRelevantPapers(publications, trimmedQ, 8);
+  const paperSummaries = relevantPapers.map((p, idx) => ({
     refId: idx + 1,
     id: p.id,
     title: p.title,
@@ -467,7 +591,7 @@ INSTRUCTIONS:
 - If answering what is going on or what a feature does, provide a clear, step-by-step institutional explanation.`;
 
   try {
-    const rawAnswer = await callGemini(
+    const rawAnswer = await callLLM(
       prompt,
       'You are PSU Asingan Academic Intelligence AI. Strictly adhere to system and research scope. Refuse personal or off-topic queries politely.',
       0.25
@@ -501,7 +625,7 @@ INSTRUCTIONS:
     return {
       answer,
       citedPapers,
-      source: 'gemini',
+      source: getLastProvider(),
     };
   } catch (err) {
     console.warn('[askCampusIntelligence] Gemini failed, using local synthesis:', err.message);

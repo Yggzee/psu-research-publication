@@ -2628,18 +2628,23 @@ export async function handleApiRequest(req, res) {
         FROM publications
         WHERE approval_status = 'approved'
         ORDER BY citations DESC, year DESC
-        LIMIT 50
+        LIMIT 500
       `).all();
+
+      const pubTotals = db.prepare(`
+        SELECT COUNT(*) AS total, COALESCE(SUM(citations), 0) AS citations
+        FROM publications WHERE approval_status = 'approved'
+      `).get();
 
       const researchers = db.prepare(`
         SELECT id, instructor_id, name, department, total_publications, total_citations
         FROM researchers
       `).all();
 
-      const totalCitations = approvedPubs.reduce((sum, p) => sum + (p.citations || 0), 0);
+      const totalCitations = Number(pubTotals?.citations) || 0;
 
       const systemMetadata = {
-        totalPublications: approvedPubs.length,
+        totalPublications: Number(pubTotals?.total) || approvedPubs.length,
         totalResearchers: researchers.length,
         researchersList: researchers.map(r => `${r.name} (${r.department || 'Faculty'}, ${r.total_publications} papers, ${r.total_citations} citations)`),
         totalCitations,
