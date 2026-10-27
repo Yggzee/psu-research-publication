@@ -19,6 +19,7 @@ import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { apiService, type DashboardStatsResponse } from "../services/api.service";
 import { PageHeader, StatCard, PageTabs, StatusBadge, EmptyState } from "./common";
+import { exportResearchMatrixToExcel } from "../utils/excelExportUtils";
 
 type ReportType = "summary" | "researcher" | "department" | "yearly" | "accreditation";
 
@@ -102,19 +103,6 @@ export function ReportsPage() {
     setIsExporting(true);
     setExportProgressText("Preparing publications for export...");
 
-    const escapeCell = (value: string | number | undefined | null) =>
-      String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
-    const escapeAttr = (value: string | number | undefined | null) =>
-      String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/"/g, "&quot;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-
     // Filter publications to be exported
     const filteredToExport = publicationsList
       .filter((pub: any) => exportYear === "all" || pub.year?.toString() === exportYear)
@@ -147,179 +135,17 @@ export function ReportsPage() {
       }
     }
 
-    setExportProgressText("Generating Excel document...");
+    setExportProgressText("Generating styled Excel document with citations & hyperlinks...");
 
-    const formatCitationsCell = (row: {
-      citations: number;
-      citedByLink?: string;
-      citingPapers?: Array<{
-        title: string;
-        authors?: string;
-        year?: number;
-        link?: string;
-      }>;
-    }) => {
-      const citing = Array.isArray(row.citingPapers) ? row.citingPapers : [];
-      const totalCitations = Number(row.citations) || 0;
-      const citedByLink = row.citedByLink || "";
-
-      if (citing.length === 0 && !citedByLink && totalCitations === 0) {
-        return `<span style="color: #64748b; font-size: 9pt;">0 citations</span>`;
-      }
-
-      const items: string[] = [];
-
-      items.push(`
-        <div style="font-weight: bold; color: #1e3a8a; font-size: 9.5pt; margin-bottom: 4px; padding-bottom: 2px; border-bottom: 1px solid #cbd5e1;">
-          Total Citations: ${totalCitations}
-        </div>
-      `);
-
-      if (citing.length > 0) {
-        citing.forEach((cp, idx) => {
-          const num = idx + 1;
-          const title = cp.title || `Citing Paper #${num}`;
-          const yearStr = cp.year ? ` (${cp.year})` : "";
-          let paperLink = cp.link || "";
-          if (!paperLink && citedByLink) {
-            paperLink = citedByLink;
-          }
-
-          const titlePart = paperLink
-            ? `<a href="${escapeAttr(paperLink)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">${escapeCell(title)}</a>`
-            : `<span style="color: #0f172a; font-weight: 500;">${escapeCell(title)}</span>`;
-
-          const linkPart = paperLink
-            ? ` &mdash; <a href="${escapeAttr(paperLink)}" target="_blank" style="color: #047857; font-size: 8.5pt; text-decoration: underline;">${escapeCell(paperLink)}</a>`
-            : "";
-
-          const itemHtml = `<div style="font-size: 8.5pt; line-height: 1.3; margin-bottom: 2px; font-family: Segoe UI, Calibri, sans-serif;"><strong>[${num}] </strong>${titlePart}${escapeCell(yearStr)}${linkPart}</div>`;
-          items.push(itemHtml);
-        });
-
-        if (totalCitations > citing.length && citedByLink) {
-          const citesMatch = citedByLink.match(/cites=(\d+)/);
-          const citesId = citesMatch ? citesMatch[1] : "";
-          for (let rem = citing.length + 1; rem <= totalCitations; rem++) {
-            const pageStart = Math.floor((rem - 1) / 10) * 10;
-            const entryUrl = citesId
-              ? `https://scholar.google.com/scholar?cites=${citesId}&hl=en&start=${pageStart}`
-              : citedByLink;
-
-            const itemHtml = `<div style="font-size: 8.5pt; line-height: 1.3; margin-bottom: 2px; font-family: Segoe UI, Calibri, sans-serif;"><strong>[${rem}] </strong><a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">Google Scholar Citation Index Entry #${rem}</a> &mdash; <a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #047857; font-size: 8.5pt; text-decoration: underline;">${escapeCell(entryUrl)}</a></div>`;
-            items.push(itemHtml);
-          }
-        }
-      } else if (citedByLink) {
-        const citesMatch = citedByLink.match(/cites=(\d+)/);
-        const citesId = citesMatch ? citesMatch[1] : "";
-        for (let rem = 1; rem <= Math.max(totalCitations, 1); rem++) {
-          const pageStart = Math.floor((rem - 1) / 10) * 10;
-          const entryUrl = citesId
-            ? `https://scholar.google.com/scholar?cites=${citesId}&hl=en&start=${pageStart}`
-            : citedByLink;
-
-          const itemHtml = `<div style="font-size: 8.5pt; line-height: 1.3; margin-bottom: 2px; font-family: Segoe UI, Calibri, sans-serif;"><strong>[${rem}] </strong><a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">Google Scholar Citation Link #${rem}</a> &mdash; <a href="${escapeAttr(entryUrl)}" target="_blank" style="color: #047857; font-size: 8.5pt; text-decoration: underline;">${escapeCell(entryUrl)}</a></div>`;
-          items.push(itemHtml);
-        }
-      } else {
-        items.push(`<span style="font-size: 9.5pt; color: #334155;">${totalCitations} citation${totalCitations === 1 ? "" : "s"}</span>`);
-      }
-
-      return items.join("");
-    };
-
-    const rows = filteredToExport.map((pub: any) => {
-      const researcher = researchersList.find(
-        (r: any) => r.instructorId === pub.owner_id || r.instructorId === pub.ownerId
-      );
-      return {
-        title: pub.title,
-        url: pub.url || "",
-        authors: Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors,
-        researcher: pub.owner_name || pub.ownerName || researcher?.name || "Unknown",
-        department: researcher?.department || "Unassigned",
-        journal: pub.journal || "",
-        year: pub.year,
-        citations: pub.citations || 0,
-        citedByLink: pub.citedByLink || pub.cited_by_link || "",
-        citingPapers: pub.citingPapers || [],
-      };
+    exportResearchMatrixToExcel({
+      publications: filteredToExport,
+      researchers: researchersList,
+      exportDepartment,
+      exportYear,
+      departmentOrder,
+      filename: `psu-research-${exportDepartment.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${exportYear}.xlsx`
     });
 
-    const tableRows = rows.map((row) => `
-      <tr>
-        <td>${row.url ? `<a href="${escapeAttr(row.url)}" target="_blank" style="color: #1a0dab; text-decoration: underline; font-weight: 500;">${escapeCell(row.title)}</a>` : escapeCell(row.title)}</td>
-        <td>${escapeCell(row.authors)}</td>
-        <td>${escapeCell(row.researcher)}</td>
-        <td>${escapeCell(row.department)}</td>
-        <td>${escapeCell(row.journal)}</td>
-        <td class="year-col">${escapeCell(row.year)}</td>
-        <td class="citation-cell">${formatCitationsCell(row)}</td>
-      </tr>`).join("");
-
-    const workbook = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-        <style>
-          body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; }
-          table { border-collapse: collapse; width: 100%; }
-          th {
-            background-color: #0038A8;
-            color: #ffffff;
-            font-weight: bold;
-            border: 1px solid #94a3b8;
-            padding: 10px 12px;
-            text-align: left;
-            vertical-align: middle;
-            font-size: 11pt;
-          }
-          td {
-            border: 1px solid #cbd5e1;
-            padding: 10px 12px;
-            vertical-align: top;
-            font-size: 10.5pt;
-            mso-number-format: "\\@";
-          }
-          .year-col {
-            text-align: center;
-            mso-number-format: "0";
-          }
-          .citation-cell {
-            vertical-align: top;
-          }
-          a {
-            color: #1d4ed8;
-            text-decoration: underline;
-          }
-        </style>
-      </head>
-      <body>
-        <table>
-          <thead>
-            <tr>
-              <th style="min-width: 250px;">Title</th>
-              <th style="min-width: 180px;">Authors</th>
-              <th style="min-width: 160px;">Researcher</th>
-              <th style="min-width: 110px;">Department</th>
-              <th style="min-width: 160px;">Journal</th>
-              <th style="min-width: 70px; text-align: center;">Year</th>
-              <th style="min-width: 380px;">Citations / Cited Papers</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      </body>
-      </html>`;
-
-    const blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `psu-research-${exportDepartment}-${exportYear}.xls`;
-    link.click();
-    URL.revokeObjectURL(url);
     setIsExporting(false);
     setExportProgressText(null);
   };

@@ -170,7 +170,7 @@ function retrieveRelevantPapers(publications, question, limit = 8) {
 /**
  * Code-only router: determines the specific intent of the question.
  */
-function routeQuestion(q) {
+function routeQuestion(q, publications = []) {
   const s = q.toLowerCase().trim();
 
   // 1. Casual Greetings
@@ -186,58 +186,75 @@ function routeQuestion(q) {
     return 'my_publications';
   }
 
-  const isPointSubject = /\b(nbc\s*461|points?|calculate|calculation|calculator|formula)\b/.test(s);
+  const isPointSubject = /\b(nbc\s*461|points?|pts|scores?|credits?|calculate|calculation|calculator|formula)\b/.test(s);
   const isResearcherSubject = /\b(researchers?|researches|faculty|professors?)\b/.test(s);
   const isPublicationSubject = /\b(publications?|papers?|articles?|works?)\b/.test(s);
   const isCitationSubject = /\b(citations?|cited)\b/.test(s);
 
-  // 3. NBC 461 Points calculation & formulas, or direct query "show me numbers"
+  // 3. Specific: NBC 461 Points for a SPECIFIC paper mentioned in the question
+  if (isPointSubject && publications && publications.length > 0) {
+    const matchedPaper = publications.find(p => {
+      const titleClean = (p.title || '').replace(/^\[[A-Z]\]\s*/i, '').toLowerCase();
+      if (!titleClean) return false;
+      if (s.includes(titleClean.slice(0, 25).trim())) return true;
+      const titleWords = titleClean.split(/[^a-z0-9]+/).filter(w => w.length > 4);
+      if (titleWords.length === 0) return false;
+      const matches = titleWords.filter(w => s.includes(w));
+      return matches.length >= 2 && matches.length >= Math.min(3, Math.ceil(titleWords.length * 0.35));
+    });
+
+    if (matchedPaper) {
+      return { route: 'specific_paper_points', paper: matchedPaper };
+    }
+  }
+
+  // 4. General NBC 461 Points calculation & formulas, or direct query "show me numbers"
   if ((isPointSubject && /\b(nbc\s*461|numbers?|formula|calculate|calculation|how|breakdown|rules?|points?|rate)\b/.test(s)) || /^show\s+me\s+(the\s+)?numbers?[\s.?!]*$/i.test(s)) {
     return 'nbc461_calc';
   }
 
-  // 4. Specific: Most cited / top paper ONLY
+  // 5. Specific: Most cited / top paper ONLY
   if (/\b(most cited|highest cited|top citation|most impact|highest impact)\b/.test(s) && (isPublicationSubject || isCitationSubject || s.includes('paper') || s.includes('research'))) {
     return 'top_paper_only';
   }
 
-  // 5. Specific: Researchers / Faculty ONLY (only if points are NOT the main subject)
+  // 6. Specific: Researchers / Faculty ONLY (only if points are NOT the main subject)
   if (isResearcherSubject && !isPublicationSubject && !isCitationSubject && !isPointSubject) {
     if (/\b(how many|count|number|who|list|names?|show|all|currently|registered|i have|we have)\b/.test(s)) {
       return 'researchers_only';
     }
   }
 
-  // 6. Specific: Publications count ONLY
+  // 7. Specific: Publications count ONLY
   if (isPublicationSubject && !isResearcherSubject && !isCitationSubject && !isPointSubject) {
     if (/\b(how many|count|total|number|how much)\b/.test(s)) {
       return 'publications_only';
     }
   }
 
-  // 7. Specific: Citations count ONLY
+  // 8. Specific: Citations count ONLY
   if (isCitationSubject && !isResearcherSubject && !isPublicationSubject && !isPointSubject) {
     if (/\b(how many|count|total|sum|number)\b/.test(s)) {
       return 'citations_only';
     }
   }
 
-  // 8. Overall system status / general overview
+  // 9. Overall system status / general overview
   if (/\b(going on|system status|overview of (the )?system|system activity|system overview|summary of (the )?system)\b/.test(s)) {
     return 'general_status';
   }
 
-  // 9. System Features / Capabilities
+  // 10. System Features / Capabilities
   if (/\b(what can you do|what features|list (the )?features|system features|what does (this|the) (system|app|tool|platform) do)\b/.test(s)) {
     return 'features';
   }
 
-  // 10. Navigation & Reports inquiries
+  // 11. Navigation & Reports inquiries
   if (/\b(where (can|do|to|is)|which page|find (the )?reports?|accreditation reports?|suc leveling reports?|aaccup reports?|how to export|export (the )?reports?)\b/.test(s)) {
     return 'navigation';
   }
 
-  // 11. General count query mentioning multiple aspects (e.g. how many publications and researchers)
+  // 12. General count query mentioning multiple aspects (e.g. how many publications and researchers)
   if (/\b(how many|number of|total count)\b/.test(s) && (isPublicationSubject || isResearcherSubject) && !isPointSubject) {
     return 'general_status';
   }
@@ -245,13 +262,45 @@ function routeQuestion(q) {
   return 'paper';
 }
 
-function handleRoutedQuestion(route, publications, meta) {
+function handleRoutedQuestion(routeInfo, publications, meta) {
+  const route = typeof routeInfo === 'object' ? routeInfo.route : routeInfo;
+  const matchedPaper = typeof routeInfo === 'object' ? routeInfo.paper : null;
   const list = meta.researchersList || [];
   const u = meta.currentUser;
 
   switch (route) {
     case 'greeting':
       return "Hello! I'm Campus AI for PSU Asingan. How can I help you today? You can ask me about our faculty researchers, publications, or how the system works.";
+
+    case 'specific_paper_points': {
+      const p = matchedPaper;
+      const base = Number(p.nbc461_points) || (p.journal?.toLowerCase().includes('scopus') ? 25 : 15);
+      let authorsList = [];
+      try {
+        authorsList = Array.isArray(p.authors)
+          ? p.authors
+          : (typeof p.authors === 'string' && p.authors.startsWith('[') ? JSON.parse(p.authors) : p.authors.split(',').map(a => a.trim()));
+      } catch {
+        authorsList = typeof p.authors === 'string' ? p.authors.split(',').map(a => a.trim()) : [];
+      }
+      const totalAuthors = Math.max(1, authorsList.length);
+      const coCount = Math.max(1, totalAuthors - 1);
+      const leadPts = (base * 0.6).toFixed(2);
+      const coPts = ((base * 0.4) / coCount).toFixed(2);
+      const leadName = authorsList[0] || 'Lead author';
+      const coNames = authorsList.slice(1).join(', ') || 'Co-authors';
+
+      const authorshipText = totalAuthors === 1
+        ? `• Sole Author (${leadName}): ${base.toFixed(2)} points (100% of base points)`
+        : `• Lead Author (${leadName}): ${leadPts} points (60% of base points)\n• Co-Authors (${coNames}): ${coPts} points each (40% shared equally among ${coCount} co-author${coCount > 1 ? 's' : ''})`;
+
+      return `"${p.title}" (${p.year}) is allocated ${base.toFixed(1)} NBC 461 base points under ${p.journal_indexing || 'Institutional Refereed'}.
+
+Authorship Point Breakdown:
+${authorshipText}
+
+You can view or adjust this paper's details in the Research Inspector Drawer.`;
+    }
 
     case 'navigation':
       return `You can access institutional tables and exportable files under the "Reports" page (/reports). This provides audit summaries for CHED audits, SUC Leveling, and AACCUP accreditation cycles.`;
@@ -660,11 +709,12 @@ How may I assist you with our system or research repository today?`,
   }
 
   // Agent 1: code-only router for fast, 100% accurate, specific answers
-  const route = routeQuestion(trimmedQ);
+  const route = routeQuestion(trimmedQ, publications || []);
   if (route !== 'paper') {
+    const matchedPaper = typeof route === 'object' && route.paper ? route.paper : null;
     return {
       answer: handleRoutedQuestion(route, publications || [], systemMetadata),
-      citedPapers: [],
+      citedPapers: matchedPaper ? [matchedPaper] : [],
       source: 'database',
     };
   }
@@ -686,13 +736,15 @@ How may I assist you with our system or research repository today?`,
     year: p.year,
     citations: p.citations || 0,
     journal: p.journal || 'PSU Archive',
+    indexing: p.journal_indexing || 'Institutional Refereed',
+    nbcPoints: p.nbc461_points || 5.0,
     abstract: p.abstract ? p.abstract.slice(0, 350) : 'Full text on archive',
     sdg: p.sdg_tags ? (typeof p.sdg_tags === 'string' ? p.sdg_tags : JSON.stringify(p.sdg_tags)) : 'General Research',
     rationale: p.sdg_rationale || '',
   }));
 
   const contextText = paperSummaries
-    .map(p => `[Ref ${p.refId}] "${p.title}" (${p.year}) by ${p.authors} | Journal: ${p.journal} | Citations: ${p.citations}\nUN SDGs: ${p.sdg}\nAbstract: ${p.abstract}`)
+    .map(p => `[Ref ${p.refId}] "${p.title}" (${p.year}) by ${p.authors} | Journal: ${p.journal} | Indexing: ${p.indexing} | NBC 461 Base: ${p.nbcPoints} pts | Citations: ${p.citations}\nUN SDGs: ${p.sdg}\nAbstract: ${p.abstract}`)
     .join('\n\n');
 
   const historySnippet = (history || [])

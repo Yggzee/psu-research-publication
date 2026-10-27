@@ -1224,7 +1224,7 @@ export async function handleApiRequest(req, res) {
       // Auto-fetch or backfill citing papers if cached count is less than recorded citations
       if ((citing.length === 0 || citing.length < totalPaperCitations) && citedByLink) {
         try {
-          const fetchedCiting = await scrapeGoogleScholarCitations(citedByLink, 50);
+          const fetchedCiting = await scrapeGoogleScholarCitations(citedByLink, 100);
           if (fetchedCiting.length > citing.length) {
             // Delete old partial preview citations and insert complete set
             db.prepare('DELETE FROM citing_papers WHERE publication_id = ? OR publication_id = ?').run(id, rawId);
