@@ -1,9 +1,38 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
-import { Check, Edit2, KeyRound, Plus, Save, Shield, Trash2, Upload, UserCheck, X, RefreshCw, GraduationCap, ExternalLink, BookOpen } from "lucide-react";
+import {
+  Check,
+  Edit2,
+  KeyRound,
+  Plus,
+  Save,
+  Shield,
+  Trash2,
+  Upload,
+  UserCheck,
+  X,
+  RefreshCw,
+  GraduationCap,
+  ExternalLink,
+  BookOpen,
+  Mail,
+  Copy,
+  Clock,
+  Send,
+  Inbox,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  UserX,
+  Search,
+  Filter,
+  Users,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Checkbox } from "./ui/checkbox";
+import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import {
   FACULTY_DATA_KEY,
@@ -11,10 +40,24 @@ import {
   saveManagedResearchers,
   type ManagedResearcher,
 } from "../utils/researchStore";
-import { apiService } from "../services/api.service";
+import {
+  apiService,
+  type PendingRegistration,
+  type EmailLog,
+} from "../services/api.service";
 import { ApifyTokenManager } from "./ApifyTokenManager";
 import { ScholarImportModal } from "./ScholarImportModal";
 import { ConfirmModal } from "./ConfirmModal";
+import {
+  PageHeader,
+  StatCard,
+  StatusBadge,
+  Notice,
+  SectionCard,
+  EmptyState,
+  PageTabs,
+  type TabItem,
+} from "./common";
 
 const DEPARTMENTS = ["BSIT", "BSBA", "BSE", "BEE", "BTLED", "BIT", "Non Teaching"];
 
@@ -28,19 +71,50 @@ const emptyForm = {
   photoUrl: "",
   email: "",
   scholarUrl: "",
+  sendInvite: true,
 };
 
 export function AdminPage() {
   const [researchers, setResearchers] = useState<ManagedResearcher[]>([]);
   const [pendingClaims, setPendingClaims] = useState<any[]>([]);
+  const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistration[]>([]);
+  
+  // Navigation tabs
+  const [activeTab, setActiveTab] = useState<string>("registrations");
+
+  // Roster search & filter
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [rosterDeptFilter, setRosterDeptFilter] = useState("all");
+
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Invitation creation result feedback banner
+  const [inviteResult, setInviteResult] = useState<{
+    name: string;
+    email: string;
+    verificationLink?: string;
+    message: string;
+  } | null>(null);
+
+  // Action loading indicators
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Email Outbox / Audit Modal
+  const [outboxOpen, setOutboxOpen] = useState(false);
+  const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
+  const [loadingOutbox, setLoadingOutbox] = useState(false);
+
   // Delete Researcher Confirmation
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  // Reject Registration Confirmation
+  const [rejectTarget, setRejectTarget] = useState<{ instructorId: string; name: string } | null>(null);
 
   // Review & Import Google Scholar Modal State
   const [scholarModalOpen, setScholarModalOpen] = useState(false);
@@ -54,9 +128,10 @@ export function AdminPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [researchersData, claimsData] = await Promise.all([
+      const [researchersData, claimsData, registrationsData] = await Promise.all([
         apiService.getResearchers().catch(() => []),
         apiService.getClaims().catch(() => []),
+        apiService.getPendingRegistrations().catch(() => []),
       ]);
 
       if (Array.isArray(researchersData)) {
@@ -87,6 +162,13 @@ export function AdminPage() {
       }
 
       setPendingClaims(Array.isArray(claimsData) ? claimsData : []);
+      const regs = Array.isArray(registrationsData) ? registrationsData : [];
+      setPendingRegistrations(regs);
+
+      // Auto-focus registrations if there are pending, otherwise researchers
+      if (regs.length === 0 && activeTab === "registrations") {
+        setActiveTab("researchers");
+      }
     } catch (err) {
       console.warn("Failed to load admin data from API, using local storage:", err);
       setResearchers(getManagedResearchers());
@@ -127,8 +209,8 @@ export function AdminPage() {
       return;
     }
 
-    if (!editingId && !form.password.trim()) {
-      setFormError("Password is required for new accounts.");
+    if (!form.email.trim()) {
+      setFormError("Email address is required for researcher invitation & account verification.");
       return;
     }
 
@@ -136,22 +218,34 @@ export function AdminPage() {
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       instructorId: form.instructorId.trim(),
-      password: form.password ? form.password.trim() : "",
+      password: form.password ? form.password.trim() : undefined,
       department: form.isFaculty ? form.department : "Non Teaching",
       email: form.email.trim(),
       isFaculty: form.isFaculty,
       photoUrl: form.photoUrl,
       scholarUrl: form.scholarUrl.trim(),
+      sendInvite: form.sendInvite,
     };
 
     try {
       if (editingId) {
         await apiService.updateResearcher(editingId, payload);
       } else {
-        await apiService.createResearcher(payload);
+        const res = await apiService.createResearcher(payload);
+        if (res.verificationLink) {
+          setInviteResult({
+            name: `${payload.firstName} ${payload.lastName}`,
+            email: payload.email,
+            verificationLink: res.verificationLink,
+            message: res.message,
+          });
+        }
       }
       await loadData();
       resetForm();
+      window.dispatchEvent(new CustomEvent("researchers-updated"));
+      window.dispatchEvent(new CustomEvent("faculty-updated"));
+      window.dispatchEvent(new CustomEvent("research-records-updated"));
     } catch (err: any) {
       setFormError(err.message || "Failed to save researcher.");
     }
@@ -172,9 +266,11 @@ export function AdminPage() {
       photoUrl: researcher.photoUrl || "",
       email: researcher.email || "",
       scholarUrl: researcher.scholarUrl || "",
+      sendInvite: false,
     });
     setEditingId(researcher.instructorId);
     setIsAdding(true);
+    setActiveTab("researchers");
     setFormError("");
   };
 
@@ -185,6 +281,9 @@ export function AdminPage() {
     try {
       await apiService.deleteResearcher(id);
       await loadData();
+      window.dispatchEvent(new CustomEvent("researchers-updated"));
+      window.dispatchEvent(new CustomEvent("faculty-updated"));
+      window.dispatchEvent(new CustomEvent("research-records-updated"));
     } catch (err) {
       console.error("Delete researcher error:", err);
     }
@@ -207,311 +306,784 @@ export function AdminPage() {
     }
   };
 
+  const handleAdmitRegistration = async (instructorId: string, name: string) => {
+    setActionLoadingId(instructorId);
+    setActionSuccessMsg(null);
+    try {
+      const res = await apiService.admitRegistration(instructorId);
+      setActionSuccessMsg(res.message || `${name} was officially admitted to the system.`);
+      await loadData();
+      window.dispatchEvent(new CustomEvent("researchers-updated"));
+      window.dispatchEvent(new CustomEvent("faculty-updated"));
+    } catch (err: any) {
+      alert(err.message || "Failed to admit researcher.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleConfirmRejectRegistration = async () => {
+    if (!rejectTarget) return;
+    const { instructorId, name } = rejectTarget;
+    setRejectTarget(null);
+    setActionLoadingId(instructorId);
+    try {
+      await apiService.rejectRegistration(instructorId);
+      setActionSuccessMsg(`Registration for ${name} was rejected.`);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || "Failed to reject registration.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleResendInvite = async (instructorId: string, email: string) => {
+    setActionLoadingId(instructorId);
+    try {
+      const res = await apiService.resendInvite(instructorId);
+      if (res.verificationLink) {
+        setInviteResult({
+          name: instructorId,
+          email,
+          verificationLink: res.verificationLink,
+          message: res.message,
+        });
+      }
+      setActionSuccessMsg(`Verification email successfully resent to ${email}.`);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || "Failed to resend invite.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleCopyLink = (tokenOrLink: string, id: string) => {
+    const fullLink = tokenOrLink.startsWith("http")
+      ? tokenOrLink
+      : `${window.location.origin}/verify-invitation?token=${encodeURIComponent(tokenOrLink)}`;
+    navigator.clipboard.writeText(fullLink);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 3000);
+  };
+
+  const openOutboxModal = async () => {
+    setOutboxOpen(true);
+    setLoadingOutbox(true);
+    try {
+      const logs = await apiService.getEmailLogs();
+      setEmailLogs(Array.isArray(logs) ? logs : []);
+    } catch (err) {
+      console.warn("Failed to load email logs:", err);
+    } finally {
+      setLoadingOutbox(false);
+    }
+  };
+
   const facultyCount = researchers.filter((member) => member.isFaculty).length;
   const nonTeachingCount = researchers.length - facultyCount;
 
+  // Filtered Roster
+  const filteredResearchers = useMemo(() => {
+    return researchers.filter((r) => {
+      const matchesSearch =
+        !rosterSearch.trim() ||
+        r.name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
+        r.instructorId.toLowerCase().includes(rosterSearch.toLowerCase()) ||
+        (r.email && r.email.toLowerCase().includes(rosterSearch.toLowerCase()));
+
+      const matchesDept =
+        rosterDeptFilter === "all" || r.department === rosterDeptFilter;
+
+      return matchesSearch && matchesDept;
+    });
+  }, [researchers, rosterSearch, rosterDeptFilter]);
+
+  // Tab definitions
+  const adminTabs: TabItem[] = [
+    {
+      id: "registrations",
+      label: "Registrations & Invites",
+      count: pendingRegistrations.length,
+      icon: UserCheck,
+      badge: pendingRegistrations.length > 0 ? "Pending" : undefined,
+    },
+    {
+      id: "researchers",
+      label: "Faculty Roster",
+      count: researchers.length,
+      icon: GraduationCap,
+    },
+    {
+      id: "claims",
+      label: "Publication Claims",
+      count: pendingClaims.length,
+      icon: KeyRound,
+      badge: pendingClaims.length > 0 ? "Action Needed" : undefined,
+    },
+    {
+      id: "integrations",
+      label: "Integrations & Tokens",
+      icon: Send,
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="mb-2 flex items-center gap-3">
-            <Shield className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-            <h1 className="text-3xl text-gray-900 dark:text-gray-100 font-bold">Admin Panel</h1>
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* 1. Page Header */}
+      <PageHeader
+        title="Admin Console"
+        description="Manage faculty researcher profiles, review registration queues, and configure scraping tokens"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={openOutboxModal}
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              title="Audit verification emails"
+            >
+              <Inbox className="w-3.5 h-3.5 text-blue-600" />
+              <span className="hidden sm:inline">Email Outbox</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadData}
+              disabled={isLoading}
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Sync Database</span>
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={() => {
+                resetForm();
+                setIsAdding(true);
+                setActiveTab("researchers");
+              }}
+              className="h-8 gap-1.5 text-xs font-semibold bg-brand hover:bg-brand/90 text-white shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Invite Researcher</span>
+            </Button>
           </div>
-          <p className="text-gray-600 dark:text-gray-300">
-            Manage researcher accounts in the database and review publication claims.
+        }
+      />
+
+      {/* 2. Feedback Banners */}
+      {actionSuccessMsg && (
+        <Notice variant="success" onDismiss={() => setActionSuccessMsg(null)}>
+          {actionSuccessMsg}
+        </Notice>
+      )}
+
+      {inviteResult && (
+        <Notice
+          variant="info"
+          title="Verification & Invitation Dispatched"
+          onDismiss={() => setInviteResult(null)}
+        >
+          <p className="leading-relaxed">
+            {inviteResult.message} The researcher ({inviteResult.name} • <strong>{inviteResult.email}</strong>) will click the verification link to choose their preferred password.
           </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading} className="self-start dark:border-gray-700">
-          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          Sync Database
-        </Button>
+          {inviteResult.verificationLink && (
+            <div className="pt-2 flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-medium text-muted-foreground">Direct Link:</span>
+              <code className="text-xs font-mono bg-background px-2 py-0.5 rounded border border-border select-all max-w-full overflow-hidden text-ellipsis">
+                {inviteResult.verificationLink}
+              </code>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleCopyLink(inviteResult.verificationLink!, "banner-link")}
+                className="h-6 text-[11px] px-2 gap-1"
+              >
+                {copiedId === "banner-link" ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+                {copiedId === "banner-link" ? "Copied" : "Copy Link"}
+              </Button>
+            </div>
+          )}
+        </Notice>
+      )}
+
+      {/* 3. Neutral StatCards Overview */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <StatCard
+          label="Active Faculty"
+          value={facultyCount}
+          subtitle="Teaching instructors"
+          icon={UserCheck}
+        />
+        <StatCard
+          label="Non-Teaching Staff"
+          value={nonTeachingCount}
+          subtitle="Support & administrative"
+          icon={Users}
+        />
+        <StatCard
+          label="Pending Registrations"
+          value={pendingRegistrations.length}
+          subtitle="Awaiting admin approval"
+          icon={Clock}
+          trend={
+            pendingRegistrations.length > 0
+              ? { value: "Action Needed", isPositive: false }
+              : undefined
+          }
+        />
+        <StatCard
+          label="Pending Claims"
+          value={pendingClaims.length}
+          subtitle="Paper authorship claims"
+          icon={KeyRound}
+          trend={
+            pendingClaims.length > 0
+              ? { value: "Review Required", isPositive: false }
+              : undefined
+          }
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <Card className="dark:border-gray-800">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm">Faculty Members</CardTitle>
-            <UserCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-semibold text-foreground">{facultyCount}</div></CardContent>
-        </Card>
-        <Card className="dark:border-gray-800">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm">Non-Teaching Personnel</CardTitle>
-            <UserCheck className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-semibold text-foreground">{nonTeachingCount}</div></CardContent>
-        </Card>
-        <Card className="dark:border-gray-800">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm">Pending Claims</CardTitle>
-            <KeyRound className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-semibold text-foreground">{pendingClaims.length}</div></CardContent>
-        </Card>
-      </div>
+      {/* 4. Tab Strip */}
+      <PageTabs tabs={adminTabs} activeTab={activeTab} onChange={setActiveTab} />
 
-      {/* Claims Review */}
-      <Card className={pendingClaims.length ? "border-amber-200 dark:border-amber-900/60" : "dark:border-gray-800"}>
-        <CardHeader>
-          <CardTitle>Research Claims ({pendingClaims.length} pending)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {pendingClaims.length === 0 ? (
-            <p className="py-6 text-center text-gray-500 dark:text-gray-400">No research claims awaiting review.</p>
+      {/* ===================================================================== */}
+      {/* TAB 1: PENDING REGISTRATIONS & INVITATIONS                             */}
+      {/* ===================================================================== */}
+      {activeTab === "registrations" && (
+        <SectionCard
+          title="Registration & Invitation Queue"
+          description="Researchers who self-registered or were invited by Admin. Once email is verified, admit them to officially recognize their profile."
+          action={
+            <Badge variant="outline" className="font-mono text-xs">
+              {pendingRegistrations.length} pending
+            </Badge>
+          }
+        >
+          {pendingRegistrations.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="All Registrations Up to Date"
+              description="New sign-ups from the login page or invited faculty awaiting activation will appear in this queue."
+            />
           ) : (
-            <div className="space-y-3">
-              {pendingClaims.map((claim) => (
-                <div key={claim.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{claim.title}</p>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                      Claimed by {claim.owner_name || claim.ownerName} • {claim.journal} • {claim.year}
+            <div className="divide-y divide-border/60">
+              {pendingRegistrations.map((item) => (
+                <div
+                  key={item.instructorId || item.id}
+                  className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-sm text-foreground">{item.name}</p>
+                      
+                      <Badge variant="outline" className="text-[10px] font-medium">
+                        {item.registrationType === "self_registration" ? "Self-Registered" : "Admin Invited"}
+                      </Badge>
+
+                      <span className="text-xs text-muted-foreground font-medium">
+                        {item.department} • {item.isFaculty ? "Faculty" : "Non-Teaching"}
+                      </span>
+
+                      {item.isEmailVerified ? (
+                        <StatusBadge status="verified" label="Email Verified" />
+                      ) : (
+                        <StatusBadge status="pending" label="Pending Email Verification" />
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
+                      <span>ID: <strong className="text-foreground">{item.instructorId}</strong></span>
+                      <span>Email: <strong className="text-foreground">{item.email}</strong></span>
+                      <span>Registered: {new Date(item.createdAt).toLocaleDateString()}</span>
                     </p>
+
+                    {item.scholarUrl && (
+                      <div className="pt-1 flex items-center gap-2">
+                        <a
+                          href={item.scholarUrl.startsWith("http") ? item.scholarUrl : `https://scholar.google.com/citations?user=${item.scholarUrl}&hl=en`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-medium"
+                        >
+                          <GraduationCap className="w-3.5 h-3.5" />
+                          <span>Google Scholar Profile</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => reviewClaim(claim.id, "approved")} className="bg-green-600 hover:bg-green-700 text-white">
-                      <Check className="mr-2 h-4 w-4" /> Approve
+
+                  <div className="flex items-center gap-2 flex-wrap shrink-0 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-0 border-border/40">
+                    {/* Admit Button */}
+                    <Button
+                      size="sm"
+                      onClick={() => handleAdmitRegistration(item.instructorId, item.name)}
+                      disabled={actionLoadingId === item.instructorId}
+                      className="bg-success text-white hover:bg-success/90 text-xs h-8 gap-1.5"
+                    >
+                      {actionLoadingId === item.instructorId ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                      <span>Admit Researcher</span>
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => reviewClaim(claim.id, "rejected")} className="text-red-600 dark:text-red-400 dark:border-gray-700">
-                      <X className="mr-2 h-4 w-4" /> Reject
+
+                    {/* Resend Verification */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleResendInvite(item.instructorId, item.email)}
+                      disabled={actionLoadingId === item.instructorId}
+                      className="text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Resend Verification</span>
+                    </Button>
+
+                    {/* Decline */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setRejectTarget({ instructorId: item.instructorId, name: item.name })}
+                      className="text-xs h-8 text-danger hover:bg-danger-soft hover:text-danger"
+                    >
+                      <UserX className="w-3.5 h-3.5 mr-1" />
+                      <span>Decline</span>
                     </Button>
                   </div>
                 </div>
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </SectionCard>
+      )}
 
-      {/* Apify Scraper Multi-Token Integration */}
-      <ApifyTokenManager />
+      {/* ===================================================================== */}
+      {/* TAB 2: FACULTY RESEARCHERS ROSTER                                     */}
+      {/* ===================================================================== */}
+      {activeTab === "researchers" && (
+        <div className="space-y-6">
+          {/* Add / Edit Researcher Collapsible Form */}
+          {isAdding && (
+            <SectionCard
+              title={editingId ? `Edit Researcher: ${editingId}` : "Invite & Register New Researcher"}
+              description="Provide faculty credentials. An institutional invitation will be dispatched so they can activate their account."
+              action={
+                <Button variant="ghost" size="sm" onClick={resetForm} className="h-8 text-xs">
+                  Cancel
+                </Button>
+              }
+            >
+              {formError && (
+                <Notice variant="danger" className="mb-4">
+                  {formError}
+                </Notice>
+              )}
 
-      {/* Action Bar for Adding Researcher */}
-      <div className="flex items-center justify-between">
-        <Button onClick={() => setIsAdding(true)} className="bg-blue-600 hover:bg-blue-700 text-white">
-          <Plus className="mr-2 h-4 w-4" /> Add New Researcher
-        </Button>
-      </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">First Name *</Label>
+                  <Input
+                    value={form.firstName}
+                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                    placeholder="e.g. Juan"
+                    className="h-8 text-xs"
+                  />
+                </div>
 
-      {/* Add / Edit Form Modal with Blurred Backdrop */}
-      {isAdding && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Last Name *</Label>
+                  <Input
+                    value={form.lastName}
+                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                    placeholder="e.g. Dela Cruz"
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Instructor / Employee ID *</Label>
+                  <Input
+                    value={form.instructorId}
+                    onChange={(e) => setForm({ ...form, instructorId: e.target.value })}
+                    placeholder="e.g. AS-2024-001"
+                    disabled={Boolean(editingId)}
+                    className="h-8 text-xs font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Email Address *</Label>
+                  <Input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="e.g. jdelacruz@psu.edu.ph"
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Department</Label>
+                  <Select
+                    value={form.department}
+                    onValueChange={(val) => setForm({ ...form, department: val })}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEPARTMENTS.map((dept) => (
+                        <SelectItem key={dept} value={dept} className="text-xs">
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Google Scholar Profile (Optional)</Label>
+                  <Input
+                    value={form.scholarUrl}
+                    onChange={(e) => setForm({ ...form, scholarUrl: e.target.value })}
+                    placeholder="User ID or Profile URL"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-4 mt-4 border-t border-border/60">
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <Checkbox
+                      checked={form.isFaculty}
+                      onCheckedChange={(checked) => setForm({ ...form, isFaculty: Boolean(checked) })}
+                    />
+                    <span>Academic Faculty (Teaching)</span>
+                  </label>
+
+                  {!editingId && (
+                    <label className="flex items-center gap-2 text-xs cursor-pointer">
+                      <Checkbox
+                        checked={form.sendInvite}
+                        onCheckedChange={(checked) => setForm({ ...form, sendInvite: Boolean(checked) })}
+                      />
+                      <span>Send email invitation link</span>
+                    </label>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={resetForm} className="h-8 text-xs">
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={saveForm}
+                    className="h-8 text-xs font-semibold bg-brand text-white"
+                  >
+                    <Save className="w-3.5 h-3.5 mr-1" />
+                    <span>{editingId ? "Update Researcher" : "Create & Send Invitation"}</span>
+                  </Button>
+                </div>
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Roster Table Card */}
+          <SectionCard
+            title="Institutional Faculty Roster"
+            description="Active faculty researchers officially recognized in the PSU Asingan tracking system"
+            action={
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-muted-foreground" />
+                  <Input
+                    value={rosterSearch}
+                    onChange={(e) => setRosterSearch(e.target.value)}
+                    placeholder="Search roster..."
+                    className="pl-8 h-8 text-xs w-40 sm:w-56 bg-card"
+                  />
+                </div>
+
+                <Select value={rosterDeptFilter} onValueChange={setRosterDeptFilter}>
+                  <SelectTrigger className="h-8 text-xs w-28">
+                    <SelectValue placeholder="Department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-xs">All Depts</SelectItem>
+                    {DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept} value={dept} className="text-xs">
+                        {dept}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            }
+          >
+            {filteredResearchers.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No Researchers Found"
+                description={
+                  rosterSearch || rosterDeptFilter !== "all"
+                    ? "No faculty records match your active search filter."
+                    : "Add faculty members using the Invite Researcher action above."
+                }
+              />
+            ) : (
+              <div className="divide-y divide-border/60">
+                {filteredResearchers.map((researcher) => (
+                  <div
+                    key={researcher.instructorId}
+                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-muted/60 border border-border/70 flex items-center justify-center font-bold text-xs text-foreground shrink-0">
+                        {researcher.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {researcher.name}
+                          </p>
+                          <StatusBadge
+                            status={researcher.isFaculty ? "active" : "unpublished"}
+                            label={researcher.isFaculty ? "Faculty" : "Non-Teaching"}
+                          />
+                          {researcher.scholarUrl && (
+                            <a
+                              href={researcher.scholarUrl.startsWith("http") ? researcher.scholarUrl : `https://scholar.google.com/citations?user=${researcher.scholarUrl}&hl=en`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-medium"
+                            >
+                              <GraduationCap className="w-3 h-3" /> Scholar Linked <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          ID: <strong className="font-mono">{researcher.instructorId}</strong> • {researcher.department} {researcher.email && `• ${researcher.email}`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 self-start sm:self-center w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border/40 justify-start sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openScholarReview(researcher.instructorId, researcher.name, researcher.scholarUrl)}
+                        className="h-8 text-xs gap-1.5 text-brand border-brand/30 hover:bg-brand-soft"
+                      >
+                        <GraduationCap className="w-3.5 h-3.5" />
+                        <span>Sync Scholar</span>
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => editResearcher(researcher)}
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                        title="Edit profile"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTarget({ id: researcher.instructorId, name: researcher.name })}
+                        className="h-8 w-8 p-0 text-danger hover:bg-danger-soft hover:text-danger"
+                        title="Remove researcher"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 3: PUBLICATION CLAIMS                                             */}
+      {/* ===================================================================== */}
+      {activeTab === "claims" && (
+        <SectionCard
+          title="Publication Authorship Claims"
+          description="Review papers discovered on Google Scholar that faculty members claimed as their original work"
+          action={
+            <Badge variant="outline" className="font-mono text-xs">
+              {pendingClaims.length} pending
+            </Badge>
+          }
+        >
+          {pendingClaims.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="No Pending Publication Claims"
+              description="When faculty members search Google Scholar and submit a claim for an unassigned paper, it will appear here for review."
+            />
+          ) : (
+            <div className="divide-y divide-border/60">
+              {pendingClaims.map((claim) => (
+                <div key={claim.id} className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1 min-w-0">
+                    <p className="font-semibold text-sm text-foreground">{claim.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Claimed by: <strong className="text-foreground">{claim.ownerName}</strong> ({claim.ownerId})
+                    </p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+                      <span>Year: {claim.year}</span>
+                      <span>Journal: {claim.journal || "Academic Repository"}</span>
+                      <span>Citations: {claim.citations || 0}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      onClick={() => reviewClaim(claim.id, "approved")}
+                      className="h-8 text-xs bg-success text-white hover:bg-success/90 gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Approve Claim</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => reviewClaim(claim.id, "rejected")}
+                      className="h-8 text-xs text-danger border-danger-border hover:bg-danger-soft gap-1.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Reject</span>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 4: INTEGRATIONS & AUDIT OUTBOX                                    */}
+      {/* ===================================================================== */}
+      {activeTab === "integrations" && (
+        <div className="space-y-6">
+          <SectionCard
+            title="Google Scholar Scraping Tokens"
+            description="Manage Apify API token rotation and monthly usage limits for resilient Google Scholar imports"
+          >
+            <ApifyTokenManager />
+          </SectionCard>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODALS & AUDIT OUTBOX                                                 */}
+      {/* ===================================================================== */}
+
+      {/* Email Outbox & Audit Logs Modal */}
+      {outboxOpen && (
         <div
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
-          onClick={resetForm}
+          onClick={() => setOutboxOpen(false)}
         >
           <div
-            className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-card p-6 shadow-2xl"
+            className="relative w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-border/70 bg-card p-6 shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100 dark:border-gray-800">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                {editingId ? "Edit Researcher" : "Add New Researcher"}
-              </h3>
+            <div className="flex items-center justify-between pb-3 border-b border-border/60">
+              <div className="flex items-center gap-2">
+                <Inbox className="w-5 h-5 text-brand" />
+                <h3 className="text-base font-bold text-foreground">
+                  Email Outbox & Audit Logs ({emailLogs.length})
+                </h3>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={resetForm}
-                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+                onClick={() => setOutboxOpen(false)}
+                className="h-8 w-8 rounded-full text-muted-foreground"
               >
                 <X className="w-4 h-4" />
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="last-name">Last Name *</Label>
-                <Input id="last-name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} placeholder="e.g. Santos" className="dark:border-gray-700" />
+            <p className="text-xs text-muted-foreground">
+              Every dispatched or simulated invitation and verification email is audited here. You can copy active verification links directly for local testing.
+            </p>
+
+            {loadingOutbox ? (
+              <div className="py-12 flex justify-center">
+                <Loader2 className="w-6 h-6 text-brand animate-spin" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="first-name">First Name *</Label>
-                <Input id="first-name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="e.g. Maria" className="dark:border-gray-700" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="instructor-id">Instructor ID / Username *</Label>
-                <Input id="instructor-id" value={form.instructorId} onChange={(e) => setForm({ ...form, instructorId: e.target.value })} placeholder="e.g. PSU-001" className="dark:border-gray-700" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="account-password">Login Password {editingId ? "(Leave empty to keep current)" : "*"}</Label>
-                <Input id="account-password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder={editingId ? "Optional password update" : "Temporary password"} className="dark:border-gray-700" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="account-email">Email Address</Label>
-                <Input id="account-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="e.g. msantos@psu.edu.ph" className="dark:border-gray-700" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="researcher-status">Status *</Label>
-                <Select
-                  value={form.isFaculty ? "faculty" : "non-teaching"}
-                  onValueChange={(value) =>
-                    setForm({
-                      ...form,
-                      isFaculty: value === "faculty",
-                      department: value === "faculty" && form.department === "Non Teaching" ? "BSIT" : form.department,
-                    })
-                  }
-                >
-                  <SelectTrigger id="researcher-status" className="dark:border-gray-700"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="faculty">Faculty</SelectItem>
-                    <SelectItem value="non-teaching">Non-Teaching Personnel</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="researcher-department">Department *</Label>
-                <Select value={form.isFaculty ? form.department : "Non Teaching"} disabled={!form.isFaculty} onValueChange={(department) => setForm({ ...form, department })}>
-                  <SelectTrigger id="researcher-department" className="dark:border-gray-700"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DEPARTMENTS.map((department) => <SelectItem key={department} value={department}>{department}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="scholar-url" className="flex items-center gap-1.5">
-                  <GraduationCap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  Google Scholar Profile URL or User ID (Optional)
-                </Label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
-                    id="scholar-url"
-                    value={form.scholarUrl}
-                    onChange={(e) => setForm({ ...form, scholarUrl: e.target.value })}
-                    placeholder="e.g. https://scholar.google.com/citations?user=... or User ID"
-                    className="dark:border-gray-700"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      if (!form.instructorId || !form.firstName) {
-                        setFormError("Please enter First Name, Last Name, and Instructor ID first.");
-                        return;
-                      }
-                      openScholarReview(
-                        form.instructorId,
-                        `${form.firstName.trim()} ${form.lastName.trim()}`,
-                        form.scholarUrl,
-                        {
-                          firstName: form.firstName.trim(),
-                          lastName: form.lastName.trim(),
-                          instructorId: form.instructorId.trim(),
-                          password: form.password,
-                          department: form.isFaculty ? form.department : "Non Teaching",
-                          email: form.email.trim(),
-                          isFaculty: form.isFaculty,
-                          photoUrl: form.photoUrl,
-                        }
-                      );
-                    }}
-                    disabled={!form.scholarUrl.trim()}
-                    className="whitespace-nowrap border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+            ) : emailLogs.length === 0 ? (
+              <p className="py-8 text-center text-xs text-muted-foreground">No emails logged yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {emailLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="p-3 bg-muted/20 rounded-xl border border-border/60 text-xs space-y-1.5"
                   >
-                    <BookOpen className="w-4 h-4 mr-1.5" />
-                    Fetch & Review Publications
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Import verified publications with automatic PSU faculty vs Non-PSU external collaborator detection.
-                </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-foreground">
+                        {log.subject}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {new Date(log.created_at).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-muted-foreground text-[11px]">
+                      <span>To: <strong className="text-foreground">{log.recipient_email}</strong></span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {log.email_type}
+                      </Badge>
+                      <StatusBadge
+                        status={log.status === "sent" ? "delivered" : "verified"}
+                        label={log.status === "sent" ? "Delivered" : "Simulated"}
+                      />
+                    </div>
+
+                    {log.verification_link && (
+                      <div className="pt-1 flex items-center justify-between gap-2">
+                        <code className="text-[11px] font-mono text-brand truncate max-w-md bg-background px-2 py-0.5 rounded border border-border">
+                          {log.verification_link}
+                        </code>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleCopyLink(log.verification_link!, log.id)}
+                          className="h-6 text-[10px] px-2 gap-1"
+                        >
+                          {copiedId === log.id ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+                          {copiedId === log.id ? "Copied" : "Copy"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="profile-photo">Profile Photo</Label>
-                <div className="flex items-center gap-4">
-                  {form.photoUrl && <img src={form.photoUrl} alt="Profile preview" className="h-16 w-16 rounded-full object-cover border dark:border-gray-700" />}
-                  <Input id="profile-photo" type="file" accept="image/*" onChange={handlePhotoUpload} className="dark:border-gray-700" />
-                </div>
-              </div>
-              {formError && <p className="text-sm text-red-600 dark:text-red-400 md:col-span-2">{formError}</p>}
-              <div className="flex justify-end gap-2 md:col-span-2 pt-3 border-t border-gray-100 dark:border-gray-800">
-                <Button variant="outline" onClick={resetForm} className="dark:border-gray-700"><X className="mr-2 h-4 w-4" /> Cancel</Button>
-                <Button onClick={saveForm} className="bg-blue-600 hover:bg-blue-700 text-white">
-                  <Save className="mr-2 h-4 w-4" /> {editingId ? "Update Researcher" : "Save Researcher"}
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
-
-      {/* Researcher Accounts List */}
-      <Card className="dark:border-gray-800">
-        <CardHeader>
-          <CardTitle>Registered Researchers ({researchers.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {researchers.length === 0 ? (
-            <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-              <UserCheck className="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600 mb-3" />
-              <p className="text-base font-medium">No researchers in the database yet.</p>
-              <p className="text-sm mt-1">Click "Add New Researcher" above to create researcher accounts with login credentials.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {researchers.map((researcher) => (
-                <div key={researcher.instructorId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-gray-200 dark:border-gray-800 p-4">
-                  <div className="flex items-center gap-4">
-                    {researcher.photoUrl ? (
-                      <img src={researcher.photoUrl} alt={researcher.name} className="h-12 w-12 rounded-full object-cover border dark:border-gray-700" />
-                    ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold">
-                        {researcher.name.charAt(0)}
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-gray-900 dark:text-gray-100">{researcher.name}</p>
-                        <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-xs text-blue-700 dark:text-blue-300">
-                          {researcher.isFaculty ? "Faculty" : "Non-Teaching"}
-                        </span>
-                        {researcher.scholarUrl && (
-                          <a
-                            href={researcher.scholarUrl.startsWith("http") ? researcher.scholarUrl : `https://scholar.google.com/citations?user=${researcher.scholarUrl}&hl=en`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-900/50"
-                            title="View Google Scholar Profile"
-                          >
-                            <GraduationCap className="w-3 h-3" /> Scholar Linked <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">ID: {researcher.instructorId} • {researcher.department}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openScholarReview(researcher.instructorId, researcher.name, researcher.scholarUrl)}
-                      className="text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-950/30 text-xs h-8"
-                      title="Import & Review publications from Google Scholar"
-                    >
-                      <GraduationCap className="w-3.5 h-3.5 mr-1" /> Import Scholar
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => editResearcher(researcher)} className="dark:text-gray-300 hover:text-foreground"><Edit2 className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleteTarget({ id: researcher.instructorId, name: researcher.name })} className="text-red-600 hover:text-red-700 dark:text-red-400">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/50">
-        <CardContent className="flex items-start gap-3 py-4">
-          <Upload className="mt-0.5 h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-          <p className="text-sm text-blue-900 dark:text-blue-200">
-            <strong>Direct Credential Generation</strong>: When you add a researcher here, their account is saved to the SQLite database. They can immediately log into the system with their Instructor ID and password.
-          </p>
-        </CardContent>
-      </Card>
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal
@@ -526,7 +1098,20 @@ export function AdminPage() {
         onCancel={() => setDeleteTarget(null)}
       />
 
-      {/* Option B: Google Scholar Review & Import Modal */}
+      {/* Reject Registration Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(rejectTarget)}
+        title="Decline Registration"
+        message={`Are you sure you want to decline the researcher registration for ${rejectTarget?.name}? They will not be able to log in.`}
+        confirmText="Decline Registration"
+        cancelText="Cancel"
+        variant="danger"
+        icon="trash"
+        onConfirm={handleConfirmRejectRegistration}
+        onCancel={() => setRejectTarget(null)}
+      />
+
+      {/* Scholar Review & Import Modal */}
       {modalTargetResearcher && (
         <ScholarImportModal
           isOpen={scholarModalOpen}

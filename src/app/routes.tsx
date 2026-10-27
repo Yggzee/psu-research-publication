@@ -14,6 +14,8 @@ import { AdminPage } from "./components/AdminPage";
 import { InstructorPublicationsPage } from "./components/InstructorPublicationsPage";
 import { ProfilePage } from "./components/ProfilePage";
 import { SettingsPage } from "./components/SettingsPage";
+import { SDGImpactMatrix } from "./components/SDGImpactMatrix";
+import { CampusAIChatHistory } from "./components/CampusAIChatHistory";
 import { getCurrentUser } from "./utils/researchStore";
 
 function RoleAwarePublications() {
@@ -36,6 +38,9 @@ function ErrorBoundary() {
   );
 }
 
+import { VerifyInvitationPage } from "./components/VerifyInvitationPage";
+import { VerifyEmailPage } from "./components/VerifyEmailPage";
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -45,6 +50,16 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: <LoginScreen />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/verify-invitation",
+    element: <VerifyInvitationPage />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/verify-email",
+    element: <VerifyEmailPage />,
     errorElement: <ErrorBoundary />,
   },
   {
@@ -75,6 +90,22 @@ export const router = createBrowserRouter([
       {
         path: "impact",
         element: <ImpactAnalysisPage />,
+      },
+      {
+        path: "sdg-matrix",
+        element: <SDGImpactMatrix />,
+      },
+      {
+        path: "network-graph",
+        element: <Navigate to="/dashboard" replace />,
+      },
+      {
+        path: "ask-ai",
+        element: <CampusAIChatHistory />,
+      },
+      {
+        path: "ai-history",
+        element: <CampusAIChatHistory />,
       },
       {
         path: "reports",

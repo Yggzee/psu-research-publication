@@ -1,12 +1,37 @@
-import { useState, useEffect, type FormEvent } from "react";
-import { Search, User, FileText, Quote, Shield, AlertCircle, CheckCircle2, Eye, Save, Hand, Database, Sparkles, KeyRound, X, RefreshCw, Zap, Plus, ExternalLink } from "lucide-react";
+import { useState, useEffect, useMemo, type FormEvent } from "react";
+import {
+  Search,
+  User,
+  FileText,
+  Quote,
+  Shield,
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  Save,
+  Hand,
+  Database,
+  Sparkles,
+  KeyRound,
+  X,
+  RefreshCw,
+  Zap,
+  Plus,
+  ExternalLink,
+  Check,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
-import { isPSUPaper, getFacultyList } from "../utils/facultyUtils";
+import { Badge } from "./ui/badge";
+import { isPSUPaper, getFacultyList, normalizeTitle } from "../utils/facultyUtils";
 import { getCurrentUser, getResearchRecords, addResearchRecord } from "../utils/researchStore";
 import { apiService, type ScholarSearchResult, type ApifyTokenUsage } from "../services/api.service";
 import { ApifyTokenManager } from "./ApifyTokenManager";
+import { toast } from "sonner";
+import { PageHeader, StatusBadge, Notice, SectionCard, EmptyState } from "./common";
 
 export function SearchEngine() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -26,11 +51,36 @@ export function SearchEngine() {
   const [facultyNames, setFacultyNames] = useState<string[]>([]);
   const [tokenUsage, setTokenUsage] = useState<ApifyTokenUsage | null>(null);
   const [isLoadingTokenUsage, setIsLoadingTokenUsage] = useState(false);
+  const [savedPublications, setSavedPublications] = useState<any[]>([]);
 
   const currentUser = getCurrentUser();
   const isInstructor = currentUser.role === "instructor";
 
+  const loadSavedPublications = async () => {
+    try {
+      const data = await apiService.getPublications();
+      setSavedPublications(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.warn("Could not load repository publications for deduplication:", err);
+    }
+  };
+
+  const savedTitleMap = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const p of savedPublications) {
+      const norm = normalizeTitle(p.title);
+      if (norm) map.set(norm, p);
+    }
+    return map;
+  }, [savedPublications]);
+
+  const isPublicationAlreadySaved = (title: string): boolean => {
+    const norm = normalizeTitle(title);
+    return norm ? savedTitleMap.has(norm) : false;
+  };
+
   useEffect(() => {
+    loadSavedPublications();
     const updateFaculty = async () => {
       try {
         const resList = await apiService.getResearchers().catch(() => []);
@@ -69,75 +119,73 @@ export function SearchEngine() {
     refreshActiveUsage(false);
 
     window.addEventListener("storage", updateFaculty);
-    return () => window.removeEventListener("storage", updateFaculty);
-  }, [currentUser.instructorId]);
+    window.addEventListener("research-records-updated", loadSavedPublications);
+    return () => {
+      window.removeEventListener("storage", updateFaculty);
+      window.removeEventListener("research-records-updated", loadSavedPublications);
+    };
+  }, []);
 
-  const refreshActiveUsage = async (showLoading = true) => {
-    if (showLoading) setIsLoadingTokenUsage(true);
-    try {
-      const res = await apiService.getActiveTokenUsage();
-      if (res?.tokenUsage) {
-        setTokenUsage(res.tokenUsage);
-      }
-    } catch (err) {
-      console.warn("Could not refresh token usage:", err);
-    } finally {
-      if (showLoading) setIsLoadingTokenUsage(false);
-    }
-  };
-
-  const executeSearch = async (textToSearch?: string, modeToUse?: "smart" | "author", forceRefresh = false) => {
-    const q = (textToSearch !== undefined ? textToSearch : searchQuery).trim();
+  const executeSearch = async (queryToSearch: string) => {
+    const q = queryToSearch.trim();
     if (!q) return;
 
-    const activeMode = modeToUse || searchMode;
-    // If author-specific search mode is active, format with author: prefix
-    const finalQuery =
-      activeMode === "author" && !q.toLowerCase().startsWith("author:")
-        ? `author:${q}`
-        : q;
-
     setSearchQuery(q);
-    setHasSearched(true);
     setIsSearching(true);
+    setHasSearched(true);
     setCacheNotice(null);
     setRequiresApify(false);
     setCaptchaDetected(false);
     setSearchSource(null);
 
+    const finalQuery = searchMode === "author" && !q.toLowerCase().startsWith("author:") ? `author:"${q}"` : q;
+
     try {
-      // Calls SQLite Search API - retrieves full list with optional force-refresh
-      const data = await apiService.searchGoogleScholar(finalQuery, forceRefresh);
-      setSearchResults(data.results || []);
-      setIsFromCache(Boolean(data.fromCache));
-      setRequiresApify(Boolean(data.requiresApify));
-      setCaptchaDetected(Boolean(data.captchaDetected));
-      setSearchSource(data.searchSource || (data.fromCache ? "cache" : "direct"));
-      setSourceLabel(data.sourceLabel || (data.fromCache ? "Local Database Cache" : "Built-in Direct Search (Free)"));
-      setCacheNotice(data.message || (data.fromCache ? "Loaded from database cache" : ""));
-      if (data.tokenUsage) {
-        setTokenUsage(data.tokenUsage);
+      const response = await apiService.searchGoogleScholar(finalQuery);
+
+      if (response.requiresApify) {
+        setRequiresApify(true);
+        setCaptchaDetected(true);
+        setSearchSource("none");
+        setSearchResults([]);
+        return;
       }
+
+      setSearchResults(response.results);
+      setIsFromCache(Boolean(response.fromCache));
+      setSearchSource(response.searchSource || "direct");
+      setSourceLabel(response.sourceLabel || "");
+
+      if (response.fromCache) {
+        setCacheNotice("Retrieved from local database cache (instant response, 0 credits used).");
+      }
+
+      // Refresh token limits in background
+      apiService.getActiveTokenUsage().then((res) => {
+        if (res?.tokenUsage) setTokenUsage(res.tokenUsage);
+      });
     } catch (err: any) {
-      console.warn("API Search failed:", err);
-      setSearchResults([]);
-      setRequiresApify(false);
-      setSearchSource("none");
-      setCacheNotice("Could not contact search service. Please check network.");
+      console.error("Search error:", err);
+      toast.error(err.message || "Search failed. Check your network or Apify connection.");
     } finally {
       setIsSearching(false);
     }
   };
 
-  const handleSearch = async (e: FormEvent) => {
+  const handleSearch = (e: FormEvent) => {
     e.preventDefault();
-    await executeSearch();
+    executeSearch(searchQuery);
   };
 
   const handleSavePublication = async (result: ScholarSearchResult) => {
     if (isPSUPaper(result.authors)) {
-      const record = {
-        id: `admin-${result.id}`,
+      if (isPublicationAlreadySaved(result.title)) {
+        toast.info(`Publication already exists in repository.`);
+        return;
+      }
+
+      const newRecord = {
+        id: result.id,
         title: result.title,
         authors: result.authors,
         journal: result.journal,
@@ -146,24 +194,38 @@ export function SearchEngine() {
         abstract: result.abstract,
         url: result.url,
         citedByLink: result.citedByLink,
-        ownerId: "admin",
-        ownerName: result.authors[0] || "PSU Researcher",
-        source: "admin" as const,
+        ownerId: currentUser.instructorId || "admin",
+        ownerName: currentUser.name,
+        source: "scraped" as const,
         approvalStatus: "approved" as const,
         researchStatus: "Published" as const,
         isPublic: true,
         createdAt: new Date().toISOString(),
       };
 
-      addResearchRecord(record);
-      await apiService.createPublication(record).catch(() => {});
-      alert(`✓ Publication saved!\n\n"${result.title}"\n\nThis PSU paper has been added to the system.`);
+      addResearchRecord(newRecord);
+      const res: any = await apiService.createPublication(newRecord).catch(() => null);
+      if (res?.isDuplicate) {
+        toast.info(`Publication already exists in repository.`);
+      } else {
+        toast.success(`✓ "${result.title}" permanently added to repository!`);
+      }
+      await loadSavedPublications();
+      window.dispatchEvent(new CustomEvent("research-records-updated"));
     } else {
-      alert(`✗ Cannot save this publication.\n\nThis is a Non-PSU paper (no faculty authors). You can view it but cannot save it to the system.`);
+      toast.error(`Cannot save Non-PSU paper (no faculty authors).`);
     }
   };
 
   const handleClaimPublication = async (result: ScholarSearchResult) => {
+    if (isPublicationAlreadySaved(result.title)) {
+      const existing = savedTitleMap.get(normalizeTitle(result.title));
+      if (existing?.owner_id === currentUser.instructorId || existing?.ownerId === currentUser.instructorId) {
+        toast.info(`You have already claimed this publication.`);
+        return;
+      }
+    }
+
     const claimRecord = {
       id: `claim-${result.id}`,
       title: result.title,
@@ -184,573 +246,351 @@ export function SearchEngine() {
     };
 
     addResearchRecord(claimRecord);
-    await apiService.createPublication(claimRecord).catch(() => {});
+    const res: any = await apiService.createPublication(claimRecord).catch(() => null);
+    if (res?.isDuplicate) {
+      toast.info(`Publication already exists in repository; authorship linked.`);
+    } else {
+      toast.success(`✓ Claim submitted for "${result.title}"!`);
+    }
     setClaimedIds((ids) => [...ids, result.id]);
-  };
-
-  const getPaperType = (authors: string[]) => {
-    return isPSUPaper(authors) ? "PSU" : "Non-PSU";
-  };
-
-  const getPaperTypeColor = (authors: string[]) => {
-    return isPSUPaper(authors)
-      ? "bg-green-100 text-green-700 border-green-300"
-      : "bg-orange-100 text-orange-700 border-orange-300";
+    await loadSavedPublications();
+    window.dispatchEvent(new CustomEvent("research-records-updated"));
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Page Header */}
-      <div className="text-center mb-6">
-        <h1 className="text-3xl text-gray-900 mb-2">Google Scholar Search Engine</h1>
-        <p className="text-gray-600">
-          Search research publications with intelligent local database caching
-        </p>
-        {facultyCount > 0 && (
-          <div className="flex items-center justify-center gap-2 mt-3">
-            <Shield className="w-4 h-4 text-blue-600" />
-            <p className="text-sm text-blue-600">
-              {facultyCount} PSU faculty members registered • Papers with faculty authors marked as "PSU"
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Info Banner */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="py-4">
-          <div className="flex items-start gap-3">
-            <Database className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 text-sm text-blue-900">
-              <p className="font-medium mb-1">Persistent Database Scraper</p>
-              <ul className="space-y-1 text-blue-800 text-xs sm:text-sm">
-                <li>• All scraped research is <strong>permanently saved to SQLite</strong> — no repeated scraper calls.</li>
-                <li>• <span className="inline-flex items-center bg-green-100 text-green-700 px-1.5 py-0.5 rounded border border-green-300">PSU</span> papers have at least one registered faculty author.</li>
-                <li>• Instructors can submit research claims for Administrator review.</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Active Apify Scraper Token & Limit Tracker */}
-      <Card className="border border-slate-200 bg-gradient-to-r from-slate-50 via-white to-blue-50/20 shadow-sm overflow-hidden">
-        <CardContent className="p-4 sm:p-5">
-          {tokenUsage ? (
-            <div className="space-y-3.5">
-              {/* Header row: Token Identity & Controls */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="relative p-2.5 bg-blue-100/70 text-blue-700 rounded-lg">
-                    <KeyRound className="w-4 h-4" />
-                    <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                    </span>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-gray-900">{tokenUsage.tokenName}</span>
-                      {tokenUsage.username && (
-                        <span className="text-xs text-gray-500 font-mono">@{tokenUsage.username}</span>
-                      )}
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {tokenUsage.plan} Plan (${tokenUsage.limitUsd.toFixed(2)} limit)
-                      </span>
-                      <span className="text-[11px] text-gray-400 hidden md:inline">
-                        • Actor: {tokenUsage.actorId.replace("~", "/")}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                      Standby failover shield • Built-in direct search is used first to save credits; this token activates only if Google CAPTCHA appears.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 self-start sm:self-center">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => refreshActiveUsage(true)}
-                    disabled={isLoadingTokenUsage}
-                    className="h-8 text-xs text-gray-600 hover:text-blue-700 flex items-center gap-1.5"
-                    title="Refresh Token Limits from Apify"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingTokenUsage ? "animate-spin text-blue-600" : ""}`} />
-                    <span>Sync Limits</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowTokenManager((prev) => !prev)}
-                    className="h-8 text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-1.5"
-                  >
-                    <KeyRound className="w-3.5 h-3.5 text-orange-600" />
-                    <span>{showTokenManager ? "Close Settings" : "Switch Token"}</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Progress Bar & Breakdown */}
-              <div className="space-y-1.5 bg-white/80 border border-slate-100 p-3 rounded-lg shadow-2xs">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-700 font-medium">
-                    Credit Used: <strong className="text-gray-900">${tokenUsage.usedUsd.toFixed(3)}</strong> of ${tokenUsage.limitUsd.toFixed(2)} limit
-                  </span>
-                  <span className="font-semibold text-emerald-700">
-                    ${tokenUsage.remainingUsd.toFixed(3)} remaining ({(100 - tokenUsage.usedPercentage).toFixed(1)}% free)
-                  </span>
-                </div>
-
-                <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      tokenUsage.usedPercentage >= 90
-                        ? "bg-rose-500"
-                        : tokenUsage.usedPercentage >= 70
-                        ? "bg-amber-500"
-                        : "bg-emerald-500"
-                    }`}
-                    style={{ width: `${Math.min(100, Math.max(3, tokenUsage.usedPercentage))}%` }}
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-gray-500">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1">
-                      <Zap className="w-3 h-3 text-amber-500" />
-                      <strong>{tokenUsage.searchesCount}</strong> searches made via app
-                    </span>
-                    {tokenUsage.totalRuns !== null && (
-                      <span className="inline-flex items-center gap-1">
-                        <Database className="w-3 h-3 text-blue-500" />
-                        <strong>{tokenUsage.totalRuns}</strong> total Apify actor runs
-                      </span>
-                    )}
-                  </div>
-                  {tokenUsage.cycleEndAt && (
-                    <span className="text-slate-500">
-                      Cycle resets: {new Date(tokenUsage.cycleEndAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 rounded-lg">
-                    <KeyRound className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">No Active Apify Scraper Token</h4>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Connect a free Apify token ($5 free monthly credits) for live scraping fallback.
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => setShowTokenManager(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-xs self-start sm:self-center text-white"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Connect Apify Token
-                </Button>
-              </div>
+    <div className="space-y-6 max-w-5xl mx-auto pb-12">
+      {/* 1. Page Header */}
+      <PageHeader
+        title="Google Scholar Search"
+        description="Query live academic literature with automatic SQLite caching and registered PSU faculty author matching"
+        actions={
+          <div className="flex items-center gap-2">
+            {tokenUsage ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTokenManager(true)}
+                className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                title="Apify scraper quota"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-warning" />
+                <span className="font-mono text-xs">${tokenUsage.remainingUsd.toFixed(2)} quota</span>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTokenManager(true)}
+                className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-warning" />
+                <span>Scraper Settings</span>
+              </Button>
             )}
-          </CardContent>
-        </Card>
-
-        {showTokenManager && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
-            onClick={() => setShowTokenManager(false)}
-          >
-            <div
-              className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-card p-6 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-gray-100 dark:border-gray-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 rounded-lg">
-                    <KeyRound className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Connect Apify Token</h3>
-                    <p className="text-xs text-muted-foreground">Manage scraper tokens for Google Scholar fallback queries</p>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowTokenManager(false)}
-                  className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-
-              <ApifyTokenManager
-                compact={true}
-                onTokenChanged={() => {
-                  setRequiresApify(false);
-                  refreshActiveUsage(true);
-                }}
-              />
-            </div>
           </div>
-        )}
+        }
+      />
 
-      {/* Search Bar */}
-      <form onSubmit={handleSearch}>
-        <Card className="shadow-md">
-          <CardContent className="p-4 sm:p-6 space-y-3">
-            {/* Search Mode Selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-500">Mode:</span>
+      {/* 2. SEARCH BAR FIRST (Primary User Action) */}
+      <Card className="bg-card border-border/70 shadow-2xs">
+        <CardContent className="p-3.5 sm:p-5 space-y-3">
+          {/* Mode Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Search Mode:</span>
+            <div className="grid grid-cols-2 sm:flex sm:items-center p-0.5 rounded-lg bg-muted/50 border border-border/60 text-xs">
               <button
                 type="button"
                 onClick={() => setSearchMode("smart")}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer text-center ${
                   searchMode === "smart"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Smart Search (Topic & Author)
+                <span className="sm:hidden">Smart Search</span>
+                <span className="hidden sm:inline">Smart Search (Topic & Author)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setSearchMode("author")}
-                className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer text-center ${
                   searchMode === "author"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                Author Filter (author:...)
+                <span className="sm:hidden">Author Only</span>
+                <span className="hidden sm:inline">Author Filter (author:...)</span>
               </button>
             </div>
+          </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder={
-                    searchMode === "author"
-                      ? "Enter author name to find all papers with their name (e.g. Julius Oscar Moreno, Santos)"
-                      : "Search researcher name or topic (e.g. Julius Oscar Moreno, data mining)"
-                  }
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-12 h-12 text-base"
-                />
-              </div>
-              <Button
-                type="submit"
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-700 px-8"
-                disabled={isSearching}
-              >
-                {isSearching ? "Searching..." : "Search"}
-              </Button>
-            </div>
-
-            {/* Quick Researcher Search Chips */}
-            {facultyNames.length > 0 && (
-              <div className="pt-1 flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs text-gray-500 flex items-center gap-1">
-                  <User className="w-3 h-3 text-blue-600" /> Quick Search:
-                </span>
-                {facultyNames.slice(0, 6).map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => executeSearch(name)}
-                    className="text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full transition-colors font-medium"
-                    title={`Search all publications by ${name}`}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </form>
-
-      {/* Apify Not Connected Notice */}
-      {requiresApify && searchResults.length === 0 && !isSearching && (
-        <div className="space-y-4">
-          <Card className="border-amber-300 bg-amber-50">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-                <div className="space-y-1">
-                  <h4 className="text-sm font-semibold text-amber-900">Apify Google Scholar Scraper Not Connected</h4>
-                  <p className="text-sm text-amber-800">
-                    Connect an Apify API token below to start scraping live research publications from Google Scholar.
-                  </p>
-                  <p className="text-xs text-amber-700 mt-1">
-                    Free accounts receive $5 monthly usage. Once scraped, papers are saved permanently in SQLite so you never re-scrape the same query.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <ApifyTokenManager
-            compact
-            onTokenChanged={() => {
-              setRequiresApify(false);
-            }}
-          />
-        </div>
-      )}
-
-      {/* CAPTCHA / Anti-Bot Alert */}
-      {captchaDetected && requiresApify && searchResults.length === 0 && !isSearching && (
-        <Card className="border-amber-400 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800">
-          <CardContent className="pt-5 pb-5">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                  Google Scholar CAPTCHA / Rate-Limit Detected
-                </h4>
-                <p className="text-sm text-amber-800 dark:text-amber-300">
-                  Google Scholar has challenged your direct server request with an anti-bot "unusual traffic" CAPTCHA. Built-in direct web scraping is temporarily paused by Google.
-                </p>
-                <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                  Connect an Apify token to activate the proxy failover shield and bypass the CAPTCHA lock.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Loading Progress State - Clearly states Priority Mode */}
-      {isSearching && (
-        <Card className="border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 shadow-xs">
-          <CardContent className="py-8 text-center space-y-4">
-            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full border-4 border-blue-200 dark:border-blue-800 animate-ping opacity-25" />
-              <div className="w-14 h-14 rounded-full border-4 border-blue-600 border-t-transparent animate-spin flex items-center justify-center" />
-              <Search className="w-6 h-6 text-blue-600 absolute" />
-            </div>
-            <div className="space-y-2 max-w-lg mx-auto">
-              <h3 className="font-semibold text-lg text-foreground">Searching Google Scholar...</h3>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Primary Mode: Built-in Direct Search (Free • 0 Token Credits)</span>
-              </div>
-              <p className="text-xs text-muted-foreground pt-1">
-                Checking local database cache and querying Google Scholar directly first to save your Apify token credits. Your Apify token will only be used if Google presents an anti-bot CAPTCHA.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Search Source Indicator Banner */}
-      {hasSearched && !isSearching && searchResults.length > 0 && (
-        <div
-          className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm transition-all ${
-            searchSource === "direct"
-              ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800/60"
-              : searchSource === "cache"
-              ? "bg-blue-50 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200 border-blue-200 dark:border-blue-800/60"
-              : searchSource === "apify"
-              ? "bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800/60"
-              : "bg-slate-50 dark:bg-slate-900/40 text-slate-900 dark:text-slate-200 border-slate-200 dark:border-slate-800"
-          }`}
-        >
-          <div className="flex items-start sm:items-center gap-3">
-            <div
-              className={`p-2 rounded-lg shrink-0 ${
-                searchSource === "direct"
-                  ? "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300"
-                  : searchSource === "cache"
-                  ? "bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300"
-                  : "bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300"
-              }`}
-            >
-              {searchSource === "direct" && <Zap className="w-4 h-4" />}
-              {searchSource === "cache" && <Database className="w-4 h-4" />}
-              {searchSource === "apify" && <KeyRound className="w-4 h-4" />}
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-xs tracking-wider uppercase opacity-75">
-                  Search Method
-                </span>
-                <span
-                  className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                    searchSource === "direct"
-                      ? "bg-emerald-200/70 dark:bg-emerald-900/80 text-emerald-800 dark:text-emerald-200"
-                      : searchSource === "cache"
-                      ? "bg-blue-200/70 dark:bg-blue-900/80 text-blue-800 dark:text-blue-200"
-                      : "bg-amber-200/70 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200"
-                  }`}
+          {/* Search Form */}
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder={
+                  searchMode === "author"
+                    ? "Enter author name (e.g. Julius Oscar Moreno)"
+                    : "Search researcher, paper title, or topic..."
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 sm:h-10 text-xs sm:text-sm bg-background"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  {searchSource === "direct" && "✓ Built-in Direct Search (Free)"}
-                  {searchSource === "cache" && "✓ Local Database Cache (Instant)"}
-                  {searchSource === "apify" && `🛡️ Apify Token Fallback (${sourceLabel || "Active Token"})`}
-                </span>
-              </div>
-              <p className="text-xs mt-0.5 opacity-90">
-                {searchSource === "direct" &&
-                  "Retrieved live from Google Scholar using the server's built-in web scraper. 0 Apify token credits used."}
-                {searchSource === "cache" &&
-                  "Loaded instantly from internal SQLite database cache. Zero network latency and 0 Apify token credits used."}
-                {searchSource === "apify" &&
-                  "Direct search was met with Google's anti-bot CAPTCHA / rate-limit. Automatically routed through Apify token proxy so your search wouldn't fail."}
-              </p>
+                  ✕
+                </button>
+              )}
             </div>
-          </div>
 
-          <div className="shrink-0 text-xs font-medium self-end sm:self-center opacity-80">
-            {searchResults.length} papers loaded
-          </div>
-        </div>
+            <Button
+              type="submit"
+              disabled={isSearching || !searchQuery.trim()}
+              className="h-9 sm:h-10 px-3.5 sm:px-6 text-xs sm:text-sm font-semibold bg-brand hover:bg-brand/90 text-white shadow-2xs shrink-0"
+            >
+              {isSearching ? (
+                <>
+                  <RefreshCw className="w-4 h-4 sm:mr-2 animate-spin" />
+                  <span className="hidden sm:inline">Searching...</span>
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4 sm:hidden" />
+                  <span className="hidden sm:inline">Search</span>
+                </>
+              )}
+            </Button>
+          </form>
+
+          {/* Quick Faculty Search Chips */}
+          {facultyNames.length > 0 && (
+            <div className="pt-1 flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
+              <span className="flex items-center gap-1 shrink-0 text-[11px]">
+                <User className="w-3 h-3 text-brand" /> Quick author search:
+              </span>
+              {facultyNames.slice(0, 6).map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => executeSearch(name)}
+                  className="text-[11px] bg-muted/60 hover:bg-brand-soft hover:text-brand hover:border-brand/40 border border-border/70 px-2.5 py-0.5 rounded-full transition-colors font-medium text-foreground"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 3. DYNAMIC NOTICE SLOT (One slot for all alerts) */}
+      {requiresApify && searchResults.length === 0 && !isSearching && (
+        <Notice
+          variant="warning"
+          title="Google Scholar Rate Limit / Anti-Bot Lock"
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowTokenManager(true)}
+              className="text-xs h-7 border-warning-border hover:bg-warning-soft"
+            >
+              Connect Apify Token
+            </Button>
+          }
+        >
+          Google Scholar has challenged direct queries. Connect a free Apify token ($5 free monthly credits) to activate the proxy failover shield and continue searching.
+        </Notice>
       )}
 
-      {/* Search Results */}
-      {hasSearched && !isSearching && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl text-gray-900 dark:text-gray-100 font-semibold">
-              {searchResults.length} result{searchResults.length !== 1 ? "s" : ""} found
-            </h2>
-            <div className="flex items-center gap-3">
-              {searchResults.length > 0 && (
-                <span className="text-sm text-gray-600 dark:text-gray-300 hidden sm:inline">
-                  {searchResults.filter((r) => isPSUPaper(r.authors)).length} PSU papers
-                </span>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => executeSearch(undefined, undefined, true)}
-                disabled={isSearching}
-                className="text-xs flex items-center gap-1.5 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900 hover:bg-blue-50 dark:hover:bg-blue-950/30"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSearching ? "animate-spin" : ""}`} />
-                Live Refresh from Google Scholar
-              </Button>
-            </div>
-          </div>
+      {isSearching && (
+        <Notice variant="info" title="Searching Google Scholar...">
+          Querying local database cache and academic literature directly to save token credits.
+        </Notice>
+      )}
 
-          {searchResults.map((result) => {
-            const isPSU = isPSUPaper(result.authors);
-            return (
-              <Card
-                key={result.id}
-                className={`hover:shadow-md transition-shadow dark:border-gray-800 ${
-                  isPSU ? "border-l-4 border-l-green-500" : "border-l-4 border-l-orange-500"
-                }`}
-              >
-                <CardContent className="pt-6">
-                  <div className="space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                      <h3 className="text-lg text-gray-900 dark:text-gray-100 font-medium">{result.title}</h3>
-                      <span className={`inline-flex items-center gap-1 px-3 py-1 rounded border text-sm font-medium self-start ${getPaperTypeColor(result.authors)}`}>
-                        {isPSU ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-                        {getPaperType(result.authors)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-start gap-2">
-                      <User className="w-4 h-4 text-gray-500 dark:text-gray-400 mt-0.5" />
-                      <p className="text-sm text-gray-700 dark:text-gray-200">
-                        {result.authors.map((author, idx) => (
-                          <span key={idx}>
-                            <span className={isPSUPaper([author]) ? "font-semibold text-blue-600 dark:text-blue-400" : ""}>
-                              {author}
-                            </span>
-                            {idx < result.authors.length - 1 && ", "}
-                          </span>
-                        ))}
-                      </p>
-                    </div>
-
-                    <p className="text-sm text-gray-600 dark:text-gray-300">
-                      {result.journal} • {result.year}
-                    </p>
-
-                    {result.abstract && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">{result.abstract}</p>
-                    )}
-
-                    <div className="flex items-center gap-6 text-sm pt-1">
-                      <div className="flex items-center gap-1">
-                        <Quote className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                        <span className="text-gray-700 dark:text-gray-200">{result.citations} citations</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-800">
-                      {result.url && (
-                        <Button variant="outline" size="sm" onClick={() => window.open(result.url, "_blank")} className="dark:border-gray-700">
-                          <Eye className="w-4 h-4 mr-2" /> View Paper
-                        </Button>
-                      )}
-                      {isInstructor ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleClaimPublication(result)}
-                          disabled={claimedIds.includes(result.id)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          <Hand className="w-4 h-4 mr-2" />
-                          {claimedIds.includes(result.id) ? "Claim Pending" : "Claim Research"}
-                        </Button>
-                      ) : (
-                        <Button
-                          variant={isPSU ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handleSavePublication(result)}
-                          className={isPSU ? "bg-green-600 hover:bg-green-700 text-white" : "dark:border-gray-700"}
-                          disabled={!isPSU}
-                        >
-                          <Save className="w-4 h-4 mr-2" />
-                          {isPSU ? "Save to System" : "Cannot Save (Non-PSU)"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          {searchResults.length === 0 && !isSearching && !requiresApify && (
-            <Card className="dark:border-gray-800">
-              <CardContent className="py-12 text-center text-gray-500 dark:text-gray-400">
-                <FileText className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-                <p>No publications found</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try other search terms or researcher names</p>
-              </CardContent>
-            </Card>
+      {hasSearched && !isSearching && searchResults.length > 0 && (
+        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+          <span>
+            Found <strong>{searchResults.length}</strong> publication results for "{searchQuery}"
+          </span>
+          {searchSource && (
+            <span className="font-medium">
+              Source: {searchSource === "cache" ? "⚡ Local SQLite Cache" : searchSource === "direct" ? "🌐 Direct Scholar" : "🛡️ Apify Failover"}
+            </span>
           )}
         </div>
       )}
 
-      {!hasSearched && (
-        <Card className="border-2 border-dashed border-gray-300">
-          <CardContent className="py-12 text-center text-gray-500">
-            <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="font-medium">Search Google Scholar</p>
-            <p className="text-sm text-gray-400 mt-1">Results will be automatically stored in the SQLite database.</p>
-          </CardContent>
-        </Card>
+      {/* 4. RESULTS SECTION */}
+      {hasSearched && !isSearching && searchResults.length === 0 && !requiresApify && (
+        <EmptyState
+          icon={AlertCircle}
+          title="No Publications Found"
+          description={`No academic literature matched "${searchQuery}". Try searching with alternate keywords, author surname, or a broader topic.`}
+        />
+      )}
+
+      {searchResults.length > 0 && (
+        <div className="space-y-3">
+          {searchResults.map((result) => {
+            const isPSU = isPSUPaper(result.authors);
+            const isSaved = isPublicationAlreadySaved(result.title);
+            const isClaimed = claimedIds.includes(result.id);
+
+            return (
+              <Card
+                key={result.id}
+                className="bg-card border-border/70 shadow-2xs hover:border-brand/40 transition-colors p-4 sm:p-5"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm sm:text-base font-semibold text-foreground leading-snug">
+                        {result.url ? (
+                          <a
+                            href={result.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:text-brand hover:underline inline-flex items-center gap-1.5"
+                          >
+                            <span>{result.title}</span>
+                            <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                          </a>
+                        ) : (
+                          result.title
+                        )}
+                      </h3>
+
+                      <StatusBadge
+                        status={isPSU ? "verified" : "unpublished"}
+                        label={isPSU ? "PSU Faculty Paper" : "External / Non-PSU"}
+                      />
+
+                      {isSaved && (
+                        <StatusBadge status="approved" label="In Repository" />
+                      )}
+                      {isClaimed && (
+                        <StatusBadge status="pending" label="Claim Submitted" />
+                      )}
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Authors: <span className="text-foreground">{result.authors.join(", ")}</span>
+                    </p>
+
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
+                      <span>Year: {result.year}</span>
+                      <span>Journal: {result.journal || "Academic Source"}</span>
+                      {result.citations > 0 && (
+                        <span className="text-brand font-semibold">
+                          Citations: {result.citations}
+                        </span>
+                      )}
+                    </div>
+
+                    {result.abstract && (
+                      <p className="text-xs text-muted-foreground pt-1 line-clamp-2 leading-relaxed">
+                        {result.abstract}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-start w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border/50 flex-wrap sm:flex-nowrap justify-start sm:justify-end">
+                    {/* Save to Repository (for PSU papers) */}
+                    {isPSU && !isSaved && !isInstructor && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleSavePublication(result)}
+                        className="h-8 text-xs bg-success hover:bg-success/90 text-white gap-1.5"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Save to Repository</span>
+                      </Button>
+                    )}
+
+                    {/* Claim Paper (for instructors) */}
+                    {isInstructor && !isClaimed && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleClaimPublication(result)}
+                        className="h-8 text-xs bg-brand hover:bg-brand/90 text-white gap-1.5"
+                      >
+                        <Hand className="w-3.5 h-3.5" />
+                        <span>Claim Authorship</span>
+                      </Button>
+                    )}
+
+                    {result.citedByLink && (
+                      <a
+                        href={result.citedByLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="h-8 px-2.5 rounded-lg border border-border/70 hover:bg-muted/50 text-xs text-muted-foreground inline-flex items-center gap-1 transition-colors"
+                      >
+                        <Quote className="w-3 h-3 text-brand" />
+                        <span>Cited by {result.citations}</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Token Manager Modal */}
+      {showTokenManager && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setShowTokenManager(false)}
+        >
+          <div
+            className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border/70 bg-card p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/60">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-brand-soft text-brand rounded-lg">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Scraper Token Management</h3>
+                  <p className="text-xs text-muted-foreground">Manage Apify scraping tokens for Google Scholar fallback queries</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowTokenManager(false)}
+                className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <ApifyTokenManager
+              compact={true}
+              onTokenChanged={() => {
+                setRequiresApify(false);
+                apiService.getActiveTokenUsage().then((res) => {
+                  if (res?.tokenUsage) setTokenUsage(res.tokenUsage);
+                });
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

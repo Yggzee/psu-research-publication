@@ -253,15 +253,15 @@ export function ScholarImportModal({
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-600" />
+            <div className="flex items-start gap-2 p-3 bg-danger-soft border border-danger-border rounded-lg text-xs text-danger-foreground">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-danger" />
               <span>{error}</span>
             </div>
           )}
 
           {importStatus && (
-            <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-              <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+            <div className="flex items-center gap-2 p-3 bg-success-soft border border-success-border rounded-lg text-xs text-success-foreground">
+              <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
               <span>{importStatus}</span>
             </div>
           )}
@@ -305,13 +305,13 @@ export function ScholarImportModal({
 
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{profile.name}</h3>
+                      <h3 className="text-lg font-bold text-foreground">{profile.name}</h3>
                       {profile.isPsuAffiliated ? (
-                        <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs">
+                        <Badge className="bg-success-soft text-success border border-success-border text-xs">
                           <Shield className="w-3 h-3 mr-1" /> PSU Affiliated
                         </Badge>
                       ) : (
-                        <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-400 text-xs bg-amber-50 dark:bg-amber-950/40">
+                        <Badge variant="outline" className="border-warning-border text-warning text-xs bg-warning-soft">
                           External / Non-PSU
                         </Badge>
                       )}

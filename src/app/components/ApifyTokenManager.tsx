@@ -326,29 +326,29 @@ export function ApifyTokenManager({ onTokenChanged, compact = false }: ApifyToke
                     key={tok.id}
                     className={`p-3.5 rounded-lg border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                       tok.isActive
-                        ? "bg-blue-50/40 dark:bg-blue-950/30 border-blue-300 dark:border-blue-800 ring-1 ring-blue-200 dark:ring-blue-900"
-                        : "bg-white dark:bg-card border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
+                        ? "bg-brand-soft border-brand/40 ring-1 ring-brand/20"
+                        : "bg-card border-border/60 hover:border-border"
                     }`}
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-gray-900 dark:text-gray-100">{tok.name}</span>
+                        <span className="font-semibold text-sm text-foreground">{tok.name}</span>
                         {tok.isActive && (
-                          <Badge className="bg-blue-600 text-white text-[11px] font-medium py-0">
+                          <Badge className="bg-brand text-white text-[11px] font-medium py-0">
                             Active Scraper
                           </Badge>
                         )}
                         {tok.status === "valid" ? (
-                          <Badge variant="outline" className="text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-[11px] py-0">
+                          <Badge variant="outline" className="text-success bg-success-soft border-success-border text-[11px] py-0">
                             <CheckCircle2 className="w-3 h-3 mr-1 inline" />
                             {tok.username ? `@${tok.username}` : "Valid"} {tok.plan ? `(${tok.plan})` : ""}
                           </Badge>
                         ) : tok.status === "invalid" ? (
-                          <Badge variant="outline" className="text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-[11px] py-0">
+                          <Badge variant="outline" className="text-danger bg-danger-soft border-danger-border text-[11px] py-0">
                             <XCircle className="w-3 h-3 mr-1 inline" /> Invalid
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 text-[11px] py-0">
+                          <Badge variant="outline" className="text-muted-foreground bg-muted text-[11px] py-0">
                             <Clock className="w-3 h-3 mr-1 inline" /> Untested
                           </Badge>
                         )}

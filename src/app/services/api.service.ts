@@ -80,6 +80,40 @@ export interface FetchScholarProfileResponse {
   error?: string;
 }
 
+export interface PendingRegistration {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  instructorId: string;
+  email: string;
+  department: string;
+  isFaculty: boolean;
+  scholarUrl?: string;
+  googleScholarId?: string;
+  status: 'pending_verification' | 'pending_email_verification' | 'pending_approval' | 'rejected' | 'active';
+  registrationType: 'admin_invite' | 'self_registration' | 'manual';
+  isEmailVerified: boolean;
+  emailVerifiedAt?: string;
+  verificationToken?: string;
+  hasScholar: boolean;
+  createdAt: string;
+}
+
+export interface EmailLog {
+  id: string;
+  recipient_email: string;
+  recipient_name: string;
+  subject: string;
+  email_type: string;
+  verification_token?: string;
+  verification_link?: string;
+  html_content?: string;
+  status: string;
+  created_at: string;
+}
+
+
 /**
  * Base API Service
  * Handles all HTTP requests to the SQLite Database API
@@ -96,6 +130,8 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const token = typeof window !== 'undefined' ? sessionStorage.getItem('psu_auth_token') : null;
+    const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
     try {
       const response = await fetch(url, {
@@ -103,6 +139,7 @@ class ApiService {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          ...authHeaders,
           ...options.headers,
         },
       });
@@ -121,7 +158,7 @@ class ApiService {
 
   // 1. Authentication
   async login(loginId: string, password: string) {
-    return this.request<{
+    const res = await this.request<{
       user: {
         id: string;
         role: 'admin' | 'instructor';
@@ -133,9 +170,83 @@ class ApiService {
         isFaculty: boolean;
         photoUrl?: string;
       };
+      token?: string;
     }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username: loginId, password }),
+    });
+
+    if (res && res.token && typeof window !== 'undefined') {
+      sessionStorage.setItem('psu_auth_token', res.token);
+    }
+
+    return res;
+  }
+
+  // Self-Registration
+  async register(data: {
+    firstName: string;
+    lastName: string;
+    instructorId: string;
+    email: string;
+    password: string;
+    department: string;
+    isFaculty: boolean;
+    scholarUrl?: string;
+    hasScholar: boolean;
+  }) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      email: string;
+      verificationLink?: string;
+    }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Verify email from token link
+  async verifyEmail(token: string) {
+    return this.request<{
+      success: boolean;
+      status: string;
+      message: string;
+      user?: any;
+    }>('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  }
+
+  // Validate invitation or verification token
+  async verifyToken(token: string) {
+    return this.request<{
+      valid: boolean;
+      error?: string;
+      user?: {
+        id: string;
+        name: string;
+        firstName?: string;
+        lastName?: string;
+        instructorId: string;
+        email: string;
+        department: string;
+        status: string;
+        registrationType: string;
+      };
+    }>(`/auth/verify-token?token=${encodeURIComponent(token)}`);
+  }
+
+  // Complete invitation & set password
+  async completeInvitation(token: string, newPassword: string) {
+    return this.request<{
+      success: boolean;
+      message: string;
+      user: any;
+    }>('/auth/complete-invitation', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
     });
   }
 
@@ -202,18 +313,58 @@ class ApiService {
     firstName: string;
     lastName: string;
     instructorId: string;
-    password: string;
+    password?: string;
     department: string;
     isFaculty: boolean;
     photoUrl?: string;
-    email?: string;
+    email: string;
     scholarUrl?: string;
     googleScholarId?: string;
+    sendInvite?: boolean;
   }) {
-    return this.request('/researchers', {
+    return this.request<{
+      success: boolean;
+      message: string;
+      verificationLink?: string;
+      researcher: any;
+    }>('/researchers', {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // Admin: Get pending researcher registrations
+  async getPendingRegistrations(): Promise<PendingRegistration[]> {
+    return this.request<PendingRegistration[]>('/admin/pending-registrations');
+  }
+
+  // Admin: Admit / Approve registration
+  async admitRegistration(instructorId: string) {
+    return this.request<{ success: boolean; message: string }>('/admin/admit-registration', {
+      method: 'POST',
+      body: JSON.stringify({ instructorId }),
+    });
+  }
+
+  // Admin: Reject registration
+  async rejectRegistration(instructorId: string, reason?: string) {
+    return this.request<{ success: boolean; message: string }>('/admin/reject-registration', {
+      method: 'POST',
+      body: JSON.stringify({ instructorId, reason }),
+    });
+  }
+
+  // Admin: Resend verification / invitation email
+  async resendInvite(instructorId: string) {
+    return this.request<{ success: boolean; message: string; verificationLink?: string }>('/admin/resend-invite', {
+      method: 'POST',
+      body: JSON.stringify({ instructorId }),
+    });
+  }
+
+  // Admin: View email outbox
+  async getEmailLogs(): Promise<EmailLog[]> {
+    return this.request<EmailLog[]>('/admin/email-logs');
   }
 
   async updateResearcher(id: string, data: Partial<{
@@ -274,6 +425,12 @@ class ApiService {
     return this.request(`/publications/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  }
+
+  async deletePublication(id: string) {
+    return this.request<{ success: boolean; message: string }>(`/publications/${id}`, {
+      method: 'DELETE',
     });
   }
 
@@ -388,6 +545,90 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  // --- Intelligence & Capstone Innovation Methods ---
+
+  async getSystemStatus(): Promise<SystemStatusResponse> {
+    return this.request('/intelligence/system-status');
+  }
+
+  async getSDGStats(): Promise<SDGStatsResponse> {
+    return this.request('/intelligence/sdg-stats');
+  }
+
+  async getNetworkGraph(): Promise<NetworkGraphResponse> {
+    return this.request('/intelligence/network-graph');
+  }
+
+  async askCampusAI(question: string): Promise<AskCampusResponse> {
+    return this.request('/ai/ask-campus', {
+      method: 'POST',
+      body: JSON.stringify({ question }),
+    });
+  }
+
+  async askCampusIntelligence(question: string): Promise<AskCampusResponse> {
+    return this.askCampusAI(question);
+  }
+
+  async getAIChatSessions(userId?: string): Promise<{ sessions: AIChatSession[] }> {
+    const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    return this.request(`/ai/chat-sessions${query}`);
+  }
+
+  async saveAIChatSession(session: {
+    id: string;
+    userId?: string;
+    title: string;
+    messages: AIChatMessage[];
+  }): Promise<{ success: boolean; id: string }> {
+    return this.request('/ai/chat-sessions', {
+      method: 'POST',
+      body: JSON.stringify(session),
+    });
+  }
+
+  async deleteAIChatSession(id: string): Promise<{ success: boolean }> {
+    return this.request(`/ai/chat-sessions?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async clearAIChatHistory(userId?: string): Promise<{ success: boolean }> {
+    const query = userId ? `&userId=${encodeURIComponent(userId)}` : '';
+    return this.request(`/ai/chat-sessions?clearAll=true${query}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async classifyPublicationSDG(payload: {
+    publicationId?: string;
+    title?: string;
+    abstract?: string;
+    journal?: string;
+  }): Promise<{
+    success: boolean;
+    sdg: { primarySDG: string; secondarySDG: string; rationale: string; chedPriority: string };
+    audit: { indexing: string; nbc461Points: number; isPredatory: number; confidence: string };
+  }> {
+    return this.request('/ai/classify-sdg', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async batchClassifySDG(): Promise<{ success: boolean; processed: number; remaining: number }> {
+    return this.request('/ai/batch-classify-sdg', {
+      method: 'POST',
+    });
+  }
+
+  async calculateSynergy(researcherIdA: string, researcherIdB: string): Promise<SynergyMatchResponse> {
+    return this.request('/ai/synergy-match', {
+      method: 'POST',
+      body: JSON.stringify({ researcherIdA, researcherIdB }),
+    });
+  }
 }
 
 export interface ApifyTokenUsage {
@@ -424,6 +665,118 @@ export interface ApifyToken {
   maxMonthlyUsageUsd?: number;
   cycleEndAt?: string | null;
   totalRuns?: number | null;
+}
+
+export interface SystemStatusResponse {
+  status: string;
+  aiEngine: string;
+  aiModel: string;
+  keyConfigured: boolean;
+  dbSync: string;
+  totalPublications: number;
+  totalResearchers: number;
+  classifiedPublications: number;
+  timestamp: string;
+}
+
+export interface SDGPaperItem {
+  id: string;
+  title: string;
+  authors: string[];
+  journal?: string;
+  year: number;
+  citations: number;
+  abstract?: string;
+  url?: string;
+  sdgRationale?: string;
+  sdgRationales?: Record<string, string>;
+  chedPriority?: string;
+  sdgTags?: string[];
+  ownerName?: string;
+  journalIndexing?: string;
+  nbc461Points?: number;
+}
+
+export interface SDGStatsResponse {
+  radarData: Array<{
+    sdg: string;
+    fullName: string;
+    count: number;
+    fullLabel: string;
+    papers: SDGPaperItem[];
+  }>;
+  totalClassified: number;
+  chedPriorities: Array<{
+    priority: string;
+    count: number;
+  }>;
+}
+
+export interface NetworkGraphNode {
+  id: string;
+  name: string;
+  department: string;
+  publications: number;
+  citations: number;
+  photoUrl?: string;
+}
+
+export interface NetworkGraphLink {
+  source: string;
+  target: string;
+  weight: number;
+  papers: string[];
+}
+
+export interface SynergyCandidate {
+  researcherA: { id: string; name: string; department: string };
+  researcherB: { id: string; name: string; department: string };
+  potentialScore: number;
+}
+
+export interface NetworkGraphResponse {
+  nodes: NetworkGraphNode[];
+  links: NetworkGraphLink[];
+  synergyCandidates: SynergyCandidate[];
+}
+
+export interface SynergyMatchResponse {
+  synergyScore: number;
+  proposedTitle: string;
+  rationale: string;
+}
+
+export interface CitedPaper {
+  id: string;
+  refId: number;
+  title: string;
+  authors: string | string[];
+  year: number;
+  journal?: string;
+}
+
+export interface AskCampusResponse {
+  answer: string;
+  citedPapers: CitedPaper[];
+  source: 'gemini' | 'heuristic' | 'guardrail';
+}
+
+export interface AIChatMessage {
+  id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  citedPapers?: CitedPaper[];
+  timestamp: string;
+  isGuardrailRefusal?: boolean;
+}
+
+export interface AIChatSession {
+  id: string;
+  userId?: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: AIChatMessage[];
 }
 
 export const apiService = new ApiService();

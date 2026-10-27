@@ -184,3 +184,64 @@ export function hasExternalCollaborators(authors: string[]): boolean {
   return categorized.some((a) => !a.isPsu);
 }
 
+/**
+ * Normalize publication title to prevent duplicate saves and cross-reference search results
+ */
+export function normalizeTitle(t?: string | null): string {
+  if (!t) return "";
+  return t
+    .replace(/^\[(pdf|html|c|b|citation|doc|book)\]\s*/i, "")
+    .replace(/[’‘]/g, "'")
+    .replace(/["“”]/g, "")
+    .replace(/[…\.]+/g, "")
+    .replace(/[^a-zA-Z0-9]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Check if a publication belongs to a specific researcher
+ * Matches by owner ID, owner name, or academic author patterns
+ */
+export function matchesResearcher(p: any, r: any): boolean {
+  if (!r) return false;
+  const pOwnerId = (p.owner_id || p.ownerId || "").trim().toLowerCase();
+  const rInstId = (r.instructor_id || r.instructorId || "").trim().toLowerCase();
+  const rId = (r.id || "").trim().toLowerCase();
+  if (pOwnerId && (pOwnerId === rInstId || pOwnerId === rId)) return true;
+
+  const rName = (r.name || `${r.first_name || r.firstName || ""} ${r.last_name || r.lastName || ""}`).trim().toLowerCase();
+  const rFirst = (r.first_name || r.firstName || r.name?.split(" ")[0] || "").trim().toLowerCase();
+  const rLast = (r.last_name || r.lastName || r.name?.split(" ").slice(-1)[0] || "").trim().toLowerCase();
+  const pOwnerName = (p.owner_name || p.ownerName || "").trim().toLowerCase();
+
+  if (pOwnerName) {
+    if (pOwnerName === rName) return true;
+    if (rLast && rLast.length >= 3 && pOwnerName.includes(rLast)) return true;
+  }
+
+  let authors: any[] = [];
+  try {
+    authors = Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || "[]");
+  } catch {
+    authors = typeof p.authors === "string" ? p.authors.split(",") : [p.authors || ""];
+  }
+
+  for (const a of authors) {
+    const aLower = (typeof a === "string" ? a : (a?.name || "")).trim().toLowerCase();
+    if (!aLower) continue;
+    if (aLower === rName || aLower.includes(rName) || rName.includes(aLower)) return true;
+    if (rLast && rLast.length >= 3 && aLower.includes(rLast)) {
+      const firstInitial = rFirst[0];
+      if (!firstInitial || aLower.includes(firstInitial) || aLower.replace(/[^a-z]/g, "") === rLast) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export const publicationMatchesResearcher = matchesResearcher;
+

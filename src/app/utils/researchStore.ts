@@ -127,6 +127,29 @@ export function updateResearchRecord(id: string, updates: Partial<StoredPublicat
   apiService.updatePublication(id, updates).catch(() => {});
 }
 
+export function deleteResearchRecord(id: string) {
+  saveResearchRecords(
+    getResearchRecords().filter((record) => record.id !== id),
+  );
+  apiService.deletePublication(id).catch(() => {});
+}
+
+export const AUTH_TOKEN_KEY = "psu_auth_token";
+
+export function getAuthToken(): string | null {
+  try {
+    return sessionStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string) {
+  try {
+    sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+  } catch {}
+}
+
 export function getCurrentUser(): SessionUser {
   try {
     const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
@@ -137,12 +160,16 @@ export function getCurrentUser(): SessionUser {
   return { role: "admin", name: "Admin User", username: "admin" };
 }
 
-export function setCurrentUser(user: SessionUser) {
+export function setCurrentUser(user: SessionUser, token?: string) {
   sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
+  if (token) {
+    setAuthToken(token);
+  }
 }
 
 export function clearCurrentUser() {
   sessionStorage.removeItem(SESSION_STORAGE_KEY);
+  sessionStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
 export function updateCurrentUser(updates: Partial<SessionUser>): SessionUser {

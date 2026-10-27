@@ -7,6 +7,16 @@ import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Automatically load root .env if present
+const rootEnvPath = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnvPath) && typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile(rootEnvPath);
+  } catch (err) {
+    console.warn('[Env] Failed to load .env file:', err.message);
+  }
+}
+
 // Ensure data directory exists (support custom mount via DATA_DIR)
 const dataDir = process.env.DATA_DIR || path.resolve(__dirname, '../../data');
 if (!fs.existsSync(dataDir)) {
@@ -144,6 +154,15 @@ export function initDatabase() {
     db.exec(`ALTER TABLE users ADD COLUMN google_scholar_id TEXT`);
   } catch {}
 
+  // Intelligence & Capstone Innovations Migrations
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_tags TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_rationale TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN journal_indexing TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN is_predatory_flag INTEGER DEFAULT 0`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN nbc461_points REAL DEFAULT 0.0`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN ched_priority TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN doi TEXT`); } catch {}
+
   // 5. Citation Trends Table (yearly citations per publication)
   db.exec(`
     CREATE TABLE IF NOT EXISTS citation_trends (
@@ -190,6 +209,51 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN max_monthly_usage_usd REAL DEFAULT 5`); } catch {}
   try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN cycle_end_at TEXT`); } catch {}
   try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN total_runs INTEGER`); } catch {}
+
+  // Verification & Onboarding Migrations
+  try { db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN verification_token TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN verification_token_expires_at TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN email_verified_at TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN registration_type TEXT DEFAULT 'manual'`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN has_scholar INTEGER DEFAULT 1`); } catch {}
+
+  try { db.exec(`ALTER TABLE researchers ADD COLUMN status TEXT DEFAULT 'active'`); } catch {}
+  try { db.exec(`ALTER TABLE researchers ADD COLUMN has_scholar INTEGER DEFAULT 1`); } catch {}
+
+  // Ensure any existing rows have active status
+  try {
+    db.exec(`UPDATE users SET status = 'active' WHERE status IS NULL`);
+    db.exec(`UPDATE researchers SET status = 'active' WHERE status IS NULL`);
+  } catch {}
+
+  // 8. Email Logs & Outbox Table (Auditing, local preview, and resend support)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_logs (
+      id TEXT PRIMARY KEY,
+      recipient_email TEXT NOT NULL,
+      recipient_name TEXT,
+      subject TEXT NOT NULL,
+      email_type TEXT NOT NULL,
+      verification_token TEXT,
+      verification_link TEXT,
+      html_content TEXT,
+      status TEXT NOT NULL DEFAULT 'sent',
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // 9. Campus AI Chat Sessions & History Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      title TEXT NOT NULL,
+      messages_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
 
   // Seed default admin account ONLY if no admin exists
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
