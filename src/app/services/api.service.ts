@@ -560,15 +560,15 @@ class ApiService {
     return this.request('/intelligence/network-graph');
   }
 
-  async askCampusAI(question: string): Promise<AskCampusResponse> {
+  async askCampusAI(question: string, history?: Array<{ sender: string; text: string }>): Promise<AskCampusResponse> {
     return this.request('/ai/ask-campus', {
       method: 'POST',
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, history }),
     });
   }
 
-  async askCampusIntelligence(question: string): Promise<AskCampusResponse> {
-    return this.askCampusAI(question);
+  async askCampusIntelligence(question: string, history?: Array<{ sender: string; text: string }>): Promise<AskCampusResponse> {
+    return this.askCampusAI(question, history);
   }
 
   async getAIChatSessions(userId?: string): Promise<{ sessions: AIChatSession[] }> {

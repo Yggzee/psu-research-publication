@@ -80,7 +80,11 @@ export function AskCampusAI() {
     setIsAsking(true);
 
     try {
-      const response = await apiService.askCampusAI(q);
+      const recentHistory = messages.slice(-6).map((m) => ({
+        sender: m.sender,
+        text: m.text,
+      }));
+      const response = await apiService.askCampusAI(q, recentHistory);
       const aiMsg: ChatMessage = {
         id: `ai-${Date.now()}`,
         sender: "ai",

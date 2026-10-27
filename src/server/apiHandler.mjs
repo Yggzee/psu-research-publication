@@ -2618,13 +2618,15 @@ export async function handleApiRequest(req, res) {
 
     // 4. Ask Campus Intelligence (Academic RAG)
     if (pathname === '/api/ai/ask-campus' && method === 'POST') {
-      const { question } = await readJsonBody();
+      const { question, history } = await readJsonBody();
       if (!question || !question.trim()) {
         return sendJson(400, { error: 'Question is required' });
       }
 
+      const caller = authenticateCaller(req);
+
       const approvedPubs = db.prepare(`
-        SELECT id, title, authors, year, journal, citations, abstract, sdg_tags, sdg_rationale, ched_priority, nbc461_points, owner_name
+        SELECT id, title, authors, year, journal, citations, abstract, sdg_tags, sdg_rationale, ched_priority, nbc461_points, owner_name, owner_id
         FROM publications
         WHERE approval_status = 'approved'
         ORDER BY citations DESC, year DESC
@@ -2641,6 +2643,26 @@ export async function handleApiRequest(req, res) {
         FROM researchers
       `).all();
 
+      let currentUser = null;
+      if (caller) {
+        const callerPubs = db.prepare(`
+          SELECT COUNT(*) as total, COALESCE(SUM(citations), 0) as citations
+          FROM publications
+          WHERE (owner_id = ? OR owner_id = ?) AND approval_status = 'approved'
+        `).get(caller.id, caller.instructorId || caller.id);
+
+        currentUser = {
+          id: caller.id,
+          name: caller.name,
+          role: caller.role,
+          department: caller.department || 'Faculty',
+          username: caller.username,
+          instructorId: caller.instructorId,
+          publicationsCount: Number(callerPubs?.total) || 0,
+          citationsCount: Number(callerPubs?.citations) || 0,
+        };
+      }
+
       const totalCitations = Number(pubTotals?.citations) || 0;
 
       const systemMetadata = {
@@ -2648,17 +2670,29 @@ export async function handleApiRequest(req, res) {
         totalResearchers: researchers.length,
         researchersList: researchers.map(r => `${r.name} (${r.department || 'Faculty'}, ${r.total_publications} papers, ${r.total_citations} citations)`),
         totalCitations,
-        features: [
-          'Google Scholar Search & Auto-Caching: Query live literature, cache in SQLite, and prevent duplicate saves via title normalization.',
-          'Publications Management: Dynamic instructor dropdown filtering by registered faculty, sorting by citations/year/impact, and APA citation export.',
-          'UN SDG Impact Matrix: Gemini Flash powered mapping into all 17 UN Sustainable Development Goals and CHED priority agendas with interactive research evidence.',
-          'Research Inspector Drawer: In-depth metrics drawer analyzing citations, NBC 461 point calculations, and academic journal predatory auditing.',
-          'Admin & Faculty Management: Dedicated portal for user credentials, faculty rosters, departments, and Google Scholar profile synchronization.',
-          'Accreditation Reporting Hub: Ready-to-export reports for CHED, SUC Leveling, and AACCUP accreditation.'
-        ]
+        currentUser,
+        pages: [
+          'Dashboard (/): Overall institutional analytics, top 5 researchers chart, department year-by-year comparison.',
+          'Publications (/publications): Central repository of approved research, faculty dropdown filter, citation/year sorting, APA citation export, and publication status tracking.',
+          'Researchers Directory (/researchers): Complete faculty roster across departments with publication totals and citation metrics.',
+          'Search Engine (/search): Live Google Scholar crawler with automatic deduplication using normalized title matching.',
+          'SDG Impact Matrix (/sdg-matrix): Interactive matrix categorizing research across all 17 UN Sustainable Development Goals and CHED priority disciplines.',
+          'Research Inspector Drawer: Detailed drawer per paper showing NBC 461 points, citation growth graph, citing paper links, and journal predatory audit.',
+          'Accreditation Reporting Hub (/reports): Generates exportable Excel spreadsheets and summaries for CHED audits, SUC Leveling, and AACCUP accreditation.',
+          'Admin Portal (/admin): User management, sending secure email invites, approving self-registered faculty accounts.'
+        ],
+        nbc461Guidelines: {
+          tiers: 'Scopus/Web of Science = 25 pts, CHED Recognized/International Refereed = 15 pts, National Refereed = 10 pts, Institutional Baseline = 5 pts',
+          authorship: 'Sole Author = 100% of base points; Lead Author = 60%; Co-Authors = share remaining 40% equally',
+          fourAreas: 'NBC 461 promotion evaluates: (1) Instruction, (2) Research (managed by this system), (3) Extension, (4) Professional Development. Final evaluation is processed by HRMO.'
+        },
+        accreditationGuidelines: {
+          aaccup: 'AACCUP evaluates program quality and faculty research culture. It does not use individual publication point quotas, but requires documented verified faculty publications and institutional impact.',
+          sucLeveling: 'SUC Leveling assesses state university research productivity, citation counts, and community development impact.'
+        }
       };
 
-      const ragResult = await askCampusIntelligence(question, approvedPubs, systemMetadata);
+      const ragResult = await askCampusIntelligence(question, approvedPubs, systemMetadata, history || []);
       return sendJson(200, ragResult);
     }
 

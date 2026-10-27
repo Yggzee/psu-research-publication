@@ -178,53 +178,66 @@ function routeQuestion(q) {
     return 'greeting';
   }
 
+  // 2. Profile / Current User Queries
+  if (/\b(who am i|my account|my profile|my role|what is my name|what is my role)\b/.test(s)) {
+    return 'my_profile';
+  }
+  if (/\b(my publications?|my papers?|how many publications? do i have|how many papers? do i have|how many papers? i have)\b/.test(s)) {
+    return 'my_publications';
+  }
+
   const isPointSubject = /\b(nbc\s*461|points?|calculate|calculation|calculator|formula)\b/.test(s);
   const isResearcherSubject = /\b(researchers?|researches|faculty|professors?)\b/.test(s);
   const isPublicationSubject = /\b(publications?|papers?|articles?|works?)\b/.test(s);
   const isCitationSubject = /\b(citations?|cited)\b/.test(s);
 
-  // 2. NBC 461 Points calculation & formulas, or direct query "show me numbers"
+  // 3. NBC 461 Points calculation & formulas, or direct query "show me numbers"
   if ((isPointSubject && /\b(nbc\s*461|numbers?|formula|calculate|calculation|how|breakdown|rules?|points?|rate)\b/.test(s)) || /^show\s+me\s+(the\s+)?numbers?[\s.?!]*$/i.test(s)) {
     return 'nbc461_calc';
   }
 
-  // 3. Specific: Most cited / top paper ONLY
+  // 4. Specific: Most cited / top paper ONLY
   if (/\b(most cited|highest cited|top citation|most impact|highest impact)\b/.test(s) && (isPublicationSubject || isCitationSubject || s.includes('paper') || s.includes('research'))) {
     return 'top_paper_only';
   }
 
-  // 4. Specific: Researchers / Faculty ONLY (only if points are NOT the main subject)
+  // 5. Specific: Researchers / Faculty ONLY (only if points are NOT the main subject)
   if (isResearcherSubject && !isPublicationSubject && !isCitationSubject && !isPointSubject) {
     if (/\b(how many|count|number|who|list|names?|show|all|currently|registered|i have|we have)\b/.test(s)) {
       return 'researchers_only';
     }
   }
 
-  // 5. Specific: Publications count ONLY
+  // 6. Specific: Publications count ONLY
   if (isPublicationSubject && !isResearcherSubject && !isCitationSubject && !isPointSubject) {
     if (/\b(how many|count|total|number|how much)\b/.test(s)) {
       return 'publications_only';
     }
   }
 
-  // 6. Specific: Citations count ONLY
+  // 7. Specific: Citations count ONLY
   if (isCitationSubject && !isResearcherSubject && !isPublicationSubject && !isPointSubject) {
     if (/\b(how many|count|total|sum|number)\b/.test(s)) {
       return 'citations_only';
     }
   }
 
-  // 7. Overall system status / general overview
+  // 8. Overall system status / general overview
   if (/\b(going on|system status|overview of (the )?system|system activity|system overview|summary of (the )?system)\b/.test(s)) {
     return 'general_status';
   }
 
-  // 8. System Features / Capabilities
+  // 9. System Features / Capabilities
   if (/\b(what can you do|what features|list (the )?features|system features|what does (this|the) (system|app|tool|platform) do)\b/.test(s)) {
     return 'features';
   }
 
-  // 9. General count query mentioning multiple aspects (e.g. how many publications and researchers)
+  // 10. Navigation & Reports inquiries
+  if (/\b(where (can|do|to|is)|which page|find (the )?reports?|accreditation reports?|suc leveling reports?|aaccup reports?|how to export|export (the )?reports?)\b/.test(s)) {
+    return 'navigation';
+  }
+
+  // 11. General count query mentioning multiple aspects (e.g. how many publications and researchers)
   if (/\b(how many|number of|total count)\b/.test(s) && (isPublicationSubject || isResearcherSubject) && !isPointSubject) {
     return 'general_status';
   }
@@ -234,10 +247,28 @@ function routeQuestion(q) {
 
 function handleRoutedQuestion(route, publications, meta) {
   const list = meta.researchersList || [];
+  const u = meta.currentUser;
 
   switch (route) {
     case 'greeting':
       return "Hello! I'm Campus AI for PSU Asingan. How can I help you today? You can ask me about our faculty researchers, publications, or how the system works.";
+
+    case 'navigation':
+      return `You can access institutional tables and exportable files under the "Reports" page (/reports). This provides audit summaries for CHED audits, SUC Leveling, and AACCUP accreditation cycles.`;
+
+    case 'my_profile': {
+      if (!u) {
+        return "You are currently browsing as a guest. Please log in to view your faculty profile and research outputs.";
+      }
+      return `Logged-in User Profile:\n• Name: ${u.name}\n• Role: ${u.role}\n• Department: ${u.department}\n• Username: ${u.username}\n• Registered Publications: ${u.publicationsCount} papers\n• Total Citations: ${u.citationsCount}`;
+    }
+
+    case 'my_publications': {
+      if (!u) {
+        return "You are currently browsing as a guest. Please log in to see publications registered under your account.";
+      }
+      return `You currently have ${u.publicationsCount} approved research publications with ${u.citationsCount} total citations in your profile.`;
+    }
 
     case 'nbc461_calc':
       return `In this system, NBC 461 research publication points are calculated using Journal Indexing and Authorship Role:
@@ -601,7 +632,7 @@ export function auditJournalReputation(journalName = '') {
  * Answers questions strictly grounded in stored PSU Asingan publications and system features
  * Strictly guarded against personal questions and off-topic queries
  */
-export async function askCampusIntelligence(question, publications = [], systemMetadata = {}) {
+export async function askCampusIntelligence(question, publications = [], systemMetadata = {}, history = []) {
   const trimmedQ = (question || '').trim();
   if (!trimmedQ) {
     return {
@@ -664,6 +695,16 @@ How may I assist you with our system or research repository today?`,
     .map(p => `[Ref ${p.refId}] "${p.title}" (${p.year}) by ${p.authors} | Journal: ${p.journal} | Citations: ${p.citations}\nUN SDGs: ${p.sdg}\nAbstract: ${p.abstract}`)
     .join('\n\n');
 
+  const historySnippet = (history || [])
+    .slice(-6)
+    .map(m => `${m.sender === 'ai' ? 'Assistant' : 'User'}: ${m.text}`)
+    .join('\n');
+
+  const u = systemMetadata.currentUser;
+  const userContextLine = u
+    ? `User is logged in as: ${u.name} (Role: ${u.role}, Department: ${u.department}, Username: ${u.username}, Publications: ${u.publicationsCount}, Citations: ${u.citationsCount})`
+    : 'User is browsing as a Guest';
+
   const prompt = `You are Campus AI for the Research Publication Tracking System of Pangasinan State University - Asingan Campus (PSU Asingan).
 
 CRITICAL INSTRUCTIONS (USER PREFERENCE):
@@ -673,13 +714,14 @@ CRITICAL INSTRUCTIONS (USER PREFERENCE):
 4. CITATIONS: Only cite research papers (using [Ref X]) if the user's question is explicitly asking about research papers, authors, topics, or study results. DO NOT cite random research papers when answering general questions about how points or system features work.
 5. NO ASTERISK CLUTTER: Do not bold numbers or over-wrap terms in asterisks.
 
-CURRENT SYSTEM CONTEXT:
+CURRENT USER & SYSTEM CONTEXT:
+- ${userContextLine}
 - Total Approved Publications: ${systemMetadata.totalPublications || publications.length}
 - Total Registered Researchers: ${systemMetadata.totalResearchers || 2}
 - Registered Researchers: ${(systemMetadata.researchersList || []).join('; ')}
 - Total Citation Count: ${systemMetadata.totalCitations || 0}
-- Key System Features:
-${(systemMetadata.features || []).map(f => '  * ' + f).join('\n')}
+- System Pages & Modules:
+${(systemMetadata.pages || systemMetadata.features || []).map(f => '  * ' + f).join('\n')}
 
 NBC 461 RESEARCH POINT RULES IN THIS SYSTEM:
 - Journal Tiers: Scopus/Web of Science = 25 pts; CHED Recognized/International Refereed = 15 pts; National Refereed = 10 pts; Institutional Baseline = 5 pts.
@@ -687,6 +729,7 @@ NBC 461 RESEARCH POINT RULES IN THIS SYSTEM:
 - Evaluated interactively in the Research Inspector Drawer.
 - Faculty Promotion: NBC 461 evaluates 4 main areas: (1) Instruction, (2) Research (tracked by this system), (3) Extension, and (4) Professional Development. Final promotion thresholds and requirements are administered by the university HRMO.
 
+${historySnippet ? `RECENT CONVERSATION HISTORY:\n${historySnippet}\n` : ''}
 CAMPUS RESEARCH PUBLICATIONS CONTEXT:
 ${contextText}
 

@@ -243,7 +243,11 @@ export function FloatingAskAIBubble() {
     });
 
     try {
-      const res = await apiService.askCampusIntelligence(q);
+      const recentHistory = messages.slice(-6).map((m) => ({
+        sender: m.sender,
+        text: m.text,
+      }));
+      const res = await apiService.askCampusIntelligence(q, recentHistory);
       const isRefusal = res.source === "guardrail" || res.answer.includes("cannot answer personal questions");
 
       const aiMsg: AIChatMessage = {
