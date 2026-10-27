@@ -11,12 +11,11 @@ if (fs.existsSync(rootEnvPath) && typeof process.loadEnvFile === 'function') {
   } catch {}
 }
 
+// Models verified live; 2.5-* models return 404 for new keys and were removed.
 const GEMINI_MODELS = [
-  'gemini-flash-latest',
   'gemini-3.5-flash-lite',
-  'gemini-2.5-flash-lite',
   'gemini-3.5-flash',
-  'gemini-3.8-flash',
+  'gemini-flash-latest',
 ];
 
 function getApiKey() {
@@ -41,7 +40,7 @@ async function callGemini(prompt, systemInstruction = '', temperature = 0.2) {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 4096,
         },
       };
 
@@ -55,7 +54,7 @@ async function callGemini(prompt, systemInstruction = '', temperature = 0.2) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(6000), // 6-second timeout per attempt
+        signal: AbortSignal.timeout(20000), // 20-second timeout per attempt
       });
 
       const data = await response.json();
@@ -508,7 +507,18 @@ INSTRUCTIONS:
     console.warn('[askCampusIntelligence] Gemini failed, using local synthesis:', err.message);
 
     const qLower = trimmedQ.toLowerCase();
-    
+    const notice = '(Note: the AI service is temporarily unavailable, so this is a basic automated answer.)';
+
+    // Counts / researcher listing from real system metadata
+    if (/\b(how many|count|number of|total)\b/.test(qLower) || /\b(researchers?|faculty|authors?)\b/.test(qLower) && /\b(who|list|registered|currently)\b/.test(qLower)) {
+      const list = systemMetadata.researchersList || [];
+      return {
+        answer: `Total Approved Publications: ${systemMetadata.totalPublications || publications.length}\nTotal Registered Researchers: ${systemMetadata.totalResearchers ?? list.length}\nTotal Citations: ${systemMetadata.totalCitations || 0}${list.length ? '\nRegistered Researchers: ' + list.join('; ') : ''}\n\n${notice}`,
+        citedPapers: [],
+        source: 'heuristic',
+      };
+    }
+
     // Check if question asks about what is going on in system
     if (qLower.includes('going on') || qLower.includes('system status') || qLower.includes('overview of system')) {
       return {
@@ -527,13 +537,27 @@ INSTRUCTIONS:
       };
     }
 
-    // Local fallback matching papers
-    const matched = publications.filter(p => {
-      return (p.title && p.title.toLowerCase().includes(qLower)) ||
-             (p.abstract && p.abstract.toLowerCase().includes(qLower));
-    }).slice(0, 5);
+    // Local fallback: keyword-score papers against the question
+    const stop = new Set(['the', 'what', 'does', 'about', 'talk', 'study', 'this', 'that', 'with', 'from', 'using', 'and', 'for', 'are', 'how', 'who', 'research', 'paper']);
+    const words = qLower.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !stop.has(w));
+    const scored = publications
+      .map(p => {
+        const hay = `${p.title || ''} ${p.abstract || ''}`.toLowerCase();
+        return { p, score: words.filter(w => hay.includes(w)).length };
+      })
+      .filter(s => s.score >= Math.max(1, Math.ceil(words.length / 3)))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
 
-    const fallbackCited = (matched.length > 0 ? matched : publications.slice(0, 3)).map((p, i) => ({
+    if (scored.length === 0) {
+      return {
+        answer: `I couldn't find a matching publication for that question, and the AI service is temporarily unavailable. Please try again shortly or rephrase using keywords from the paper's title.\n\n${notice}`,
+        citedPapers: [],
+        source: 'heuristic',
+      };
+    }
+
+    const fallbackCited = scored.map(({ p }, i) => ({
       id: p.id,
       refId: i + 1,
       title: p.title,
@@ -542,8 +566,9 @@ INSTRUCTIONS:
       journal: p.journal || 'PSU Archive',
     }));
 
+    const lines = scored.map(({ p }, i) => `[Ref ${i + 1}] "${p.title}" (${p.year}) by ${Array.isArray(p.authors) ? p.authors.join(', ') : p.authors}${p.abstract ? '\nAbstract: ' + p.abstract.slice(0, 300) : ''}`);
     return {
-      answer: `Based on PSU Asingan campus records, our faculty have conducted foundational research addressing this inquiry. Relevant publications include "${fallbackCited[0]?.title}" by ${fallbackCited[0]?.authors}. The research contributes to regional development and academic excellence in Pangasinan.`,
+      answer: `Closest matching publications:\n\n${lines.join('\n\n')}\n\n${notice}`,
       citedPapers: fallbackCited,
       source: 'heuristic',
     };
