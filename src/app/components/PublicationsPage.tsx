@@ -454,6 +454,12 @@ export function PublicationsPage() {
                       </td>
                       <td className="p-3.5 font-semibold text-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         <div className="line-clamp-2 leading-snug">{pub.title}</div>
+                        {(pub.owner_name || pub.ownerName) && (
+                          <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.2 rounded">
+                            <User className="w-2.5 h-2.5" />
+                            <span>Assigned: {pub.owner_name || pub.ownerName}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3.5 text-muted-foreground">
                         <div className="line-clamp-1">{authorsStr}</div>
@@ -537,6 +543,13 @@ export function PublicationsPage() {
                   <p className="text-xs text-muted-foreground line-clamp-1">
                     By {authorsStr}
                   </p>
+
+                  {(pub.owner_name || pub.ownerName) && (
+                    <div className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-md">
+                      <User className="w-3 h-3" />
+                      <span>Assigned Researcher: {pub.owner_name || pub.ownerName}</span>
+                    </div>
+                  )}
 
                   <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs">
                     <span className="text-muted-foreground truncate max-w-[200px]">

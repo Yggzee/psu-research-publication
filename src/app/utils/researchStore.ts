@@ -104,18 +104,32 @@ export function saveResearchRecords(records: StoredPublication[]) {
   window.dispatchEvent(new Event("research-records-updated"));
 }
 
-export function addResearchRecord(record: StoredPublication) {
+export function addResearchRecord(record: StoredPublication, syncBackend = false) {
   const records = getResearchRecords();
   if (!records.some((item) => item.id === record.id && item.ownerId === record.ownerId)) {
     saveResearchRecords([...records, record]);
   }
-  // Also asynchronously sync to SQLite backend
-  apiService.createPublication({
-    ...record,
-    impactScore: record.impactScore || 0,
-  }).catch(() => {
-    // Graceful offline fallback
+  if (syncBackend) {
+    apiService.createPublication({
+      ...record,
+      impactScore: record.impactScore || 0,
+    }).catch(() => {
+      // Graceful offline fallback
+    });
+  }
+}
+
+export function removeResearcherRecordsFromLocal(instructorId: string, researcherName?: string) {
+  const idLower = (instructorId || "").trim().toLowerCase();
+  const nameLower = (researcherName || "").trim().toLowerCase();
+  const filtered = getResearchRecords().filter((record) => {
+    const rOwnerId = (record.ownerId || "").trim().toLowerCase();
+    const rOwnerName = (record.ownerName || "").trim().toLowerCase();
+    if (idLower && rOwnerId === idLower) return false;
+    if (nameLower && rOwnerName === nameLower) return false;
+    return true;
   });
+  saveResearchRecords(filtered);
 }
 
 export function updateResearchRecord(id: string, updates: Partial<StoredPublication>) {

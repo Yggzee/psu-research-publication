@@ -53,6 +53,81 @@ export function updateResearcherStats(dbInstance, researcherId) {
 }
 
 /**
+ * Cascade delete all publications, citing papers, and citation trends belonging to a researcher
+ */
+export function deleteResearcherPublications(dbInstance, researcher) {
+  if (!researcher) return 0;
+  const rInstId = (researcher.instructor_id || '').trim().toLowerCase();
+  const rId = (researcher.id || '').trim().toLowerCase();
+  const rUserId = (researcher.user_id || '').trim().toLowerCase();
+  const rName = (researcher.name || '').trim().toLowerCase();
+
+  const allPubs = dbInstance.prepare('SELECT * FROM publications').all();
+  const toDelete = allPubs.filter((p) => {
+    const pOwnerId = (p.owner_id || '').trim().toLowerCase();
+    const pOwnerName = (p.owner_name || '').trim().toLowerCase();
+    if (pOwnerId && (pOwnerId === rInstId || pOwnerId === rId || (rUserId && pOwnerId === rUserId))) {
+      return true;
+    }
+    if (pOwnerName && rName && pOwnerName === rName) {
+      return true;
+    }
+    return matchesResearcher(p, researcher);
+  });
+
+  const delCiting = dbInstance.prepare('DELETE FROM citing_papers WHERE publication_id = ?');
+  const delTrends = dbInstance.prepare('DELETE FROM citation_trends WHERE publication_id = ?');
+  const delPub = dbInstance.prepare('DELETE FROM publications WHERE id = ?');
+
+  for (const pub of toDelete) {
+    delCiting.run(pub.id);
+    delTrends.run(pub.id);
+    delPub.run(pub.id);
+  }
+
+  return toDelete.length;
+}
+
+/**
+ * Ensure every publication is strictly tied to a registered non-rejected researcher;
+ * remove any orphaned publications whose researcher has been deleted.
+ */
+export function cleanupOrphanedPublications(dbInstance) {
+  try {
+    const validResearchers = dbInstance
+      .prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'")
+      .all();
+    const allPubs = dbInstance.prepare('SELECT * FROM publications').all();
+    if (allPubs.length === 0) return 0;
+
+    const delCiting = dbInstance.prepare('DELETE FROM citing_papers WHERE publication_id = ?');
+    const delTrends = dbInstance.prepare('DELETE FROM citation_trends WHERE publication_id = ?');
+    const delPub = dbInstance.prepare('DELETE FROM publications WHERE id = ?');
+    const tiePub = dbInstance.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE id = ?');
+
+    let removedCount = 0;
+    for (const p of allPubs) {
+      const matched = validResearchers.find((r) => matchesResearcher(p, r));
+      if (!matched) {
+        delCiting.run(p.id);
+        delTrends.run(p.id);
+        delPub.run(p.id);
+        removedCount++;
+      } else if (p.owner_id !== matched.instructor_id || p.owner_name !== matched.name) {
+        tiePub.run(matched.instructor_id, matched.name, p.id);
+      }
+    }
+    return removedCount;
+  } catch (err) {
+    console.warn('[CleanupOrphans] Error cleaning orphaned publications:', err.message);
+    return 0;
+  }
+}
+
+// Run initial orphan cleanup on module load
+cleanupOrphanedPublications(db);
+
+/**
  * Handle incoming API requests
  * Compatible with Vite dev server middleware and standalone Node http server
  */
@@ -580,6 +655,7 @@ export async function handleApiRequest(req, res) {
     // 2. DASHBOARD STATS: GET /api/dashboard/stats
     // ----------------------------------------------------
     if (pathname === '/api/dashboard/stats' && method === 'GET') {
+      cleanupOrphanedPublications(db);
       const researchersCount = db.prepare("SELECT COUNT(*) as count FROM researchers WHERE (status = 'active' OR status IS NULL)").get().count;
       const pubStats = db.prepare(`
         SELECT 
@@ -968,8 +1044,10 @@ export async function handleApiRequest(req, res) {
         return sendJson(404, { error: 'Researcher registration not found.' });
       }
 
+      deleteResearcherPublications(db, r);
       db.prepare("UPDATE researchers SET status = 'rejected' WHERE id = ?").run(r.id);
       db.prepare("UPDATE users SET status = 'rejected' WHERE id = ? OR LOWER(username) = LOWER(?)").run(r.user_id || '', r.instructor_id);
+      cleanupOrphanedPublications(db);
 
       return sendJson(200, {
         success: true,
@@ -1099,20 +1177,40 @@ export async function handleApiRequest(req, res) {
         return sendJson(403, { error: 'Forbidden: Only administrators can remove researcher records.' });
       }
 
-      const current = db.prepare('SELECT * FROM researchers WHERE id = ? OR instructor_id = ?').get(id, id);
+      const current = db.prepare('SELECT * FROM researchers WHERE id = ? OR LOWER(instructor_id) = LOWER(?)').get(id, id);
+      let deletedPubsCount = 0;
       if (current) {
+        // 1. Cascade delete all publications, citing papers, and citation trends tied to this researcher
+        deletedPubsCount = deleteResearcherPublications(db, current);
+
+        // 2. Delete researcher record
         db.prepare('DELETE FROM researchers WHERE id = ?').run(current.id);
+
+        // 3. Delete associated user login (preserve main admin account if admin was also listed in researchers)
         if (current.user_id) {
-          db.prepare('DELETE FROM users WHERE id = ?').run(current.user_id);
+          db.prepare("DELETE FROM users WHERE id = ? AND role != 'admin'").run(current.user_id);
+        } else if (current.instructor_id) {
+          db.prepare("DELETE FROM users WHERE LOWER(username) = LOWER(?) AND role != 'admin'").run(current.instructor_id);
         }
       }
-      return sendJson(200, { success: true, message: 'Researcher deleted successfully' });
+
+      // 4. Clean up any remaining orphaned publications
+      cleanupOrphanedPublications(db);
+
+      return sendJson(200, {
+        success: true,
+        deletedPublicationsCount: deletedPubsCount,
+        message: current
+          ? `Removed researcher ${current.name} and ${deletedPubsCount} associated publication(s) from the repository.`
+          : 'Researcher deleted successfully',
+      });
     }
 
     // ----------------------------------------------------
     // 4. PUBLICATIONS CRUD
     // ----------------------------------------------------
     if (pathname === '/api/publications' && method === 'GET') {
+      cleanupOrphanedPublications(db);
       const caller = authenticateCaller(req);
       const allRows = db.prepare('SELECT * FROM publications ORDER BY year DESC, citations DESC').all();
 
@@ -1274,31 +1372,99 @@ export async function handleApiRequest(req, res) {
       // Input Whitelisting: Sanitize input and enforce status/ownership constraints
       const sanitized = sanitizePublicationInput(data, caller, true);
 
+      // STRICT RESEARCHER ASSIGNMENT CHECK:
+      // Every publication must be tied to a registered researcher in the system.
+      if (isCallerAdmin(caller)) {
+        const requestedOwnerId = (data.ownerId || '').trim();
+        if (!requestedOwnerId || requestedOwnerId.toLowerCase() === 'admin') {
+          return sendJson(400, {
+            error: 'Publication must be assigned to a specific registered researcher in the system before saving to the repository.',
+          });
+        }
+
+        const assignedResearcher = db.prepare(`
+          SELECT * FROM researchers
+          WHERE (LOWER(instructor_id) = LOWER(?) OR id = ?)
+            AND (status IS NULL OR status != 'rejected')
+          LIMIT 1
+        `).get(requestedOwnerId, requestedOwnerId);
+
+        if (!assignedResearcher) {
+          return sendJson(400, {
+            error: 'Selected researcher is not registered in the system. Please assign this publication to a registered researcher.',
+          });
+        }
+
+        sanitized.ownerId = assignedResearcher.instructor_id;
+        sanitized.ownerName = assignedResearcher.name;
+        sanitized.approvalStatus = 'approved';
+      } else {
+        // Researcher / Instructor claiming or submitting their own publication:
+        // Must be a registered researcher, assigned to themselves, and requires Admin (Sir Garin) approval.
+        const candidateId = (caller?.instructorId || caller?.username || data.ownerId || '').trim();
+        const callerResearcher = db.prepare(`
+          SELECT * FROM researchers
+          WHERE (
+            LOWER(instructor_id) = LOWER(?) OR
+            user_id = ? OR
+            id = ?
+          ) AND (status IS NULL OR status != 'rejected')
+          LIMIT 1
+        `).get(candidateId, caller?.id || '', candidateId);
+
+        if (!callerResearcher) {
+          return sendJson(400, {
+            error: 'Your researcher profile must be registered in the system to assign and claim publications.',
+          });
+        }
+
+        if (
+          data.ownerId &&
+          data.ownerId.trim().toLowerCase() !== callerResearcher.instructor_id.toLowerCase() &&
+          data.ownerId.trim().toLowerCase() !== callerResearcher.id.toLowerCase()
+        ) {
+          return sendJson(403, {
+            error: 'Researchers can only assign and claim publications to themselves.',
+          });
+        }
+
+        sanitized.ownerId = callerResearcher.instructor_id;
+        sanitized.ownerName = callerResearcher.name;
+        sanitized.approvalStatus = 'pending'; // Must be approved by System Administrator (Sir Garin)
+      }
+
       // 1. Strict Deduplication Check: Check existing publications using normalized title
       const normInput = normalizeTitle(sanitized.title);
-      const allExisting = db.prepare('SELECT id, title, citations, abstract, url, cited_by_link, sdg_tags FROM publications').all();
+      const allExisting = db.prepare('SELECT id, title, citations, abstract, url, cited_by_link, sdg_tags, owner_id, owner_name, approval_status FROM publications').all();
       const existing = allExisting.find((p) => normalizeTitle(p.title) === normInput);
 
       if (existing) {
-        // Prevent duplicate creation: update metrics on existing record instead
-        const higherCitations = Math.max(existing.citations || 0, Number(sanitized.citations) || 0);
-        const bestUrl = sanitized.url || existing.url;
-        const bestAbstract = (sanitized.abstract && sanitized.abstract.length > (existing.abstract || '').length) ? sanitized.abstract : existing.abstract;
-        const bestCitedByLink = sanitized.citedByLink || existing.cited_by_link;
+        if (existing.approval_status === 'rejected') {
+          db.prepare('DELETE FROM publications WHERE id = ?').run(existing.id);
+        } else {
+          // Prevent duplicate creation: update metrics on existing record instead
+          const higherCitations = Math.max(existing.citations || 0, Number(sanitized.citations) || 0);
+          const bestUrl = sanitized.url || existing.url;
+          const bestAbstract = (sanitized.abstract && sanitized.abstract.length > (existing.abstract || '').length) ? sanitized.abstract : existing.abstract;
+          const bestCitedByLink = sanitized.citedByLink || existing.cited_by_link;
 
-        db.prepare(`
-          UPDATE publications
-          SET citations = ?, url = ?, abstract = ?, cited_by_link = ?
-          WHERE id = ?
-        `).run(higherCitations, bestUrl, bestAbstract, bestCitedByLink, existing.id);
+          db.prepare(`
+            UPDATE publications
+            SET citations = ?, url = ?, abstract = ?, cited_by_link = ?
+            WHERE id = ?
+          `).run(higherCitations, bestUrl, bestAbstract, bestCitedByLink, existing.id);
 
-        return sendJson(200, {
-          success: true,
-          id: existing.id,
-          isDuplicate: true,
-          alreadyExists: true,
-          message: `Publication already exists in repository ("${existing.title}"). Duplicate save prevented, metrics updated.`,
-        });
+          return sendJson(200, {
+            success: true,
+            id: existing.id,
+            isDuplicate: true,
+            alreadyExists: true,
+            ownerId: existing.owner_id,
+            ownerName: existing.owner_name,
+            approvalStatus: existing.approval_status,
+            message: `Publication already exists in repository ("${existing.title}") assigned to ${existing.owner_name}.`,
+          });
+        }
       }
 
       const id = data.id || `pub-${Date.now()}`;
@@ -1867,7 +2033,8 @@ export async function handleApiRequest(req, res) {
 
       const updatePub = db.prepare(`
         UPDATE publications
-        SET citations = MAX(citations, ?), url = COALESCE(?, url), cited_by_link = COALESCE(?, cited_by_link)
+        SET citations = MAX(citations, ?), url = COALESCE(?, url), cited_by_link = COALESCE(?, cited_by_link),
+            owner_id = ?, owner_name = ?
         WHERE id = ?
       `);
 
@@ -1888,7 +2055,7 @@ export async function handleApiRequest(req, res) {
         const year = parseInt(item.year, 10) || new Date().getFullYear();
 
         if (existing) {
-          updatePub.run(citations, item.url || null, item.citedByLink || null, existing.id);
+          updatePub.run(citations, item.url || null, item.citedByLink || null, targetInstId, targetName, existing.id);
           updatedCount++;
         } else {
           const newId = `pub-scholar-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -2226,12 +2393,13 @@ export async function handleApiRequest(req, res) {
     }
 
     // ----------------------------------------------------
-    // 6. RESEARCH CLAIMS
+    // 6. RESEARCH CLAIMS & PENDING PUBLICATION APPROVALS
     // ----------------------------------------------------
     if (pathname === '/api/claims' && method === 'GET') {
+      cleanupOrphanedPublications(db);
       const caller = authenticateCaller(req);
       let claims = db.prepare(`
-        SELECT * FROM publications WHERE source = 'claim' ORDER BY created_at DESC
+        SELECT * FROM publications WHERE approval_status = 'pending' ORDER BY created_at DESC
       `).all();
 
       // Application-Level Tenant Isolation:
@@ -2245,6 +2413,10 @@ export async function handleApiRequest(req, res) {
 
       return sendJson(200, claims.map((c) => ({
         ...c,
+        ownerId: c.owner_id,
+        ownerName: c.owner_name,
+        approvalStatus: c.approval_status,
+        researchStatus: c.research_status,
         authors: JSON.parse(c.authors || '[]'),
       })));
     }
@@ -2257,8 +2429,26 @@ export async function handleApiRequest(req, res) {
       const claimId = pathname.replace('/api/claims/', '').replace('/review', '');
       const { status } = await readJsonBody(); // 'approved' or 'rejected'
 
-      db.prepare('UPDATE publications SET approval_status = ? WHERE id = ?').run(status, claimId);
-      return sendJson(200, { success: true, message: `Claim marked as ${status}` });
+      if (status === 'rejected') {
+        db.prepare('DELETE FROM citing_papers WHERE publication_id = ?').run(claimId);
+        db.prepare('DELETE FROM citation_trends WHERE publication_id = ?').run(claimId);
+        db.prepare('DELETE FROM publications WHERE id = ?').run(claimId);
+      } else {
+        db.prepare('UPDATE publications SET approval_status = ? WHERE id = ?').run(status, claimId);
+      }
+
+      // Synchronize researcher publication & citation counts
+      const allRes = db.prepare('SELECT id FROM researchers').all();
+      for (const resRow of allRes) {
+        updateResearcherStats(db, resRow.id);
+      }
+
+      return sendJson(200, {
+        success: true,
+        message: status === 'approved'
+          ? 'Publication claim approved and saved to the repository!'
+          : 'Publication claim rejected and removed.',
+      });
     }
 
     // ----------------------------------------------------

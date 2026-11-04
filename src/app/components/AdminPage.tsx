@@ -44,6 +44,7 @@ import {
   getManagedResearchers,
   saveManagedResearchers,
   getCurrentUser,
+  removeResearcherRecordsFromLocal,
   type ManagedResearcher,
 } from "../utils/researchStore";
 import {
@@ -170,8 +171,8 @@ export function AdminPage() {
         department: found.department || "BSIT",
         email: found.email || "rodeliogarin@gmail.com",
         scholarUrl: found.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-        totalPublications: Math.max(found.totalPublications || 0, 16),
-        totalCitations: Math.max(found.totalCitations || 0, 95),
+        totalPublications: found.totalPublications || 0,
+        totalCitations: found.totalCitations || 0,
         photoUrl: found.photoUrl || "https://scholar.google.com/citations/images/avatar_scholar_128.png",
       };
     }
@@ -182,8 +183,8 @@ export function AdminPage() {
       department: "BSIT",
       email: "rodeliogarin@gmail.com",
       scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-      totalPublications: 16,
-      totalCitations: 95,
+      totalPublications: 0,
+      totalCitations: 0,
       photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
     };
   }, [researchers]);
@@ -339,16 +340,22 @@ export function AdminPage() {
 
   const confirmDeleteResearcher = async () => {
     if (!deleteTarget) return;
-    const { id } = deleteTarget;
+    const { id, name } = deleteTarget;
     setDeleteTarget(null);
     try {
-      await apiService.deleteResearcher(id);
+      const res: any = await apiService.deleteResearcher(id);
+      removeResearcherRecordsFromLocal(id, name);
+      toast.success(
+        res?.message ||
+          `Researcher ${name || id} and all their assigned publications have been removed from the system.`
+      );
       await loadData();
       window.dispatchEvent(new CustomEvent("researchers-updated"));
       window.dispatchEvent(new CustomEvent("faculty-updated"));
       window.dispatchEvent(new CustomEvent("research-records-updated"));
-    } catch (err) {
+    } catch (err: any) {
       console.error("Delete researcher error:", err);
+      toast.error(err?.message || "Failed to remove researcher.");
     }
   };
 
@@ -362,10 +369,19 @@ export function AdminPage() {
 
   const reviewClaim = async (claimId: string, status: "approved" | "rejected") => {
     try {
-      await apiService.reviewClaim(claimId, status);
+      const res: any = await apiService.reviewClaim(claimId, status);
+      toast.success(
+        res?.message ||
+          (status === "approved"
+            ? "Publication claim approved and saved to the repository!"
+            : "Publication claim rejected and removed.")
+      );
       await loadData();
-    } catch (err) {
+      window.dispatchEvent(new CustomEvent("researchers-updated"));
+      window.dispatchEvent(new CustomEvent("research-records-updated"));
+    } catch (err: any) {
       console.error("Review claim error:", err);
+      toast.error(err?.message || "Failed to review publication claim.");
     }
   };
 
@@ -1331,9 +1347,9 @@ export function AdminPage() {
       {/* Delete Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(deleteTarget)}
-        title="Remove Researcher"
-        message={`Are you sure you want to remove researcher ${deleteTarget?.name || deleteTarget?.id}? Their login credentials and profile associations will be deleted.`}
-        confirmText="Remove Researcher"
+        title="Remove Researcher & Assigned Publications"
+        message={`Are you sure you want to remove researcher ${deleteTarget?.name || deleteTarget?.id}? Their login credentials, profile associations, and ALL publications tied to this researcher will be permanently deleted from the repository.`}
+        confirmText="Remove Researcher & Publications"
         cancelText="Cancel"
         variant="danger"
         icon="trash"

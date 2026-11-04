@@ -27,7 +27,7 @@ import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { isPSUPaper, getFacultyList, normalizeTitle } from "../utils/facultyUtils";
-import { getCurrentUser, getResearchRecords, addResearchRecord } from "../utils/researchStore";
+import { getCurrentUser, getResearchRecords, addResearchRecord, type ManagedResearcher } from "../utils/researchStore";
 import { apiService, type ScholarSearchResult, type ApifyTokenUsage } from "../services/api.service";
 import { ApifyTokenManager } from "./ApifyTokenManager";
 import { toast } from "sonner";
@@ -49,6 +49,9 @@ export function SearchEngine() {
   const [showTokenManager, setShowTokenManager] = useState(false);
   const [searchMode, setSearchMode] = useState<"smart" | "author">("smart");
   const [facultyNames, setFacultyNames] = useState<string[]>([]);
+  const [registeredResearchers, setRegisteredResearchers] = useState<ManagedResearcher[]>([]);
+  const [assignedResearcherMap, setAssignedResearcherMap] = useState<Record<string, string>>({});
+  const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
   const [tokenUsage, setTokenUsage] = useState<ApifyTokenUsage | null>(null);
   const [isLoadingTokenUsage, setIsLoadingTokenUsage] = useState(false);
   const [savedPublications, setSavedPublications] = useState<any[]>([]);
@@ -84,7 +87,14 @@ export function SearchEngine() {
 
   const isPublicationAlreadySaved = (title: string): boolean => {
     const norm = normalizeTitle(title);
-    return norm ? savedTitleMap.has(norm) : false;
+    if (!norm) return false;
+    const existing = savedTitleMap.get(norm);
+    return Boolean(existing && (existing.approval_status === "approved" || existing.approvalStatus === "approved"));
+  };
+
+  const getExistingPublicationRecord = (title: string): any | null => {
+    const norm = normalizeTitle(title);
+    return norm ? savedTitleMap.get(norm) || null : null;
   };
 
   useEffect(() => {
@@ -92,8 +102,21 @@ export function SearchEngine() {
     const updateFaculty = async () => {
       try {
         const resList = await apiService.getResearchers().catch(() => []);
-        if (Array.isArray(resList) && resList.length > 0) {
-          const names = resList.filter((r) => r.isFaculty).map((r) => r.name);
+        if (Array.isArray(resList)) {
+          const mapped: ManagedResearcher[] = resList.map((r: any) => ({
+            id: r.id,
+            instructorId: r.instructorId || r.instructor_id || r.id || "",
+            firstName: r.firstName || "",
+            lastName: r.lastName || "",
+            name: r.name || "",
+            department: r.department || "BSIT",
+            isFaculty: r.isFaculty ?? true,
+            email: r.email || "",
+            photoUrl: r.photoUrl || "",
+            scholarUrl: r.scholarUrl || "",
+          }));
+          setRegisteredResearchers(mapped);
+          const names = mapped.filter((r) => r.isFaculty).map((r) => r.name);
           setFacultyNames(names);
           setFacultyCount(names.length);
           return;
@@ -127,9 +150,11 @@ export function SearchEngine() {
     refreshActiveUsage(false);
 
     window.addEventListener("storage", updateFaculty);
+    window.addEventListener("researchers-updated", updateFaculty);
     window.addEventListener("research-records-updated", loadSavedPublications);
     return () => {
       window.removeEventListener("storage", updateFaculty);
+      window.removeEventListener("researchers-updated", updateFaculty);
       window.removeEventListener("research-records-updated", loadSavedPublications);
     };
   }, []);
@@ -265,12 +290,27 @@ export function SearchEngine() {
   };
 
   const handleSavePublication = async (result: ScholarSearchResult) => {
-    if (isPSUPaper(result.authors)) {
-      if (isPublicationAlreadySaved(result.title)) {
-        toast.info(`Publication already exists in repository.`);
-        return;
-      }
+    const selectedInstructorId = assignedResearcherMap[result.id];
+    if (!selectedInstructorId) {
+      toast.error("Please assign this publication to a registered researcher before saving to the repository.");
+      return;
+    }
 
+    const assignedRes = registeredResearchers.find(
+      (r) => r.instructorId === selectedInstructorId || r.id === selectedInstructorId
+    );
+    if (!assignedRes) {
+      toast.error("Selected researcher is not registered in the system.");
+      return;
+    }
+
+    if (isPublicationAlreadySaved(result.title)) {
+      toast.info(`Publication already exists in repository.`);
+      return;
+    }
+
+    setSavingMap((prev) => ({ ...prev, [result.id]: true }));
+    try {
       const newRecord = {
         id: result.id,
         title: result.title,
@@ -281,8 +321,8 @@ export function SearchEngine() {
         abstract: result.abstract,
         url: result.url,
         citedByLink: result.citedByLink,
-        ownerId: currentUser.instructorId || "admin",
-        ownerName: currentUser.name,
+        ownerId: assignedRes.instructorId,
+        ownerName: assignedRes.name,
         source: "scraped" as const,
         approvalStatus: "approved" as const,
         researchStatus: "Published" as const,
@@ -290,58 +330,80 @@ export function SearchEngine() {
         createdAt: new Date().toISOString(),
       };
 
-      addResearchRecord(newRecord);
-      const res: any = await apiService.createPublication(newRecord).catch(() => null);
+      const res: any = await apiService.createPublication(newRecord);
+      addResearchRecord(newRecord, false);
+
       if (res?.isDuplicate) {
-        toast.info(`Publication already exists in repository.`);
+        toast.info(res.message || `Publication already exists in repository.`);
       } else {
-        toast.success(`✓ "${result.title}" permanently added to repository!`);
+        toast.success(`✓ "${result.title}" assigned to ${assignedRes.name} and saved to repository!`);
       }
       await loadSavedPublications();
       window.dispatchEvent(new CustomEvent("research-records-updated"));
-    } else {
-      toast.error(`Cannot save Non-PSU paper (no faculty authors).`);
+      window.dispatchEvent(new CustomEvent("researchers-updated"));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save publication to repository.");
+    } finally {
+      setSavingMap((prev) => ({ ...prev, [result.id]: false }));
     }
   };
 
   const handleClaimPublication = async (result: ScholarSearchResult) => {
-    if (isPublicationAlreadySaved(result.title)) {
-      const existing = savedTitleMap.get(normalizeTitle(result.title));
-      if (existing?.owner_id === currentUser.instructorId || existing?.ownerId === currentUser.instructorId) {
-        toast.info(`You have already claimed this publication.`);
-        return;
+    const selectedInstructorId = assignedResearcherMap[result.id];
+    if (!selectedInstructorId) {
+      toast.error("Please assign this publication to your researcher profile before claiming.");
+      return;
+    }
+
+    const existing = getExistingPublicationRecord(result.title);
+    if (existing && (existing.approval_status === "approved" || existing.approvalStatus === "approved")) {
+      toast.info(`Publication is already saved in the repository (assigned to ${existing.owner_name || existing.ownerName}).`);
+      return;
+    }
+    if (existing && (existing.approval_status === "pending" || existing.approvalStatus === "pending")) {
+      toast.info(`This publication is already pending approval from the System Administrator.`);
+      return;
+    }
+
+    setSavingMap((prev) => ({ ...prev, [result.id]: true }));
+    try {
+      const claimRecord = {
+        id: `claim-${result.id}`,
+        title: result.title,
+        authors: result.authors,
+        journal: result.journal,
+        year: result.year,
+        citations: result.citations,
+        abstract: result.abstract,
+        url: result.url,
+        citedByLink: result.citedByLink,
+        ownerId: currentUser.instructorId || selectedInstructorId,
+        ownerName: currentUser.name,
+        source: "claim" as const,
+        approvalStatus: "pending" as const,
+        researchStatus: "Published" as const,
+        isPublic: true,
+        createdAt: new Date().toISOString(),
+      };
+
+      const res: any = await apiService.createPublication(claimRecord);
+      addResearchRecord(claimRecord, false);
+
+      if (res?.isDuplicate) {
+        toast.info(res.message || `Publication already exists in repository.`);
+      } else {
+        toast.success(
+          `✓ Claim submitted! "${result.title}" assigned to ${currentUser.name} and awaiting approval from Sir Rodelio M. Garin.`
+        );
       }
+      setClaimedIds((ids) => [...ids, result.id]);
+      await loadSavedPublications();
+      window.dispatchEvent(new CustomEvent("research-records-updated"));
+    } catch (err: any) {
+      toast.error(err.message || "Failed to submit publication claim.");
+    } finally {
+      setSavingMap((prev) => ({ ...prev, [result.id]: false }));
     }
-
-    const claimRecord = {
-      id: `claim-${result.id}`,
-      title: result.title,
-      authors: result.authors,
-      journal: result.journal,
-      year: result.year,
-      citations: result.citations,
-      abstract: result.abstract,
-      url: result.url,
-      citedByLink: result.citedByLink,
-      ownerId: currentUser.instructorId || "",
-      ownerName: currentUser.name,
-      source: "claim" as const,
-      approvalStatus: "pending" as const,
-      researchStatus: "Published" as const,
-      isPublic: true,
-      createdAt: new Date().toISOString(),
-    };
-
-    addResearchRecord(claimRecord);
-    const res: any = await apiService.createPublication(claimRecord).catch(() => null);
-    if (res?.isDuplicate) {
-      toast.info(`Publication already exists in repository; authorship linked.`);
-    } else {
-      toast.success(`✓ Claim submitted for "${result.title}"!`);
-    }
-    setClaimedIds((ids) => [...ids, result.id]);
-    await loadSavedPublications();
-    window.dispatchEvent(new CustomEvent("research-records-updated"));
   };
 
   return (
@@ -547,117 +609,227 @@ export function SearchEngine() {
         <div className="space-y-3">
           {searchResults.map((result) => {
             const isPSU = isPSUPaper(result.authors);
-            const isSaved = isPublicationAlreadySaved(result.title);
-            const isClaimed = claimedIds.includes(result.id);
+            const existingRecord = getExistingPublicationRecord(result.title);
+            const isSaved = Boolean(
+              existingRecord &&
+                (existingRecord.approval_status === "approved" || existingRecord.approvalStatus === "approved")
+            );
+            const isClaimed = Boolean(
+              (existingRecord &&
+                (existingRecord.approval_status === "pending" || existingRecord.approvalStatus === "pending")) ||
+                claimedIds.includes(result.id)
+            );
+            const assignedOwnerName =
+              existingRecord?.owner_name ||
+              existingRecord?.ownerName ||
+              (isClaimed ? currentUser.name : "");
+            const selectedResearcherId = assignedResearcherMap[result.id] || "";
+            const isSavingThis = Boolean(savingMap[result.id]);
 
             return (
               <Card
                 key={result.id}
                 className="bg-card border-border/70 shadow-2xs hover:border-brand/40 transition-colors p-4 sm:p-5"
               >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm sm:text-base font-semibold text-foreground leading-snug">
-                        {result.url ? (
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm sm:text-base font-semibold text-foreground leading-snug">
+                          {result.url ? (
+                            <a
+                              href={result.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="hover:text-brand hover:underline inline-flex items-center gap-1.5"
+                            >
+                              <span>{result.title}</span>
+                              <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
+                            </a>
+                          ) : (
+                            result.title
+                          )}
+                        </h3>
+
+                        {result.pdfUrl && result.pdfUrl !== result.url && (
                           <a
-                            href={result.url}
+                            href={result.pdfUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="hover:text-brand hover:underline inline-flex items-center gap-1.5"
+                            className="text-[11px] px-2 py-0.5 rounded-md bg-destructive-soft text-destructive font-semibold hover:bg-destructive/20 transition-colors inline-flex items-center gap-1"
+                            title="Direct PDF Full Text"
                           >
-                            <span>{result.title}</span>
-                            <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
+                            <FileText className="w-3 h-3" />
+                            <span>PDF</span>
                           </a>
-                        ) : (
-                          result.title
                         )}
-                      </h3>
 
-                      {result.pdfUrl && result.pdfUrl !== result.url && (
-                        <a
-                          href={result.pdfUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] px-2 py-0.5 rounded-md bg-destructive-soft text-destructive font-semibold hover:bg-destructive/20 transition-colors inline-flex items-center gap-1"
-                          title="Direct PDF Full Text"
-                        >
-                          <FileText className="w-3 h-3" />
-                          <span>PDF</span>
-                        </a>
-                      )}
+                        <StatusBadge
+                          status={isPSU ? "verified" : "unpublished"}
+                          label={isPSU ? "PSU Faculty Paper" : "External / Non-PSU"}
+                        />
 
-                      <StatusBadge
-                        status={isPSU ? "verified" : "unpublished"}
-                        label={isPSU ? "PSU Faculty Paper" : "External / Non-PSU"}
-                      />
+                        {isSaved && (
+                          <StatusBadge
+                            status="approved"
+                            label={
+                              assignedOwnerName
+                                ? `In Repository • Assigned to ${assignedOwnerName}`
+                                : "In Repository"
+                            }
+                          />
+                        )}
+                        {!isSaved && isClaimed && (
+                          <StatusBadge
+                            status="pending"
+                            label={`Pending Admin Approval (Sir Garin) • Assigned to ${assignedOwnerName || currentUser.name}`}
+                          />
+                        )}
+                      </div>
 
-                      {isSaved && (
-                        <StatusBadge status="approved" label="In Repository" />
-                      )}
-                      {isClaimed && (
-                        <StatusBadge status="pending" label="Claim Submitted" />
-                      )}
-                    </div>
-
-                    <p className="text-xs text-muted-foreground">
-                      Authors: <span className="text-foreground">{result.authors.join(", ")}</span>
-                    </p>
-
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
-                      <span>Year: {result.year}</span>
-                      <span>Journal: {result.journal || "Academic Source"}</span>
-                      {result.citations > 0 && (
-                        <span className="text-brand font-semibold">
-                          Citations: {result.citations}
-                        </span>
-                      )}
-                    </div>
-
-                    {result.abstract && (
-                      <p className="text-xs text-muted-foreground pt-1 line-clamp-2 leading-relaxed">
-                        {result.abstract}
+                      <p className="text-xs text-muted-foreground">
+                        Authors: <span className="text-foreground">{result.authors.join(", ")}</span>
                       </p>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-start w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border/50 flex-wrap sm:flex-nowrap justify-start sm:justify-end">
-                    {/* Save to Repository (for PSU papers) */}
-                    {isPSU && !isSaved && !isInstructor && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleSavePublication(result)}
-                        className="h-8 text-xs bg-success hover:bg-success/90 text-white gap-1.5"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>Save to Repository</span>
-                      </Button>
-                    )}
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono">
+                        <span>Year: {result.year}</span>
+                        <span>Journal: {result.journal || "Academic Source"}</span>
+                        {result.citations > 0 && (
+                          <span className="text-brand font-semibold">
+                            Citations: {result.citations}
+                          </span>
+                        )}
+                      </div>
 
-                    {/* Claim Paper (for instructors) */}
-                    {isInstructor && !isClaimed && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleClaimPublication(result)}
-                        className="h-8 text-xs bg-brand hover:bg-brand/90 text-white gap-1.5"
-                      >
-                        <Hand className="w-3.5 h-3.5" />
-                        <span>Claim Authorship</span>
-                      </Button>
-                    )}
+                      {result.abstract && (
+                        <p className="text-xs text-muted-foreground pt-1 line-clamp-2 leading-relaxed">
+                          {result.abstract}
+                        </p>
+                      )}
+                    </div>
 
                     {result.citedByLink && (
-                      <a
-                        href={result.citedByLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="h-8 px-2.5 rounded-lg border border-border/70 hover:bg-muted/50 text-xs text-muted-foreground inline-flex items-center gap-1 transition-colors"
-                      >
-                        <Quote className="w-3 h-3 text-brand" />
-                        <span>Cited by {result.citations}</span>
-                      </a>
+                      <div className="shrink-0 self-start">
+                        <a
+                          href={result.citedByLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="h-8 px-2.5 rounded-lg border border-border/70 hover:bg-muted/50 text-xs text-muted-foreground inline-flex items-center gap-1 transition-colors"
+                        >
+                          <Quote className="w-3 h-3 text-brand" />
+                          <span>Cited by {result.citations}</span>
+                        </a>
+                      </div>
                     )}
                   </div>
+
+                  {/* Researcher Assignment & Save / Claim Bar */}
+                  {!isSaved && !isClaimed && (
+                    <div className="pt-3 mt-1 border-t border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <User className="w-3.5 h-3.5 text-brand shrink-0" />
+                        <span className="text-xs font-medium text-muted-foreground shrink-0">
+                          Assign Researcher:
+                        </span>
+
+                        {!isInstructor ? (
+                          <select
+                            value={selectedResearcherId}
+                            onChange={(e) =>
+                              setAssignedResearcherMap((prev) => ({
+                                ...prev,
+                                [result.id]: e.target.value,
+                              }))
+                            }
+                            aria-label="Assign publication to a registered researcher"
+                            className="h-8 px-2.5 rounded-lg border border-border/80 bg-background text-xs text-foreground flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-brand/40"
+                          >
+                            <option value="">
+                              {registeredResearchers.length === 0
+                                ? "-- No Registered Researchers in System --"
+                                : "-- Select Registered Researcher (Required) --"}
+                            </option>
+                            {registeredResearchers.map((r) => (
+                              <option key={r.instructorId} value={r.instructorId}>
+                                {r.name} ({r.instructorId} • {r.department})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <select
+                            value={selectedResearcherId}
+                            onChange={(e) =>
+                              setAssignedResearcherMap((prev) => ({
+                                ...prev,
+                                [result.id]: e.target.value,
+                              }))
+                            }
+                            aria-label="Assign publication to yourself"
+                            className="h-8 px-2.5 rounded-lg border border-border/80 bg-background text-xs text-foreground flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-brand/40"
+                          >
+                            <option value="">-- Assign to Myself (Required) --</option>
+                            <option value={currentUser.instructorId || "self"}>
+                              {currentUser.name} ({currentUser.instructorId || "Researcher"}) — Assign to Myself
+                            </option>
+                          </select>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 justify-end">
+                        {/* Save to Repository (Admin: requires assigned registered researcher) */}
+                        {!isInstructor && (
+                          <Button
+                            size="sm"
+                            disabled={!selectedResearcherId || isSavingThis}
+                            onClick={() => handleSavePublication(result)}
+                            title={
+                              !selectedResearcherId
+                                ? "You must assign this publication to a registered researcher first"
+                                : "Save publication tied to the assigned researcher"
+                            }
+                            className="h-8 text-xs bg-success hover:bg-success/90 disabled:opacity-50 text-white gap-1.5"
+                          >
+                            {isSavingThis ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Save className="w-3.5 h-3.5" />
+                            )}
+                            <span>
+                              {selectedResearcherId
+                                ? "Save to Repository"
+                                : "Assign Researcher to Save"}
+                            </span>
+                          </Button>
+                        )}
+
+                        {/* Claim Paper (Researcher: assigns to self & requires Admin Sir Garin approval) */}
+                        {isInstructor && (
+                          <Button
+                            size="sm"
+                            disabled={!selectedResearcherId || isSavingThis}
+                            onClick={() => handleClaimPublication(result)}
+                            title={
+                              !selectedResearcherId
+                                ? "Assign this publication to yourself first before claiming"
+                                : "Submit claim to Sir Rodelio M. Garin for repository approval"
+                            }
+                            className="h-8 text-xs bg-brand hover:bg-brand/90 disabled:opacity-50 text-white gap-1.5"
+                          >
+                            {isSavingThis ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Hand className="w-3.5 h-3.5" />
+                            )}
+                            <span>
+                              {selectedResearcherId
+                                ? "Claim & Request Admin Approval"
+                                : "Assign to Self to Claim"}
+                            </span>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Card>
             );

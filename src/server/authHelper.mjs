@@ -4,16 +4,26 @@ import crypto from 'node:crypto';
  * Check if a publication belongs to a researcher (by instructorId, user id, full name, or surname/initial in authors)
  */
 export function matchesResearcher(p, r) {
-  if (!r) return false;
-  const pOwnerId = (p.owner_id || '').trim().toLowerCase();
-  const rInstId = (r.instructor_id || '').trim().toLowerCase();
+  if (!r || !p) return false;
+  const pOwnerId = (p.owner_id || p.ownerId || '').trim().toLowerCase();
+  const rInstId = (r.instructor_id || r.instructorId || '').trim().toLowerCase();
   const rId = (r.id || '').trim().toLowerCase();
-  if (pOwnerId && (pOwnerId === rInstId || pOwnerId === rId)) return true;
+  const rUserId = (r.user_id || r.userId || '').trim().toLowerCase();
+
+  // If the publication has an explicit researcher owner_id assigned (not generic 'admin'/'instructor'),
+  // strictly tie the publication to that assigned researcher.
+  if (pOwnerId && pOwnerId !== 'admin' && pOwnerId !== 'instructor') {
+    return (
+      pOwnerId === rInstId ||
+      pOwnerId === rId ||
+      (Boolean(rUserId) && pOwnerId === rUserId)
+    );
+  }
 
   const rName = (r.name || '').trim().toLowerCase();
-  const rFirst = (r.first_name || '').trim().toLowerCase();
-  const rLast = (r.last_name || '').trim().toLowerCase();
-  const pOwnerName = (p.owner_name || '').trim().toLowerCase();
+  const rFirst = (r.first_name || r.firstName || '').trim().toLowerCase();
+  const rLast = (r.last_name || r.lastName || '').trim().toLowerCase();
+  const pOwnerName = (p.owner_name || p.ownerName || '').trim().toLowerCase();
 
   if (pOwnerName) {
     if (pOwnerName === rName) return true;
@@ -248,13 +258,13 @@ export function sanitizePublicationInput(data, caller, isCreate = false) {
     abstract: data.abstract || '',
     url: data.url || null,
     impactScore: 0.0,
-    ownerId: caller?.instructorId || caller?.id || 'instructor',
-    ownerName: caller?.name || 'Faculty Researcher',
-    source: isCreate ? 'manual' : (data.source || 'manual'),
-    approvalStatus: 'pending', // Strictly enforced! Non-admins cannot approve
+    ownerId: caller?.instructorId || data.ownerId || caller?.id || '',
+    ownerName: caller?.name || data.ownerName || 'Faculty Researcher',
+    source: data.source === 'claim' ? 'claim' : (isCreate ? 'manual' : (data.source || 'manual')),
+    approvalStatus: 'pending', // Strictly enforced! Non-admins cannot self-approve
     researchStatus: ['In Progress', 'Unpublished', 'Published'].includes(data.researchStatus)
       ? data.researchStatus
-      : 'In Progress',
+      : 'Published',
     isPublic: data.isPublic !== undefined ? Boolean(data.isPublic) : true,
     fileName: data.fileName || null,
     citedByLink: data.citedByLink || null,

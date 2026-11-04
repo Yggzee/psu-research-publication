@@ -117,14 +117,21 @@ export function filterFacultyResearchers<T extends { name: string }>(
 export function filterFacultyPublications<T extends { authors: string[] }>(
   publications: T[]
 ): T[] {
+  // Exclude pending or rejected claims from the main repository view
+  const approvedOnly = publications.filter((pub) => {
+    const status = ((pub as any).approval_status || (pub as any).approvalStatus || "approved").toLowerCase();
+    return status === "approved";
+  });
+
   const facultyList = getFacultyList();
-  // If faculty list is empty, show all publications (default behavior)
+  // If faculty list is empty, show all approved publications
   if (facultyList.length === 0) {
-    return publications;
+    return approvedOnly;
   }
-  // Include publications that have a registered faculty author or are already marked approved
-  return publications.filter(
+  // Include approved publications that are assigned to a researcher or have a registered faculty author
+  return approvedOnly.filter(
     (pub) =>
+      Boolean((pub as any).owner_id || (pub as any).ownerId) ||
       hasFacultyAuthor(pub.authors) ||
       (pub as any).approvalStatus === 'approved' ||
       (pub as any).approval_status === 'approved'
@@ -205,11 +212,15 @@ export function normalizeTitle(t?: string | null): string {
  * Matches by owner ID, owner name, or academic author patterns
  */
 export function matchesResearcher(p: any, r: any): boolean {
-  if (!r) return false;
+  if (!r || !p) return false;
   const pOwnerId = (p.owner_id || p.ownerId || "").trim().toLowerCase();
   const rInstId = (r.instructor_id || r.instructorId || "").trim().toLowerCase();
   const rId = (r.id || "").trim().toLowerCase();
-  if (pOwnerId && (pOwnerId === rInstId || pOwnerId === rId)) return true;
+
+  // Strict Researcher Assignment check: if publication has an explicit researcher owner_id
+  if (pOwnerId && pOwnerId !== "admin" && pOwnerId !== "instructor") {
+    return Boolean((rInstId && pOwnerId === rInstId) || (rId && pOwnerId === rId));
+  }
 
   const rName = (r.name || `${r.first_name || r.firstName || ""} ${r.last_name || r.lastName || ""}`).trim().toLowerCase();
   const rFirst = (r.first_name || r.firstName || r.name?.split(" ")[0] || "").trim().toLowerCase();

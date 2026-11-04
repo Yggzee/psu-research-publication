@@ -55,7 +55,12 @@ export function ReportsPage() {
 
       if (stats) setDashboardData(stats);
       if (Array.isArray(researchers)) setResearchersList(researchers);
-      if (Array.isArray(pubs)) setPublicationsList(pubs);
+      if (Array.isArray(pubs)) {
+        const approvedPubs = pubs.filter(
+          (p: any) => ((p.approval_status || p.approvalStatus || "approved") as string).toLowerCase() === "approved"
+        );
+        setPublicationsList(approvedPubs);
+      }
     } catch (err) {
       console.warn("Failed to load reports data:", err);
     } finally {
@@ -65,6 +70,15 @@ export function ReportsPage() {
 
   useEffect(() => {
     loadData();
+    const onUpdate = () => loadData();
+    window.addEventListener("research-records-updated", onUpdate);
+    window.addEventListener("researchers-updated", onUpdate);
+    window.addEventListener("faculty-updated", onUpdate);
+    return () => {
+      window.removeEventListener("research-records-updated", onUpdate);
+      window.removeEventListener("researchers-updated", onUpdate);
+      window.removeEventListener("faculty-updated", onUpdate);
+    };
   }, []);
 
   // Calculate metrics from real data
