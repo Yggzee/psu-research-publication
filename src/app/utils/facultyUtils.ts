@@ -256,3 +256,29 @@ export function matchesResearcher(p: any, r: any): boolean {
 
 export const publicationMatchesResearcher = matchesResearcher;
 
+/**
+ * Find a matching registered researcher profile for an author string
+ */
+export function findAuthorFacultyProfile(authorName: string, researchers: any[]): any | undefined {
+  if (!authorName || !Array.isArray(researchers)) return undefined;
+  const cleanAuthor = authorName.toLowerCase().trim();
+  if (!cleanAuthor) return undefined;
+
+  return researchers.find((r) => {
+    const rName = (r.name || `${r.first_name || r.firstName || ""} ${r.last_name || r.lastName || ""}`).toLowerCase().trim();
+    if (!rName) return false;
+    if (cleanAuthor === rName || cleanAuthor.includes(rName) || rName.includes(cleanAuthor)) return true;
+
+    const parts = rName.split(/\s+/).filter(Boolean);
+    const lastName = parts[parts.length - 1];
+    if (lastName && lastName.length >= 3 && cleanAuthor.includes(lastName)) {
+      const firstInitial = parts[0]?.[0];
+      if (!firstInitial || cleanAuthor.includes(firstInitial) || cleanAuthor.replace(/[^a-z]/g, "") === lastName) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+

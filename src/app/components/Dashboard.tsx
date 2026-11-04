@@ -37,7 +37,7 @@ export function Dashboard() {
   const isDark = resolvedTheme === "dark";
 
   const [yearRange, setYearRange] = useState(() => {
-    const lastYears = getLastNYears(5);
+    const lastYears = getLastNYears(10);
     return { start: lastYears[0], end: lastYears[lastYears.length - 1] };
   });
   const [outputMetric, setOutputMetric] = useState<OutputMetric>("citations");
@@ -82,12 +82,12 @@ export function Dashboard() {
     const row: any = { year, key: `metric-${year}` };
     DEPARTMENTS.forEach((dept) => {
       const match = dashboardData.deptYearStats.find(
-        (s) => s.year === year && s.department === dept
+        (s) => Number(s.year) === Number(year) && String(s.department || "").toUpperCase() === dept
       );
       row[dept] = match
         ? outputMetric === "citations"
-          ? match.citations
-          : match.publications
+          ? Number(match.citations) || 0
+          : Number(match.publications) || 0
         : 0;
     });
     return row;
@@ -206,6 +206,52 @@ export function Dashboard() {
               >
                 <BarChart3 className="w-3.5 h-3.5" />
                 <span>Publications</span>
+              </button>
+            </div>
+
+            {/* Quick Window Presets */}
+            <div className="flex items-center p-0.5 rounded-lg bg-muted/50 border border-border/70 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  const yrs = getLastNYears(5);
+                  setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                  yearRange.end - yearRange.start === 4
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                5Y
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const yrs = getLastNYears(10);
+                  setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                  yearRange.end - yearRange.start === 9
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                10Y
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const currentYr = new Date().getFullYear();
+                  setYearRange({ start: 2015, end: currentYr });
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                  yearRange.start === 2015 && yearRange.end - yearRange.start > 9
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All
               </button>
             </div>
 

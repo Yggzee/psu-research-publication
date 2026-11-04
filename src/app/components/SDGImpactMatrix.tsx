@@ -611,11 +611,6 @@ export function SDGImpactMatrix() {
                               <Quote className="w-3 h-3 text-brand" />
                               {paper.citations} citations
                             </Badge>
-                            {(paper.jc3Points !== undefined || paper.nbc461Points !== undefined) && (
-                              <Badge variant="secondary" className="text-xs font-mono">
-                                JC3: {paper.jc3Points || (paper.nbc461Points ? (paper.nbc461Points >= 25 ? 50 : 30) : 10)} pts
-                              </Badge>
-                            )}
                           </div>
                         </div>
 

@@ -171,8 +171,16 @@ export function AdminPage() {
         department: found.department || "BSIT",
         email: found.email || "rodeliogarin@gmail.com",
         scholarUrl: found.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-        totalPublications: found.totalPublications || 0,
-        totalCitations: found.totalCitations || 0,
+        totalPublications:
+          typeof found.totalPublications === "number"
+            ? found.totalPublications
+            : Array.isArray((found as any).totalPublications)
+            ? (found as any).totalPublications.length
+            : Number(found.totalPublications) || 0,
+        totalCitations:
+          typeof found.totalCitations === "number"
+            ? found.totalCitations
+            : Number(found.totalCitations) || 0,
         photoUrl: found.photoUrl || "https://scholar.google.com/citations/images/avatar_scholar_128.png",
       };
     }
@@ -215,8 +223,20 @@ export function AdminPage() {
             photoUrl: r.photoUrl || "",
             scholarUrl: r.scholarUrl || "",
             googleScholarId: r.googleScholarId || "",
-            totalPublications: r.publications || r.totalPublications || 0,
-            totalCitations: r.citations || r.totalCitations || 0,
+            totalPublications:
+              typeof r.totalPublications === "number"
+                ? r.totalPublications
+                : Array.isArray(r.publications)
+                ? r.publications.length
+                : typeof r.publications === "number"
+                ? r.publications
+                : 0,
+            totalCitations:
+              typeof r.totalCitations === "number"
+                ? r.totalCitations
+                : typeof r.citations === "number"
+                ? r.citations
+                : 0,
           };
         });
         setResearchers(mapped);
@@ -634,7 +654,7 @@ export function AdminPage() {
                   </span>
                   <span>•</span>
                   <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
-                    DBM-CHED JC3 Evaluator
+                    Campus Research Coordinator
                   </span>
                 </div>
               </div>
@@ -1228,9 +1248,9 @@ export function AdminPage() {
                   <span>PSU-002 • Department of Information Technology (BSIT)</span>
                 </div>
                 <div>
-                  <span className="block text-[11px] font-semibold text-foreground">Evaluation Standard</span>
+                  <span className="block text-[11px] font-semibold text-foreground">Reporting Standard</span>
                   <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    DBM-CHED Joint Circular No. 3 (JC3) KRA II
+                    PSU RDO Target Apportionments & Citation Matrix
                   </span>
                 </div>
                 <div>

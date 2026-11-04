@@ -380,7 +380,7 @@ export function InstructorPublicationsPage() {
                           className="h-6 text-[11px] px-2 gap-1 text-ai hover:bg-ai-soft"
                         >
                           <Sparkles className="h-3 w-3" />
-                          <span>Inspect & JC3 Points</span>
+                          <span>Inspect & SDG Check</span>
                         </Button>
                       </div>
                     </div>

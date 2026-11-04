@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FileBarChart,
   Download,
@@ -11,15 +11,23 @@ import {
   RefreshCw,
   Printer,
   ChevronDown,
+  FolderArchive,
+  FolderOpen,
+  CheckSquare,
+  Square,
+  Search,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { apiService, type DashboardStatsResponse } from "../services/api.service";
 import { PageHeader, StatCard, PageTabs, StatusBadge, EmptyState } from "./common";
-import { exportResearchMatrixToExcel } from "../utils/excelExportUtils";
+import { exportPerResearcherReportsByDepartment } from "../utils/excelExportUtils";
+import { matchesResearcher } from "../utils/facultyUtils";
 
 type ReportType = "summary" | "researcher" | "department" | "yearly" | "accreditation";
 
@@ -31,6 +39,11 @@ export function ReportsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgressText, setExportProgressText] = useState<string | null>(null);
+
+  // Multi-researcher selection state for per-researcher Excel export
+  const [selectedResearcherIds, setSelectedResearcherIds] = useState<string[]>([]);
+  const [showResearcherPicker, setShowResearcherPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
 
   // Database state
   const [researchersList, setResearchersList] = useState<any[]>([]);
@@ -54,7 +67,16 @@ export function ReportsPage() {
       ]);
 
       if (stats) setDashboardData(stats);
-      if (Array.isArray(researchers)) setResearchersList(researchers);
+      if (Array.isArray(researchers)) {
+        setResearchersList(researchers);
+        setSelectedResearcherIds((prev) =>
+          prev.length > 0
+            ? prev.filter((id) =>
+                researchers.some((r: any) => (r.instructorId || r.id) === id)
+              )
+            : researchers.map((r: any) => r.instructorId || r.id)
+        );
+      }
       if (Array.isArray(pubs)) {
         const approvedPubs = pubs.filter(
           (p: any) => ((p.approval_status || p.approvalStatus || "approved") as string).toLowerCase() === "approved"
@@ -113,55 +135,137 @@ export function ReportsPage() {
     deptStats[dept].publications += r.totalPublications || 0;
   });
 
-  const handleDownload = async () => {
-    setIsExporting(true);
-    setExportProgressText("Preparing publications for export...");
+  // Researchers filtered by department & search inside the export picker
+  const pickerFilteredResearchers = useMemo(() => {
+    return researchersList.filter((r: any) => {
+      const matchesDept = exportDepartment === "all" || r.department === exportDepartment;
+      const q = pickerSearch.trim().toLowerCase();
+      const matchesQuery =
+        !q ||
+        (r.name || "").toLowerCase().includes(q) ||
+        (r.instructorId || "").toLowerCase().includes(q) ||
+        (r.department || "").toLowerCase().includes(q);
+      return matchesDept && matchesQuery;
+    });
+  }, [researchersList, exportDepartment, pickerSearch]);
 
-    // Filter publications to be exported
-    const filteredToExport = publicationsList
-      .filter((pub: any) => exportYear === "all" || pub.year?.toString() === exportYear)
-      .filter((pub: any) => {
-        if (exportDepartment === "all") return true;
-        const researcher = researchersList.find(
-          (r: any) => r.instructorId === pub.owner_id || r.instructorId === pub.ownerId
-        );
-        return researcher?.department === exportDepartment;
-      });
-
-    // Check publications that need citing papers fetched from server
-    const needsCitingFetch = filteredToExport.filter(
-      (p: any) => Number(p.citations) > 0 && (!p.citingPapers || p.citingPapers.length < Number(p.citations))
+  const selectedResearchersObjects = useMemo(() => {
+    return researchersList.filter((r: any) =>
+      selectedResearcherIds.includes(r.instructorId || r.id)
     );
+  }, [researchersList, selectedResearcherIds]);
 
-    if (needsCitingFetch.length > 0) {
-      for (let i = 0; i < needsCitingFetch.length; i++) {
-        const targetPub = needsCitingFetch[i];
-        setExportProgressText(`Fetching complete citation links (${i + 1} of ${needsCitingFetch.length})...`);
-        try {
-          const detailed = await apiService.getPublicationById(targetPub.id);
-          if (detailed) {
-            targetPub.citingPapers = (detailed as any).citingPapers || [];
-            if ((detailed as any).citedByLink) targetPub.citedByLink = (detailed as any).citedByLink;
-          }
-        } catch (e) {
-          console.warn("Could not fetch detailed citations for pub:", targetPub.id, e);
-        }
-      }
+  const selectedDepartmentsPreview = useMemo(() => {
+    const depts = new Set<string>();
+    selectedResearchersObjects.forEach((r: any) => {
+      depts.add(r.department || "Unassigned");
+    });
+    return Array.from(depts);
+  }, [selectedResearchersObjects]);
+
+  const toggleResearcherSelection = (id: string) => {
+    setSelectedResearcherIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllVisibleResearchers = () => {
+    const visibleIds = pickerFilteredResearchers.map((r: any) => r.instructorId || r.id);
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedResearcherIds.includes(id));
+    if (allSelected) {
+      setSelectedResearcherIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      setSelectedResearcherIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const handleDepartmentScopeChange = (dept: string) => {
+    setExportDepartment(dept);
+    if (dept === "all") {
+      setSelectedResearcherIds(researchersList.map((r: any) => r.instructorId || r.id));
+    } else {
+      setSelectedResearcherIds(
+        researchersList
+          .filter((r: any) => r.department === dept)
+          .map((r: any) => r.instructorId || r.id)
+      );
+    }
+  };
+
+  const handleDownload = async (mode: "zip" | "direct-folder" = "zip") => {
+    if (selectedResearchersObjects.length === 0) {
+      toast.error("Please select at least one researcher to export.");
+      setShowResearcherPicker(true);
+      return;
     }
 
-    setExportProgressText("Generating styled Excel document with citations & hyperlinks...");
+    setIsExporting(true);
+    setExportProgressText("Preparing publications & citation sheets for selected researchers...");
 
-    exportResearchMatrixToExcel({
-      publications: filteredToExport,
-      researchers: researchersList,
-      exportDepartment,
-      exportYear,
-      departmentOrder,
-      filename: `psu-research-${exportDepartment.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${exportYear}.xlsx`
-    });
+    try {
+      // Find all publications belonging to the selected researchers
+      const targetPubs = publicationsList.filter((pub: any) => {
+        const matchesYear = exportYear === "all" || String(pub.year) === String(exportYear);
+        const belongsToSelected = selectedResearchersObjects.some((r: any) =>
+          matchesResearcher(pub, r)
+        );
+        return matchesYear && belongsToSelected;
+      });
 
-    setIsExporting(false);
-    setExportProgressText(null);
+      // Fetch full citation details & CrossRef metadata (all co-authors, citing authors, journal, vol/issue, ISSN/DOI)
+      const needsDetailFetch = targetPubs.filter(
+        (p: any) =>
+          !p.keywords ||
+          !p.issn_isbn ||
+          String(p.authors || "").includes("…") ||
+          (Number(p.citations) > 0 &&
+            (!p.citingPapers ||
+              p.citingPapers.length < Number(p.citations) ||
+              p.citingPapers.some((cp: any) => !cp.journal)))
+      );
+
+      if (needsDetailFetch.length > 0) {
+        for (let i = 0; i < needsDetailFetch.length; i++) {
+          const targetPub = needsDetailFetch[i];
+          setExportProgressText(
+            `Scraping & enriching full co-authors and citing papers (${i + 1} of ${needsDetailFetch.length})...`
+          );
+          try {
+            const detailed: any = await apiService.getPublicationById(targetPub.id);
+            if (detailed) {
+              Object.assign(targetPub, detailed);
+              targetPub.citingPapers = detailed.citingPapers || [];
+              if (detailed.citedByLink) targetPub.citedByLink = detailed.citedByLink;
+            }
+          } catch (e) {
+            console.warn("Could not fetch detailed citations for pub:", targetPub.id, e);
+          }
+        }
+      }
+
+      setExportProgressText(
+        `Generating ${selectedResearchersObjects.length} researcher Excel file(s) organized into ${selectedDepartmentsPreview.length} department folder(s)...`
+      );
+
+      const res = await exportPerResearcherReportsByDepartment({
+        selectedResearchers: selectedResearchersObjects,
+        publications: publicationsList,
+        exportYear,
+        mode,
+      });
+
+      toast.success(
+        `Exported ${res.exportedFiles} Excel report(s) organized into department folder(s): ${res.departments.join(", ")}`
+      );
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        toast.error(err?.message || "Failed to export Excel reports.");
+      }
+    } finally {
+      setIsExporting(false);
+      setExportProgressText(null);
+    }
   };
 
   const tabs = [
@@ -177,9 +281,9 @@ export function ReportsPage() {
       {/* 1. Page Header */}
       <PageHeader
         title="Institutional Research Reports"
-        description="Accreditation-ready audits, department breakdowns, and exportable citation matrices"
+        description="Official PSU Asingan Publication & Citation Sheets — 1 Excel workbook per researcher organized into Department folders"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -190,10 +294,40 @@ export function ReportsPage() {
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
               <span>Refresh</span>
             </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResearcherPicker((v) => !v)}
+              className="text-xs h-9 gap-1.5 border-brand/30 text-brand hover:bg-brand-soft"
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>
+                Select Researchers ({selectedResearchersObjects.length}/{researchersList.length})
+              </span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition-transform ${showResearcherPicker ? "rotate-180" : ""}`}
+              />
+            </Button>
+
+            {typeof (window as any).showDirectoryPicker === "function" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDownload("direct-folder")}
+                disabled={isExporting || selectedResearchersObjects.length === 0}
+                className="text-xs h-9 gap-1.5"
+                title="Write department folders and Excel files directly into a chosen folder on your PC"
+              >
+                <FolderOpen className="h-3.5 w-3.5 text-amber-600" />
+                <span className="hidden sm:inline">Save to PC Folder</span>
+              </Button>
+            )}
+
             <Button
               size="sm"
-              onClick={handleDownload}
-              disabled={isExporting}
+              onClick={() => handleDownload("zip")}
+              disabled={isExporting || selectedResearchersObjects.length === 0}
               className="text-xs h-9 gap-1.5 bg-brand hover:bg-brand/90 text-white shadow-2xs"
             >
               {isExporting ? (
@@ -203,8 +337,11 @@ export function ReportsPage() {
                 </>
               ) : (
                 <>
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Export Excel</span>
+                  <FolderArchive className="h-3.5 w-3.5" />
+                  <span>
+                    Export {selectedResearchersObjects.length}{" "}
+                    {selectedResearchersObjects.length === 1 ? "Researcher" : "Researchers"} (Dept Folders)
+                  </span>
                 </>
               )}
             </Button>
@@ -212,18 +349,27 @@ export function ReportsPage() {
         }
       />
 
-      {/* 2. Compact Export Filters Strip */}
+      {/* 2. Multi-Researcher & Department Folder Export Strip */}
       <Card className="border-border/60 shadow-xs">
-        <CardContent className="p-3.5">
+        <CardContent className="p-4 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 text-muted-foreground font-medium">
-              <Filter className="w-3.5 h-3.5 text-brand" />
-              <span>Export Scope:</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="w-3.5 h-3.5 text-brand shrink-0" />
+              <span className="font-semibold text-foreground">Per-Researcher Export Scope:</span>
+              <span className="text-muted-foreground">
+                <strong>{selectedResearchersObjects.length}</strong> researcher(s) selected across{" "}
+                <strong>{selectedDepartmentsPreview.length}</strong> department folder(s)
+              </span>
+              {selectedDepartmentsPreview.map((dept) => (
+                <Badge key={dept} variant="secondary" className="text-[10px] font-mono">
+                  📁 {dept}/
+                </Badge>
+              ))}
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap flex-1 sm:justify-end w-full sm:w-auto">
-              <div className="flex-1 sm:flex-initial sm:w-36">
-                <Select value={exportDepartment} onValueChange={setExportDepartment}>
+              <div className="flex-1 sm:flex-initial sm:w-40">
+                <Select value={exportDepartment} onValueChange={handleDepartmentScopeChange}>
                   <SelectTrigger className="h-8 text-xs w-full">
                     <SelectValue placeholder="All Departments" />
                   </SelectTrigger>
@@ -231,7 +377,7 @@ export function ReportsPage() {
                     <SelectItem value="all">All Departments</SelectItem>
                     {departmentOrder.map((dept) => (
                       <SelectItem key={dept} value={dept}>
-                        {dept}
+                        {dept} Only
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -254,11 +400,97 @@ export function ReportsPage() {
                 </Select>
               </div>
 
-              <span className="text-[11px] text-muted-foreground hidden lg:inline">
-                Applies to the generated Excel file
-              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowResearcherPicker((v) => !v)}
+                className="h-8 text-xs text-brand"
+              >
+                {showResearcherPicker ? "Hide Researcher Selector" : "Choose Specific Researchers"}
+              </Button>
             </div>
           </div>
+
+          {/* Collapsible Multi-Researcher Checkbox Selector */}
+          {showResearcherPicker && (
+            <div className="pt-3 border-t border-border/60 space-y-3 animate-in fade-in duration-150">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    placeholder="Filter researchers by name, ID, or department..."
+                    className="pl-8 h-8 text-xs"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllVisibleResearchers}
+                    className="h-7 text-[11px]"
+                  >
+                    Select / Deselect Visible ({pickerFilteredResearchers.length})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedResearcherIds([])}
+                    className="h-7 text-[11px] text-muted-foreground"
+                  >
+                    Clear All
+                  </Button>
+                </div>
+              </div>
+
+              {pickerFilteredResearchers.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-3 text-center">
+                  No registered researchers match the current filter.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-1">
+                  {pickerFilteredResearchers.map((r: any) => {
+                    const rKey = r.instructorId || r.id;
+                    const isChecked = selectedResearcherIds.includes(rKey);
+                    const pubCount = publicationsList.filter((p) => matchesResearcher(p, r)).length;
+
+                    return (
+                      <div
+                        key={rKey}
+                        onClick={() => toggleResearcherSelection(rKey)}
+                        className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 cursor-pointer transition-all ${
+                          isChecked
+                            ? "border-brand bg-brand/5 text-foreground"
+                            : "border-border/60 bg-background hover:bg-muted/40 text-muted-foreground"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          {isChecked ? (
+                            <CheckSquare className="w-4 h-4 text-brand shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-foreground truncate">{r.name}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono truncate">
+                              📁 {r.department || "Unassigned"}/{r.name.replace(/\s+/g, "_")}.xlsx
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+                          {pubCount} {pubCount === 1 ? "pub" : "pubs"}
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -355,8 +587,9 @@ export function ReportsPage() {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-muted/40 border-b border-border/80 text-muted-foreground uppercase tracking-wider text-[11px] font-semibold">
                     <tr>
+                      <th className="py-3 px-4 w-10 text-center">Export</th>
                       <th className="py-3 px-4">Researcher Name</th>
-                      <th className="py-3 px-4">Department</th>
+                      <th className="py-3 px-4">Department Folder</th>
                       <th className="py-3 px-4 text-center">Publications</th>
                       <th className="py-3 px-4 text-center">Citations</th>
                       <th className="py-3 px-4 text-right">Avg Citations/Pub</th>
@@ -364,12 +597,29 @@ export function ReportsPage() {
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {researchersList.map((r: any) => {
+                      const rKey = r.instructorId || r.id;
+                      const isChecked = selectedResearcherIds.includes(rKey);
                       const pubs = r.totalPublications || 0;
                       const cites = r.totalCitations || 0;
                       return (
-                        <tr key={r.id || r.instructorId} className="hover:bg-muted/30 transition-colors">
+                        <tr
+                          key={rKey}
+                          onClick={() => toggleResearcherSelection(rKey)}
+                          className={`hover:bg-muted/30 transition-colors cursor-pointer ${
+                            isChecked ? "bg-brand/5" : ""
+                          }`}
+                        >
+                          <td className="py-3 px-4 text-center">
+                            {isChecked ? (
+                              <CheckSquare className="w-4 h-4 text-brand inline-block" />
+                            ) : (
+                              <Square className="w-4 h-4 text-muted-foreground/60 inline-block" />
+                            )}
+                          </td>
                           <td className="py-3 px-4 font-semibold text-foreground">{r.name}</td>
-                          <td className="py-3 px-4 text-muted-foreground">{r.department || "Faculty"}</td>
+                          <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
+                            📁 {r.department || "Faculty"}/
+                          </td>
                           <td className="py-3 px-4 text-center font-mono font-medium">{pubs}</td>
                           <td className="py-3 px-4 text-center font-mono font-medium">{cites}</td>
                           <td className="py-3 px-4 text-right font-mono text-muted-foreground">
@@ -466,14 +716,20 @@ export function ReportsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {years.map((year) => {
-              const yearPubs = publicationsList.filter((pub: any) => pub.year === year);
-              const yearCitations = yearPubs.reduce((sum: number, pub: any) => sum + (pub.citations || 0), 0);
+              const yearPubs = publicationsList.filter((pub: any) => Number(pub.year) === Number(year));
+              const deptYearMatches = dashboardData.deptYearStats.filter(
+                (s) => Number(s.year) === Number(year)
+              );
+              const yearCitations =
+                deptYearMatches.length > 0
+                  ? deptYearMatches.reduce((sum, s) => sum + (Number(s.citations) || 0), 0)
+                  : yearPubs.reduce((sum: number, pub: any) => sum + (pub.citations || 0), 0);
 
               if (selectedYear !== "all" && selectedYear !== year.toString()) {
                 return null;
               }
 
-              if (yearPubs.length === 0 && selectedYear === "all") {
+              if (yearPubs.length === 0 && yearCitations === 0 && selectedYear === "all") {
                 return null;
               }
 
@@ -481,27 +737,21 @@ export function ReportsPage() {
                 <Card key={year} className="border-border/60 shadow-xs">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm font-semibold">{year} Output</CardTitle>
+                      <CardTitle className="text-sm font-semibold">{year} Output & Impact</CardTitle>
                       <Badge variant="outline" className="font-mono text-[10px]">
                         {year}
                       </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3 pt-1 text-xs">
-                    <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-border/40">
+                    <div className="grid grid-cols-2 gap-2 text-center pt-1 border-t border-border/40">
                       <div>
-                        <p className="text-[10px] text-muted-foreground">Papers</p>
+                        <p className="text-[10px] text-muted-foreground">Papers Published</p>
                         <p className="text-base font-bold font-mono text-foreground">{yearPubs.length}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground">Citations</p>
-                        <p className="text-base font-bold font-mono text-foreground">{yearCitations}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-muted-foreground">Avg/Pub</p>
-                        <p className="text-base font-bold font-mono text-foreground">
-                          {yearPubs.length > 0 ? (yearCitations / yearPubs.length).toFixed(1) : 0}
-                        </p>
+                        <p className="text-[10px] text-muted-foreground">Citations Earned</p>
+                        <p className="text-base font-bold font-mono text-emerald-600">{yearCitations}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -517,16 +767,10 @@ export function ReportsPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-              label="JC3 (KRA II) Points"
-              value={publicationsList
-                .reduce(
-                  (acc, p) =>
-                    acc + (p.jc3_points || p.jc3Points || (p.nbc461_points ? (p.nbc461_points >= 25 ? 50 : p.nbc461_points >= 15 ? 30 : p.nbc461_points >= 10 ? 20 : 10) : (p.journal?.toLowerCase().includes("scopus") ? 50 : 30))),
-                  0
-                )
-                .toFixed(1)}
-              subtitle={`Across ${publicationsList.length} publications`}
-              icon={Award}
+              label="Total Publications"
+              value={publicationsList.length}
+              subtitle="Verified institutional records"
+              icon={FileText}
             />
             <StatCard
               label="Scopus / WoS Papers"
@@ -537,7 +781,7 @@ export function ReportsPage() {
                     (p.journal || "").toLowerCase().includes("scopus")
                 ).length
               }
-              subtitle="50 points base each"
+              subtitle="Internationally Indexed"
               icon={Award}
             />
             <StatCard
@@ -549,7 +793,7 @@ export function ReportsPage() {
                     !(p.journal || "").toLowerCase().includes("scopus")
                 ).length
               }
-              subtitle="30 points base each"
+              subtitle="Peer-Reviewed Journals"
               icon={FileText}
             />
             <StatCard
@@ -564,10 +808,10 @@ export function ReportsPage() {
             <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-border/60">
               <div>
                 <CardTitle className="text-sm font-semibold text-foreground">
-                  Official DBM-CHED JC3 & AACCUP Exhibit Table
+                  Official SUC & AACCUP Exhibit Table
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Institutional portfolio formatted for DBM-CHED JC3 faculty promotion and accreditation audits
+                  Institutional portfolio formatted for university RDO reporting and accreditation audits
                 </CardDescription>
               </div>
               <Button
@@ -589,8 +833,8 @@ export function ReportsPage() {
                     <th className="p-3.5 min-w-[150px]">Authors</th>
                     <th className="p-3.5 min-w-[140px]">Journal Venue & Index</th>
                     <th className="p-3.5 w-20 text-center">Year</th>
+                    <th className="p-3.5 w-24 text-center">Citations</th>
                     <th className="p-3.5 min-w-[110px]">UN SDG Goal</th>
-                    <th className="p-3.5 w-24 text-right">JC3 Points</th>
                     <th className="p-3.5 w-28 text-center">Audit Status</th>
                   </tr>
                 </thead>
@@ -610,12 +854,6 @@ export function ReportsPage() {
                         })()
                       : [];
 
-                    const jc3Pts = pub.jc3_points || pub.jc3Points || (
-                      pub.nbc461_points
-                        ? (pub.nbc461_points >= 25 ? 50 : pub.nbc461_points >= 15 ? 30 : pub.nbc461_points >= 10 ? 20 : 10)
-                        : (pub.journal?.toLowerCase().includes("scopus") ? 50 : 30)
-                    );
-
                     return (
                       <tr key={pub.id} className="hover:bg-muted/30 transition-colors">
                         <td className="p-3.5 font-semibold text-foreground">
@@ -629,13 +867,13 @@ export function ReportsPage() {
                           </span>
                         </td>
                         <td className="p-3.5 text-center font-mono text-muted-foreground">{pub.year}</td>
+                        <td className="p-3.5 text-center font-mono font-semibold text-emerald-600">
+                          {pub.citations || 0}
+                        </td>
                         <td className="p-3.5">
                           <span className="text-emerald-700 dark:text-emerald-400 font-mono text-[11px] font-semibold">
                             {sdgList[0]?.split(":")[0] || "SDG 4"}
                           </span>
-                        </td>
-                        <td className="p-3.5 text-right font-mono font-semibold text-brand">
-                          {jc3Pts} pts
                         </td>
                         <td className="p-3.5 text-center">
                           <StatusBadge status="verified" />

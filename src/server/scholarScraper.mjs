@@ -28,6 +28,216 @@ function hashString(str) {
   return Math.abs(hash).toString(36);
 }
 
+function normalizeForMatch(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getQuarterFromMonth(month) {
+  const m = Number(month);
+  if (!m || m < 1 || m > 12) return 'First';
+  if (m <= 3) return 'First';
+  if (m <= 6) return '2nd';
+  if (m <= 9) return '3rd';
+  return '4th';
+}
+
+function extractKeywordsFromText(title = '', abstract = '') {
+  const stopWords = new Set([
+    'the', 'and', 'for', 'with', 'using', 'from', 'that', 'this', 'into', 'among',
+    'based', 'study', 'analysis', 'towards', 'through', 'effect', 'effects', 'impact',
+    'among', 'their', 'between', 'under', 'over', 'case', 'review', 'approach',
+    'pangasinan', 'state', 'university', 'asingan', 'campus', 'philippines'
+  ]);
+  const combined = `${title} ${abstract}`
+    .replace(/[^a-zA-Z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 4 && !stopWords.has(w.toLowerCase()));
+  const unique = [];
+  const seen = new Set();
+  for (const w of combined) {
+    const low = w.toLowerCase();
+    if (!seen.has(low)) {
+      seen.add(low);
+      unique.push(w);
+    }
+    if (unique.length >= 5) break;
+  }
+  return unique.join(', ');
+}
+
+/**
+ * Enrich a publication or citing paper using CrossRef public metadata API
+ * Retrieves full un-truncated author list (lead + all co-researchers),
+ * journal title, volume/issue/page, ISSN/ISBN/DOI, publication date, and quarter.
+ */
+export async function enrichPaperWithCrossRef(paper) {
+  if (!paper || !paper.title) return paper;
+  try {
+    const cleanTitle = cleanText(paper.title);
+    const normTarget = normalizeForMatch(cleanTitle);
+    if (!normTarget || normTarget.length < 6) return paper;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4500);
+    const url = `https://api.crossref.org/works?query.title=${encodeURIComponent(cleanTitle)}&rows=3`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'PSUResearchTracker/1.0 (mailto:research@psu.edu.ph)',
+        'Accept': 'application/json',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return paper;
+    const data = await res.json();
+    const items = data?.message?.items;
+    if (!Array.isArray(items) || items.length === 0) return paper;
+
+    // Find best matching item by title overlap
+    const targetWords = normTarget.split(' ').filter((w) => w.length > 2);
+    let matchedItem = null;
+    for (const candidate of items) {
+      const candTitle = normalizeForMatch(candidate?.title?.[0] || '');
+      if (!candTitle) continue;
+      if (candTitle === normTarget || candTitle.includes(normTarget) || normTarget.includes(candTitle)) {
+        matchedItem = candidate;
+        break;
+      }
+      const hits = targetWords.filter((w) => candTitle.includes(w)).length;
+      if (targetWords.length > 0 && hits / targetWords.length >= 0.75) {
+        matchedItem = candidate;
+        break;
+      }
+    }
+
+    if (!matchedItem) return paper;
+
+    // 1. Full Authors list (Lead researcher + all co-researchers)
+    if (Array.isArray(matchedItem.author) && matchedItem.author.length > 0) {
+      const fullAuthors = matchedItem.author
+        .map((a) => {
+          const given = (a.given || '').trim();
+          const family = (a.family || '').trim();
+          const name = (a.name || '').trim();
+          return given && family ? `${given} ${family}` : family || given || name;
+        })
+        .filter(Boolean);
+
+      if (fullAuthors.length > 0) {
+        if (Array.isArray(paper.authors)) {
+          paper.authors = fullAuthors;
+        } else {
+          paper.authors = fullAuthors.join(', ');
+        }
+      }
+    }
+
+    // 2. Journal / Venue Title
+    const containerTitle = matchedItem['container-title']?.[0] || matchedItem.publisher || '';
+    if (containerTitle && (!paper.journal || paper.journal === 'Academic Publication' || paper.journal.length < containerTitle.length)) {
+      paper.journal = cleanText(containerTitle);
+    }
+
+    // 3. Volume / Issue / Page No.
+    const vol = matchedItem.volume ? `Vol. ${matchedItem.volume}` : '';
+    const iss = matchedItem.issue ? `No. ${matchedItem.issue}` : '';
+    const page = matchedItem.page ? `pp. ${matchedItem.page}` : matchedItem['article-number'] ? `Art. ${matchedItem['article-number']}` : '';
+    const volIssueParts = [vol, iss, page].filter(Boolean);
+    if (volIssueParts.length > 0 && !paper.volume_issue) {
+      paper.volume_issue = volIssueParts.join(', ');
+    }
+
+    // 4. ISSN / ISBN / DOI
+    const issns = Array.isArray(matchedItem.ISSN) ? matchedItem.ISSN : [];
+    const isbns = Array.isArray(matchedItem.ISBN) ? matchedItem.ISBN : [];
+    const doi = matchedItem.DOI ? String(matchedItem.DOI).trim() : '';
+    if (doi && !paper.doi) {
+      paper.doi = doi;
+    }
+    const issnDoiParts = [];
+    if (issns.length > 0) issnDoiParts.push(`ISSN ${issns.join(' / ')}`);
+    if (isbns.length > 0) issnDoiParts.push(`ISBN ${isbns[0]}`);
+    if (doi) issnDoiParts.push(`DOI: ${doi}`);
+    if (issnDoiParts.length > 0) {
+      paper.issn_isbn = paper.issn_isbn || issnDoiParts.join('\n');
+      paper.doi_issn = paper.doi_issn || (doi ? `https://doi.org/${doi}` : issns[0] ? `ISSN ${issns[0]}` : '');
+    }
+    if (!paper.volume_issue && paper.doi_issn) {
+      paper.volume_issue = paper.doi_issn;
+    }
+
+    // 5. Link fallback to DOI URL if missing or generic scholar search link
+    if (doi && (!paper.link && !paper.url || String(paper.link || paper.url).includes('scholar.google.com/scholar?q='))) {
+      const doiUrl = `https://doi.org/${doi}`;
+      if ('link' in paper) paper.link = doiUrl;
+      if ('url' in paper) paper.url = doiUrl;
+    }
+
+    // 6. Date of Publication & Quarter
+    const dateParts =
+      matchedItem.published?.['date-parts']?.[0] ||
+      matchedItem['published-online']?.['date-parts']?.[0] ||
+      matchedItem['published-print']?.['date-parts']?.[0] ||
+      matchedItem.issued?.['date-parts']?.[0];
+
+    if (Array.isArray(dateParts) && dateParts.length > 0) {
+      const [y, m, d] = dateParts;
+      if (y && !paper.year) paper.year = Number(y);
+      if (y && m && d) {
+        paper.publication_date = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      } else if (y && m) {
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        paper.publication_date = `${monthNames[m - 1] || m}, ${y}`;
+      } else if (y) {
+        paper.publication_date = String(y);
+      }
+      if (m) {
+        paper.quarter = getQuarterFromMonth(m);
+      }
+    }
+
+    // 7. Keywords
+    if (!paper.keywords) {
+      if (Array.isArray(matchedItem.subject) && matchedItem.subject.length > 0) {
+        paper.keywords = matchedItem.subject.join(', ');
+      } else {
+        paper.keywords = extractKeywordsFromText(paper.title, paper.abstract);
+      }
+    }
+  } catch {
+    // Ignore enrichment network timeouts and preserve scraped Google Scholar data
+  }
+  if (!paper.keywords && paper.title) {
+    paper.keywords = extractKeywordsFromText(paper.title, paper.abstract);
+  }
+  if (!paper.quarter) {
+    paper.quarter = 'First';
+  }
+  return paper;
+}
+
+/**
+ * Enrich a batch of papers with bounded concurrency
+ */
+export async function enrichBatchWithCrossRef(papers, concurrency = 4) {
+  if (!Array.isArray(papers) || papers.length === 0) return papers;
+  const queue = [...papers];
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (item) await enrichPaperWithCrossRef(item);
+    }
+  });
+  await Promise.all(workers);
+  return papers;
+}
+
 /**
  * Directly scrapes Google Scholar search results for a given query (1 page / 10 results by default)
  */
@@ -160,6 +370,8 @@ export async function scrapeGoogleScholarDirect(query, pageOrOptions = 0, limit 
     console.warn('[ScholarScraper] Direct search page error:', err.message);
   }
 
+  await enrichBatchWithCrossRef(allResults, 5);
+
   allResults.captchaBlocked = captchaBlocked;
   allResults.hasMore = allResults.length === limit;
   return allResults;
@@ -223,7 +435,16 @@ export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 50) 
 
         const ym = authorSummary.match(/\b(19\d{2}|20\d{2})\b/);
         const year = ym ? parseInt(ym[1], 10) : null;
-        const authorPart = authorSummary.split('-')[0]?.trim() || '';
+        const parts = authorSummary.split(/\s+-\s+/);
+        const authorPart = (parts[0] || '').replace(/…/g, '').trim();
+
+        let journalPart = '';
+        if (parts.length > 1) {
+          journalPart = parts[1].replace(/,?\s*\b(19\d{2}|20\d{2})\b/g, '').trim();
+        }
+        if (!journalPart && parts.length > 2) {
+          journalPart = parts[2].trim();
+        }
 
         let paperUrl = linkMatch ? linkMatch[1].replace(/&amp;/g, '&') : '';
         if (paperUrl.startsWith('/')) {
@@ -236,7 +457,11 @@ export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 50) 
         citingPapers.push({
           title: cleanTitle,
           authors: authorPart || 'Academic Authors',
+          journal: journalPart || 'Academic Journal',
+          volume_issue: '',
           year,
+          quarter: 'First',
+          doi_issn: '',
           link: paperUrl
         });
       }
@@ -245,6 +470,9 @@ export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 50) 
       break;
     }
   }
+
+  // Enrich citing papers with CrossRef so all co-authors, journal, vol/issue, and quarter are populated
+  await enrichBatchWithCrossRef(citingPapers, 5);
 
   return citingPapers;
 }
@@ -370,6 +598,8 @@ export async function scrapeGoogleScholarProfile(profileUrlOrId) {
       abstract: '',
     });
   }
+
+  await enrichBatchWithCrossRef(publications, 5);
 
   return {
     profile: {

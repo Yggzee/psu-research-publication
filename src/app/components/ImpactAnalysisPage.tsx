@@ -36,8 +36,9 @@ export function ImpactAnalysisPage() {
   const isDark = resolvedTheme === "dark";
 
   const [activeTab, setActiveTab] = useState("citations");
+  const [citationMode, setCitationMode] = useState<"annual" | "cumulative">("annual");
   const [yearRange, setYearRange] = useState(() => {
-    const lastYears = getLastNYears(5);
+    const lastYears = getLastNYears(10);
     return { start: lastYears[0], end: lastYears[lastYears.length - 1] };
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -76,12 +77,27 @@ export function ImpactAnalysisPage() {
     chartYears.push(y);
   }
 
+  // Helper to get annual or cumulative citations for a department & year
+  const getDeptCitationsForYear = (dept: string, year: number, mode: "annual" | "cumulative") => {
+    if (mode === "annual") {
+      const match = data.deptYearStats.find(
+        (s) => Number(s.year) === Number(year) && String(s.department || "").toUpperCase() === dept
+      );
+      return match ? Number(match.citations) || 0 : 0;
+    }
+    // Cumulative: sum all citations for this department up to and including `year`
+    return data.deptYearStats
+      .filter(
+        (s) => Number(s.year) <= Number(year) && String(s.department || "").toUpperCase() === dept
+      )
+      .reduce((sum, s) => sum + (Number(s.citations) || 0), 0);
+  };
+
   // Build citation data by year from database records
   const citationDataByYear = chartYears.map((year) => {
     const row: any = { year, key: `impact-cite-${year}` };
     DEPARTMENTS.forEach((dept) => {
-      const match = data.deptYearStats.find((s) => s.year === year && s.department === dept);
-      row[dept] = match ? match.citations : 0;
+      row[dept] = getDeptCitationsForYear(dept, year, citationMode);
     });
     return row;
   });
@@ -90,8 +106,10 @@ export function ImpactAnalysisPage() {
   const publicationDataByYear = chartYears.map((year) => {
     const row: any = { year, key: `impact-pub-${year}` };
     DEPARTMENTS.forEach((dept) => {
-      const match = data.deptYearStats.find((s) => s.year === year && s.department === dept);
-      row[dept] = match ? match.publications : 0;
+      const match = data.deptYearStats.find(
+        (s) => Number(s.year) === Number(year) && String(s.department || "").toUpperCase() === dept
+      );
+      row[dept] = match ? Number(match.publications) || 0 : 0;
     });
     return row;
   });
@@ -157,7 +175,53 @@ export function ImpactAnalysisPage() {
         title="Research Impact Analysis"
         description="Comprehensive metrics, citation velocity, and academic department benchmarks"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Quick Window Presets */}
+            <div className="flex items-center p-0.5 rounded-lg bg-muted/50 border border-border/70 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  const yrs = getLastNYears(5);
+                  setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                  yearRange.end - yearRange.start === 4
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                5Y
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const yrs = getLastNYears(10);
+                  setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                  yearRange.end - yearRange.start === 9
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                10Y
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const currentYr = new Date().getFullYear();
+                  setYearRange({ start: 2015, end: currentYr });
+                }}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                  yearRange.start === 2015 && yearRange.end - yearRange.start > 9
+                    ? "bg-card text-foreground font-semibold shadow-2xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All (2015–{new Date().getFullYear()})
+              </button>
+            </div>
+
             {/* Year Navigator Pill */}
             <div className="flex items-center gap-1 bg-card border border-border/70 rounded-lg p-0.5 shadow-2xs">
               <button
@@ -234,11 +298,39 @@ export function ImpactAnalysisPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Citations Over Time by Department (7 cols) */}
             <Card className="lg:col-span-7 border-border/60 shadow-xs">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Citations Over Time by Department</CardTitle>
-                <CardDescription className="text-xs">
-                  Annual citation momentum across academic units ({yearRange.start}–{yearRange.end})
-                </CardDescription>
+              <CardHeader className="pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm font-semibold">Citations Over Time by Department</CardTitle>
+                  <CardDescription className="text-xs">
+                    {citationMode === "annual"
+                      ? `Citations received in each citing year (${yearRange.start}–${yearRange.end})`
+                      : `Cumulative citation growth over time (${yearRange.start}–{yearRange.end})`}
+                  </CardDescription>
+                </div>
+                <div className="flex items-center p-0.5 rounded-lg bg-muted/50 border border-border/70 text-[11px] shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setCitationMode("annual")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      citationMode === "annual"
+                        ? "bg-card text-foreground font-semibold shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Annual Citations
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCitationMode("cumulative")}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                      citationMode === "cumulative"
+                        ? "bg-card text-foreground font-semibold shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Cumulative Growth
+                  </button>
+                </div>
               </CardHeader>
               <CardContent className="pt-2">
                 {!hasData ? (

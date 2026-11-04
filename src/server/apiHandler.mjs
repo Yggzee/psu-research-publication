@@ -1,7 +1,13 @@
 import crypto from 'node:crypto';
 import { db } from './db.mjs';
 import { isTursoConfigured, rehydrateFromTurso, pushTableToTurso } from './turso.mjs';
-import { scrapeGoogleScholarDirect, scrapeGoogleScholarCitations, scrapeGoogleScholarProfile } from './scholarScraper.mjs';
+import {
+  scrapeGoogleScholarDirect,
+  scrapeGoogleScholarCitations,
+  scrapeGoogleScholarProfile,
+  enrichPaperWithCrossRef,
+  enrichBatchWithCrossRef,
+} from './scholarScraper.mjs';
 import {
   classifyPublicationSDG,
   auditJournalReputation,
@@ -126,6 +132,125 @@ export function cleanupOrphanedPublications(dbInstance) {
 
 // Run initial orphan cleanup on module load
 cleanupOrphanedPublications(db);
+
+/**
+ * Infer the publication year of a citing paper from its explicit year, URL, ResearchGate ObjectId, or volume/issue string.
+ */
+function inferCitingPaperYear(cp, minYear = 2000) {
+  const maxYear = new Date().getFullYear() + 1;
+  if (cp.year) {
+    const numYr = Number(cp.year);
+    if (numYr >= 1990 && numYr <= maxYear) {
+      return numYr;
+    }
+  }
+
+  const linkStr = String(cp.link || '');
+  if (linkStr) {
+    // 1. Check ResearchGate MongoDB ObjectId timestamp in /links/<24-hex>/
+    const rgMatch = linkStr.match(/\/links\/([0-9a-f]{8})[0-9a-f]{16}\//i);
+    if (rgMatch) {
+      const unixSec = parseInt(rgMatch[1], 16);
+      const rgYear = new Date(unixSec * 1000).getUTCFullYear();
+      if (rgYear >= minYear && rgYear <= maxYear) {
+        return rgYear;
+      }
+    }
+
+    // 2. Check explicit 4-digit year in URL path (e.g. /2026/ or /2020/01/)
+    const urlYearMatch = linkStr.match(/(?:\/|[-_])(20[12]\d)(?:\/|[-_.]|$)/);
+    if (urlYearMatch) {
+      const uYear = Number(urlYearMatch[1]);
+      if (uYear >= minYear && uYear <= maxYear) {
+        return uYear;
+      }
+    }
+  }
+
+  // 3. Check volume_issue or doi_issn for 4-digit year
+  const metaStr = `${cp.volume_issue || ''} ${cp.doi_issn || ''}`;
+  const metaYearMatch = metaStr.match(/\b(20[12]\d)\b/);
+  if (metaYearMatch) {
+    const mYear = Number(metaYearMatch[1]);
+    if (mYear >= minYear && mYear <= maxYear) {
+      return mYear;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Compute per-year citation counts for a publication from its citing_papers rows
+ * (and persist any inferred citing paper years + sync citation_trends).
+ */
+function computePublicationCitationYears(dbInstance, p) {
+  const minPubYear = Number(p.year) >= 1990 ? Number(p.year) : 2000;
+  const citingRows = dbInstance
+    .prepare('SELECT id, year, link, volume_issue, doi_issn FROM citing_papers WHERE publication_id = ?')
+    .all(p.id);
+
+  const yearCounts = {};
+  let datedCount = 0;
+
+  const updYearStmt = dbInstance.prepare('UPDATE citing_papers SET year = ? WHERE id = ?');
+  for (const cp of citingRows) {
+    const yr = inferCitingPaperYear(cp, minPubYear);
+    if (!cp.year && yr && cp.id) {
+      try {
+        updYearStmt.run(yr, cp.id);
+      } catch {}
+    }
+    if (yr) {
+      yearCounts[yr] = (yearCounts[yr] || 0) + 1;
+      datedCount += 1;
+    }
+  }
+
+  const totalPubCitations = Number(p.citations) || 0;
+
+  if (datedCount > 0) {
+    // If there are remaining citations whose citing row had no extractable year,
+    // attribute them to the publication's baseline year so total citations across all years match 100%.
+    const unmapped = Math.max(0, totalPubCitations - datedCount);
+    if (unmapped > 0 && p.year) {
+      const pubYr = Number(p.year);
+      yearCounts[pubYr] = (yearCounts[pubYr] || 0) + unmapped;
+    }
+
+    // Keep citation_trends table synchronized with actual citing_papers years
+    try {
+      dbInstance.prepare('DELETE FROM citation_trends WHERE publication_id = ?').run(p.id);
+      const insTrend = dbInstance.prepare(
+        'INSERT INTO citation_trends (id, publication_id, year, citations) VALUES (?, ?, ?, ?)'
+      );
+      for (const [yrStr, cnt] of Object.entries(yearCounts)) {
+        insTrend.run(`trend-${p.id}-${yrStr}`, p.id, Number(yrStr), cnt);
+      }
+    } catch {}
+    return yearCounts;
+  }
+
+  // Fallback 1: check citation_trends if citing_papers has no rows yet
+  const trendRows = dbInstance
+    .prepare('SELECT year, citations FROM citation_trends WHERE publication_id = ?')
+    .all(p.id);
+  if (trendRows.length > 0) {
+    for (const tr of trendRows) {
+      if (tr.year && tr.citations) {
+        yearCounts[Number(tr.year)] = (yearCounts[Number(tr.year)] || 0) + Number(tr.citations);
+      }
+    }
+    return yearCounts;
+  }
+
+  // Fallback 2: attribute to publication year if no citing paper details exist yet
+  if (totalPubCitations > 0 && p.year) {
+    yearCounts[Number(p.year)] = totalPubCitations;
+  }
+
+  return yearCounts;
+}
 
 /**
  * Handle incoming API requests
@@ -693,26 +818,48 @@ export async function handleApiRequest(req, res) {
         .slice(0, 10);
 
       // Citations and publications grouped by department & year
+      // Publications are counted in the year published (p.year),
+      // while Citations are counted in the actual year the citing paper was published (citing_papers.year).
       const deptYearMap = {};
+      const ensureDeptYear = (dept, yr) => {
+        const key = `${dept}-${yr}`;
+        if (!deptYearMap[key]) {
+          deptYearMap[key] = { department: dept, year: Number(yr), publications: 0, citations: 0 };
+        }
+        return deptYearMap[key];
+      };
+
       for (const p of allApprovedPubs) {
-        if (!p.year) continue;
         // Find matching researcher to get department
         const matchedR = allResearchers.find((r) => matchesResearcher(p, r));
-        const dept = matchedR ? matchedR.department : 'General';
-        const key = `${dept}-${p.year}`;
-        if (!deptYearMap[key]) {
-          deptYearMap[key] = { department: dept, year: p.year, publications: 0, citations: 0 };
+        const dept = matchedR ? matchedR.department : 'BSIT';
+
+        if (p.year) {
+          ensureDeptYear(dept, p.year).publications += 1;
         }
-        deptYearMap[key].publications += 1;
-        deptYearMap[key].citations += (p.citations || 0);
+
+        const citeYearCounts = computePublicationCitationYears(db, p);
+        for (const [cYearStr, cnt] of Object.entries(citeYearCounts)) {
+          const cYear = Number(cYearStr);
+          if (cYear >= 1990) {
+            ensureDeptYear(dept, cYear).citations += Number(cnt) || 0;
+          }
+        }
       }
       const deptYearStats = Object.values(deptYearMap).sort((a, b) => a.year - b.year);
+
+      const computedAvgImpact =
+        pubStats.averageImpactScore > 0
+          ? Number(pubStats.averageImpactScore.toFixed(1))
+          : pubStats.totalPublications > 0
+          ? Number((pubStats.totalCitations / pubStats.totalPublications).toFixed(1))
+          : 0.0;
 
       return sendJson(200, {
         totalResearchers: researchersCount,
         totalPublications: pubStats.totalPublications,
         totalCitations: pubStats.totalCitations,
-        averageImpactScore: Number(pubStats.averageImpactScore.toFixed(1)),
+        averageImpactScore: computedAvgImpact,
         topResearchers,
         deptYearStats,
       });
@@ -1219,17 +1366,22 @@ export async function handleApiRequest(req, res) {
       const rows = filterPublicationsForCaller(allRows, caller);
 
       // Batch-fetch all citing papers
-      const allCiting = db.prepare('SELECT publication_id, title, authors, year, link FROM citing_papers').all();
+      const allCiting = db.prepare('SELECT id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers').all();
       const citingByPubId = {};
       for (const cp of allCiting) {
         if (!citingByPubId[cp.publication_id]) {
           citingByPubId[cp.publication_id] = [];
         }
         citingByPubId[cp.publication_id].push({
+          id: cp.id,
           title: cp.title,
           authors: cp.authors,
           year: cp.year,
           link: cp.link,
+          journal: cp.journal || '',
+          volume_issue: cp.volume_issue || '',
+          quarter: cp.quarter || 'First',
+          doi_issn: cp.doi_issn || '',
         });
       }
 
@@ -1323,7 +1475,39 @@ export async function handleApiRequest(req, res) {
       }
 
       const trends = db.prepare('SELECT year, citations, id FROM citation_trends WHERE publication_id = ? OR publication_id = ? ORDER BY year ASC').all(id, rawId);
-      let citing = db.prepare('SELECT title, authors, year, link FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+      let citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+
+      // Enrich parent publication metadata if missing keywords, ISSN/DOI, volume/issue, or full co-authors
+      if (!isScraped && (!p.keywords || !p.issn_isbn || !p.volume_issue || String(p.authors || '').includes('…'))) {
+        try {
+          const parsedAuthors = JSON.parse(p.authors || '[]');
+          const enrichTarget = {
+            ...p,
+            authors: parsedAuthors,
+          };
+          await enrichPaperWithCrossRef(enrichTarget);
+          const updatedAuthorsJson = JSON.stringify(Array.isArray(enrichTarget.authors) ? enrichTarget.authors : parsedAuthors);
+          db.prepare(`
+            UPDATE publications
+            SET authors = ?, journal = COALESCE(?, journal), keywords = COALESCE(?, keywords),
+                issn_isbn = COALESCE(?, issn_isbn), volume_issue = COALESCE(?, volume_issue),
+                publication_date = COALESCE(?, publication_date), doi = COALESCE(?, doi)
+            WHERE id = ?
+          `).run(
+            updatedAuthorsJson,
+            enrichTarget.journal || p.journal,
+            enrichTarget.keywords || null,
+            enrichTarget.issn_isbn || null,
+            enrichTarget.volume_issue || null,
+            enrichTarget.publication_date || null,
+            enrichTarget.doi || null,
+            id
+          );
+          p = db.prepare('SELECT * FROM publications WHERE id = ?').get(id) || p;
+        } catch (enrichErr) {
+          console.warn('[EnrichPublication] Metadata enrichment error:', enrichErr.message);
+        }
+      }
 
       const totalPaperCitations = Number(p.citations) || 0;
       // Auto-fetch or backfill citing papers if cached count is less than recorded citations
@@ -1333,17 +1517,75 @@ export async function handleApiRequest(req, res) {
           if (fetchedCiting.length > citing.length) {
             // Delete old partial preview citations and insert complete set
             db.prepare('DELETE FROM citing_papers WHERE publication_id = ? OR publication_id = ?').run(id, rawId);
-            const insertStmt = db.prepare('INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link) VALUES (?, ?, ?, ?, ?, ?)');
+            const insertStmt = db.prepare(`
+              INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
             for (let i = 0; i < fetchedCiting.length; i++) {
               const cp = fetchedCiting[i];
-              insertStmt.run(`cite-${id}-${i + 1}`, id, cp.title, cp.authors, cp.year, cp.link);
+              const cpAuthors = Array.isArray(cp.authors) ? cp.authors.join(', ') : (cp.authors || '');
+              insertStmt.run(
+                `cite-${id}-${i + 1}`,
+                id,
+                cp.title,
+                cpAuthors,
+                cp.year || null,
+                cp.link || '',
+                cp.journal || '',
+                cp.volume_issue || '',
+                cp.quarter || 'First',
+                cp.doi_issn || ''
+              );
             }
-            citing = db.prepare('SELECT title, authors, year, link FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+            citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
           }
         } catch (err) {
           console.warn('[AutoFetchCitations] Error scraping citing papers:', err.message);
         }
       }
+
+      // If existing citing papers lack journal or full authors, enrich them with CrossRef and persist
+      const needsCitingEnrich = citing.filter((c) => !c.journal || String(c.authors || '').includes('…'));
+      if (needsCitingEnrich.length > 0) {
+        try {
+          await enrichBatchWithCrossRef(needsCitingEnrich, 5);
+          const updCiteStmt = db.prepare(`
+            UPDATE citing_papers
+            SET authors = ?, journal = ?, volume_issue = ?, year = COALESCE(?, year), quarter = ?, doi_issn = ?, link = COALESCE(?, link)
+            WHERE id = ?
+          `);
+          for (const c of needsCitingEnrich) {
+            if (!c.id) continue;
+            const cAuthors = Array.isArray(c.authors) ? c.authors.join(', ') : (c.authors || '');
+            updCiteStmt.run(
+              cAuthors,
+              c.journal || '',
+              c.volume_issue || '',
+              c.year || null,
+              c.quarter || 'First',
+              c.doi_issn || '',
+              c.link || null,
+              c.id
+            );
+          }
+          citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+        } catch (cErr) {
+          console.warn('[EnrichCitingPapers] Error enriching citing papers:', cErr.message);
+        }
+      }
+
+      // Recompute citationTrend from actual citing_papers years so the chart is always accurate
+      const computedYearCounts = computePublicationCitationYears(db, p);
+      const computedTrends = Object.entries(computedYearCounts)
+        .map(([yrStr, cnt]) => ({
+          id: `trend-${id}-${yrStr}`,
+          year: Number(yrStr),
+          citations: Number(cnt),
+        }))
+        .sort((a, b) => a.year - b.year);
+
+      // Refresh citing array after year inference updates
+      citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
 
       const jc3 = p.jc3_points !== null && p.jc3_points !== undefined
         ? Number(p.jc3_points)
@@ -1356,7 +1598,7 @@ export async function handleApiRequest(req, res) {
         jc3Points: jc3,
         jc3_points: jc3,
         nbc461Points: p.nbc461_points,
-        citationTrend: trends,
+        citationTrend: computedTrends.length > 0 ? computedTrends : trends,
         citingPapers: citing,
         citedByLink: citedByLink || null,
       });
@@ -1490,6 +1732,25 @@ export async function handleApiRequest(req, res) {
         }
       }
 
+      // Enrich publication metadata (all co-authors, ISSN/DOI, volume/issue, publication date, keywords)
+      const enrichPayload = {
+        title: sanitized.title,
+        authors: Array.isArray(sanitized.authors) ? sanitized.authors : [sanitized.authors],
+        journal: sanitized.journal || 'Research Journal',
+        year: Number(sanitized.year) || new Date().getFullYear(),
+        abstract: sanitized.abstract || '',
+        url: sanitized.url || '',
+        keywords: data.keywords || '',
+        issn_isbn: data.issn_isbn || data.issnIsbn || '',
+        volume_issue: data.volume_issue || data.volumeIssue || '',
+        publication_date: data.publication_date || data.publicationDate || '',
+        doi: data.doi || '',
+      };
+      await enrichPaperWithCrossRef(enrichPayload);
+      sanitized.authors = Array.isArray(enrichPayload.authors) ? enrichPayload.authors : [enrichPayload.authors];
+      sanitized.journal = enrichPayload.journal || sanitized.journal;
+      sanitized.url = enrichPayload.url || sanitized.url;
+
       if (!journalIndex || jc3Points === null) {
         const audit = auditJournalReputation(sanitized.journal || '');
         if (!journalIndex) journalIndex = audit.indexing;
@@ -1504,8 +1765,10 @@ export async function handleApiRequest(req, res) {
           impact_score, owner_id, owner_name, source, approval_status,
           research_status, is_public, file_name, cited_by_link,
           sdg_tags, sdg_rationale, ched_priority, journal_indexing,
-          jc3_points, nbc461_points, is_predatory_flag, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          jc3_points, nbc461_points, is_predatory_flag,
+          keywords, issn_isbn, volume_issue, publication_date, publication_level, doi,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         sanitized.title,
@@ -1531,24 +1794,36 @@ export async function handleApiRequest(req, res) {
         jc3Points,
         nbcPoints,
         isPredatory,
+        enrichPayload.keywords || null,
+        enrichPayload.issn_isbn || null,
+        enrichPayload.volume_issue || null,
+        enrichPayload.publication_date || String(Number(sanitized.year) || new Date().getFullYear()),
+        data.publication_level || data.publicationLevel || 'International',
+        enrichPayload.doi || null,
         now
       );
 
       // If citing papers were provided, save them too
       if (Array.isArray(data.citingPapers)) {
+        await enrichBatchWithCrossRef(data.citingPapers, 5);
         const insertCiting = db.prepare(`
-          INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const cp of data.citingPapers) {
           if (!cp.title) continue;
+          const cpAuthors = Array.isArray(cp.authors) ? cp.authors.join(', ') : (typeof cp.authors === 'string' ? cp.authors : '');
           insertCiting.run(
             cp.id || `cite-${id}-${Math.random().toString(36).slice(2, 7)}`,
             id,
             cp.title,
-            typeof cp.authors === 'string' ? cp.authors : JSON.stringify(cp.authors || []),
+            cpAuthors,
             cp.year || null,
-            cp.link || null
+            cp.link || null,
+            cp.journal || '',
+            cp.volume_issue || '',
+            cp.quarter || 'First',
+            cp.doi_issn || ''
           );
         }
       }
@@ -1604,6 +1879,31 @@ export async function handleApiRequest(req, res) {
         if (allowedStatuses.includes(data.researchStatus)) {
           updates.push('research_status = ?');
           values.push(data.researchStatus);
+        }
+      }
+
+      const editableTextFields = [
+        ['keywords', 'keywords'],
+        ['issn_isbn', 'issn_isbn'],
+        ['issnIsbn', 'issn_isbn'],
+        ['volume_issue', 'volume_issue'],
+        ['volumeIssue', 'volume_issue'],
+        ['publication_date', 'publication_date'],
+        ['publicationDate', 'publication_date'],
+        ['publication_level', 'publication_level'],
+        ['publicationLevel', 'publication_level'],
+        ['journal_indexing', 'journal_indexing'],
+        ['journalIndexing', 'journal_indexing'],
+        ['doi', 'doi'],
+        ['url', 'url'],
+        ['journal', 'journal'],
+      ];
+      const addedCols = new Set();
+      for (const [payloadKey, colName] of editableTextFields) {
+        if (data[payloadKey] !== undefined && !addedCols.has(colName)) {
+          addedCols.add(colName);
+          updates.push(`${colName} = ?`);
+          values.push(String(data[payloadKey]).trim());
         }
       }
 
@@ -2022,19 +2322,26 @@ export async function handleApiRequest(req, res) {
       let importedCount = 0;
       let updatedCount = 0;
 
+      await enrichBatchWithCrossRef(publications, 5);
+
       const allExistingPubs = db.prepare('SELECT id, title, citations, url, cited_by_link FROM publications').all();
 
       const insertPub = db.prepare(`
         INSERT INTO publications (
           id, title, authors, journal, year, citations, abstract, url, cited_by_link,
-          owner_id, owner_name, source, approval_status, research_status, is_public, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped', 'approved', 'Published', 1, ?)
+          owner_id, owner_name, source, approval_status, research_status, is_public,
+          keywords, issn_isbn, volume_issue, publication_date, publication_level, doi, journal_indexing,
+          created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped', 'approved', 'Published', 1, ?, ?, ?, ?, 'International', ?, ?, ?)
       `);
 
       const updatePub = db.prepare(`
         UPDATE publications
         SET citations = MAX(citations, ?), url = COALESCE(?, url), cited_by_link = COALESCE(?, cited_by_link),
-            owner_id = ?, owner_name = ?
+            owner_id = ?, owner_name = ?,
+            keywords = COALESCE(?, keywords), issn_isbn = COALESCE(?, issn_isbn),
+            volume_issue = COALESCE(?, volume_issue), publication_date = COALESCE(?, publication_date),
+            doi = COALESCE(?, doi)
         WHERE id = ?
       `);
 
@@ -2053,9 +2360,22 @@ export async function handleApiRequest(req, res) {
         const authorsJson = JSON.stringify(Array.isArray(item.authors) ? item.authors : [item.authors || targetName]);
         const citations = parseInt(item.citations, 10) || 0;
         const year = parseInt(item.year, 10) || new Date().getFullYear();
+        const audit = auditJournalReputation(item.journal || '');
 
         if (existing) {
-          updatePub.run(citations, item.url || null, item.citedByLink || null, targetInstId, targetName, existing.id);
+          updatePub.run(
+            citations,
+            item.url || null,
+            item.citedByLink || null,
+            targetInstId,
+            targetName,
+            item.keywords || null,
+            item.issn_isbn || null,
+            item.volume_issue || null,
+            item.publication_date || String(year),
+            item.doi || null,
+            existing.id
+          );
           updatedCount++;
         } else {
           const newId = `pub-scholar-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -2071,6 +2391,12 @@ export async function handleApiRequest(req, res) {
             item.citedByLink || null,
             targetInstId,
             targetName,
+            item.keywords || null,
+            item.issn_isbn || null,
+            item.volume_issue || null,
+            item.publication_date || String(year),
+            item.doi || null,
+            audit.indexing || 'Google Scholar',
             now
           );
           allExistingPubs.push({ id: newId, title, citations, url: item.url, cited_by_link: item.citedByLink });

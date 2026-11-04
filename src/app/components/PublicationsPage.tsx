@@ -411,7 +411,6 @@ export function PublicationsPage() {
                   <th className="p-3.5 w-20 text-center">Year</th>
                   <th className="p-3.5 w-24 text-center">Citations</th>
                   <th className="p-3.5 min-w-[120px]">UN SDG Goal</th>
-                  <th className="p-3.5 w-24 text-right">JC3 (KRA II)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -430,12 +429,6 @@ export function PublicationsPage() {
                         }
                       })()
                     : [];
-
-                  const jc3Pts = pub.jc3_points || pub.jc3Points || (
-                    pub.nbc461_points
-                      ? (pub.nbc461_points >= 25 ? 50 : pub.nbc461_points >= 15 ? 30 : pub.nbc461_points >= 10 ? 20 : 10)
-                      : (pub.journal?.toLowerCase().includes("scopus") ? 50 : 30)
-                  );
 
                   return (
                     <tr
@@ -485,9 +478,6 @@ export function PublicationsPage() {
                           <span className="text-muted-foreground/60 text-[10px] italic">Unassigned</span>
                         )}
                       </td>
-                      <td className="p-3.5 text-right font-mono font-bold text-purple-600 dark:text-purple-400">
-                        {jc3Pts} pts
-                      </td>
                     </tr>
                   );
                 })}
@@ -503,11 +493,6 @@ export function PublicationsPage() {
           {filteredAndSortedPublications.map((pub) => {
             const isSelected = selectedIds.includes(pub.id);
             const authorsStr = Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors;
-            const jc3Pts = pub.jc3_points || pub.jc3Points || (
-              pub.nbc461_points
-                ? (pub.nbc461_points >= 25 ? 50 : pub.nbc461_points >= 15 ? 30 : pub.nbc461_points >= 10 ? 20 : 10)
-                : (pub.journal?.toLowerCase().includes("scopus") ? 50 : 30)
-            );
 
             return (
               <Card
@@ -555,9 +540,9 @@ export function PublicationsPage() {
                     <span className="text-muted-foreground truncate max-w-[200px]">
                       {pub.journal || "PSU Asingan Archive"}
                     </span>
-                    <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
-                      JC3: {jc3Pts} pts
-                    </span>
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {pub.journal_indexing || "Google Scholar"}
+                    </Badge>
                   </div>
                 </CardContent>
               </Card>

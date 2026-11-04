@@ -1,48 +1,210 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router";
-import { ArrowLeft, Quote, TrendingUp, ExternalLink, Calendar, Users, BookOpen, Loader2, Shield, UserCheck } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { useEffect, useState } from "react";
+import { useParams, useNavigate, Link } from "react-router";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Input } from "./ui/input";
 import { apiService } from "../services/api.service";
-import type { Publication } from "../data/mockData";
-import { categorizeAuthors, hasExternalCollaborators, isPSUPaper } from "../utils/facultyUtils";
+import { getResearchRecords } from "../utils/researchStore";
+import { findAuthorFacultyProfile } from "../utils/facultyUtils";
+import { exportSinglePublicationToExcel } from "../utils/excelExportUtils";
+import {
+  ArrowLeft,
+  BookOpen,
+  Users,
+  Calendar,
+  Quote,
+  Award,
+  ExternalLink,
+  Share2,
+  TrendingUp,
+  UserCheck,
+  User,
+  Loader2,
+  FileSpreadsheet,
+  RefreshCw,
+  Target,
+  Sparkles,
+  Copy,
+  Check,
+  Edit3,
+  Save,
+  X,
+  Search,
+  Globe,
+  Hash,
+  Layers,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { toast } from "sonner";
+
+function parseAuthorsList(raw: unknown): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((a) => String(a || "").trim()).filter(Boolean);
+  }
+  const str = String(raw).trim();
+  if (!str) return [];
+  if (str.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(str);
+      if (Array.isArray(parsed)) {
+        return parsed.map((a) => String(a || "").trim()).filter(Boolean);
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return str
+    .split(/,|;|\band\b/i)
+    .map((a) => a.trim())
+    .filter(Boolean);
+}
 
 export function PublicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [publication, setPublication] = useState<Publication | null>(null);
+  const [publication, setPublication] = useState<any | null>(null);
+  const [researchers, setResearchers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [citationPage, setCitationPage] = useState(1);
-  const [citationsPerPage, setCitationsPerPage] = useState(10);
-  const CITATIONS_PER_PAGE = citationsPerPage;
+  const [refreshing, setRefreshing] = useState(false);
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
+  const [citingSearch, setCitingSearch] = useState("");
+
+  // Inline Edit Mode for Excel Metadata fields
+  const [isEditingExcel, setIsEditingExcel] = useState(false);
+  const [savingExcel, setSavingExcel] = useState(false);
+  const [editForm, setEditForm] = useState({
+    journal: "",
+    publication_date: "",
+    volume_issue: "",
+    issn_isbn: "",
+    journal_indexing: "",
+    keywords: "",
+    publication_level: "International",
+    url: "",
+  });
+
+  const loadData = async (isRefresh = false) => {
+    if (!id) return;
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    try {
+      const decodedId = decodeURIComponent(id);
+      const [resData, pubData] = await Promise.all([
+        apiService.getResearchers().catch(() => []),
+        apiService.getPublicationById(decodedId).catch(() => null),
+      ]);
+
+      setResearchers(resData || []);
+
+      if (pubData) {
+        setPublication(pubData);
+        setEditForm({
+          journal: pubData.journal || "",
+          publication_date: pubData.publication_date || pubData.publicationDate || String(pubData.year || ""),
+          volume_issue: pubData.volume_issue || pubData.volumeIssue || "",
+          issn_isbn: pubData.issn_isbn || pubData.issnIsbn || pubData.doi || "",
+          journal_indexing: pubData.journal_indexing || pubData.journalIndexing || "Google Scholar",
+          keywords: pubData.keywords || "",
+          publication_level: pubData.publication_level || pubData.publicationLevel || "International",
+          url: pubData.url || "",
+        });
+        if (isRefresh) {
+          toast.success("Publication metadata & citations refreshed!");
+        }
+      } else {
+        const fallback = getResearchRecords().find((p: any) => p.id === decodedId);
+        setPublication(fallback || null);
+      }
+    } catch (err) {
+      console.error("Failed to load publication details:", err);
+      const decodedId = id ? decodeURIComponent(id) : "";
+      const fallback = getResearchRecords().find((p: any) => p.id === decodedId);
+      setPublication(fallback || null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    if (!id) return;
-
-    const loadPublication = async () => {
-      setLoading(true);
-      try {
-        const data = await apiService.getPublicationById(id);
-        if (data) {
-          setPublication(data);
-        }
-      } catch (err) {
-        console.warn("Failed to load publication from database:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadPublication();
+    loadData(false);
   }, [id]);
+
+  const handleSaveExcelFields = async () => {
+    if (!publication?.id) return;
+    setSavingExcel(true);
+    try {
+      await apiService.updatePublication(publication.id, editForm);
+      setPublication((prev: any) => ({
+        ...prev,
+        ...editForm,
+      }));
+      setIsEditingExcel(false);
+      toast.success("Excel publication metadata saved!");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update publication metadata");
+    } finally {
+      setSavingExcel(false);
+    }
+  };
+
+  const handleReclassifySDG = async () => {
+    if (!publication) return;
+    setIsClassifying(true);
+    toast.loading("Analyzing paper with Gemini Flash...", { id: "reclassify-detail" });
+    try {
+      const res = await apiService.classifyPublicationSDG({
+        publicationId: publication.id,
+        title: publication.title,
+        abstract: publication.abstract,
+        journal: publication.journal,
+      });
+
+      if (res?.success) {
+        toast.success("SDG Check updated with Gemini Flash!", { id: "reclassify-detail" });
+        setPublication((prev: any) => ({
+          ...prev,
+          sdg_tags: [res.sdg.primarySDG, res.sdg.secondarySDG].filter(Boolean),
+          sdg_rationale: res.sdg.rationale,
+          ched_priority: res.sdg.chedPriority,
+          journal_indexing: res.audit?.indexing || prev.journal_indexing,
+        }));
+      }
+    } catch (err: any) {
+      toast.error(`Classification error: ${err.message}`, { id: "reclassify-detail" });
+    } finally {
+      setIsClassifying(false);
+    }
+  };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      <div className="text-center py-20 space-y-3">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
+        <p className="text-gray-500 text-sm">
+          Loading full publication record, CrossRef metadata, and citing papers...
+        </p>
       </div>
     );
   }
@@ -50,428 +212,953 @@ export function PublicationDetail() {
   if (!publication) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-600">Publication not found</p>
-        <Button onClick={() => navigate("/dashboard")} className="mt-4">
-          Back to Dashboard
+        <p className="text-gray-500">Publication not found</p>
+        <Button onClick={() => navigate("/dashboard/publications")} className="mt-4">
+          Back to Publications
         </Button>
       </div>
     );
   }
 
-  const citationTrendData = publication.citationTrend || [];
-  const citingPapers = publication.citingPapers || [];
-  const totalCitationPages = Math.ceil(citingPapers.length / CITATIONS_PER_PAGE) || 1;
-  const paginatedCitingPapers = citingPapers.slice(
-    (citationPage - 1) * CITATIONS_PER_PAGE,
-    citationPage * CITATIONS_PER_PAGE
-  );
-  const currentYear = new Date().getFullYear();
-  const yearsActive = Math.max(currentYear - publication.year, 1);
+  const authorsList = parseAuthorsList(publication.authors);
+  const authorsString = authorsList.join(", ");
+  const assignedResearcherName = publication.owner_name || publication.ownerName;
+  const assignedResearcherId = publication.owner_id || publication.ownerId;
+
+  const citationTrendData = Array.isArray(publication.citationTrend)
+    ? publication.citationTrend
+    : [];
+  const citingPapers: any[] = Array.isArray(publication.citingPapers)
+    ? publication.citingPapers
+    : [];
+  const yearsActive = Math.max(1, new Date().getFullYear() - (Number(publication.year) || new Date().getFullYear()) + 1);
+
+  // Format SDGs
+  const rawSdgTags = publication.sdg_tags || publication.sdgTags;
+  const sdgList: string[] = Array.isArray(rawSdgTags)
+    ? rawSdgTags
+    : typeof rawSdgTags === "string"
+    ? (() => {
+        try {
+          const parsed = JSON.parse(rawSdgTags);
+          return Array.isArray(parsed) ? parsed : [rawSdgTags];
+        } catch {
+          return [rawSdgTags];
+        }
+      })()
+    : ["SDG 4: Quality Education"];
+
+  const rawRationale = publication.sdg_rationale || publication.sdgRationale;
+  let rationalesMap: Record<string, string> | null = null;
+  if (rawRationale) {
+    try {
+      const parsed = JSON.parse(rawRationale);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        rationalesMap = parsed;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const getRationaleForSDG = (sdgName: string) => {
+    if (!rationalesMap) return null;
+    const extractNum = (str: string) => {
+      const m = str.match(/\bSDG\s*(\d{1,2})\b/i);
+      return m ? parseInt(m[1], 10) : null;
+    };
+    const targetNum = extractNum(sdgName);
+    for (const [k, v] of Object.entries(rationalesMap)) {
+      if (k === sdgName || k.toLowerCase() === sdgName.toLowerCase()) return v;
+      const kNum = extractNum(k);
+      if (targetNum !== null && kNum !== null && targetNum === kNum) return v;
+    }
+    return null;
+  };
+
+  // Excel field values
+  const pubDateStr =
+    publication.publication_date ||
+    publication.publicationDate ||
+    String(publication.year || "—");
+  const volIssueStr = publication.volume_issue || publication.volumeIssue || "—";
+  const issnDoiStr =
+    publication.issn_isbn || publication.issnIsbn || publication.doi || "—";
+  const indexingStr =
+    publication.journal_indexing || publication.journalIndexing || "Google Scholar";
+  const levelStr =
+    publication.publication_level || publication.publicationLevel || "International";
+  const keywordsStr =
+    publication.keywords ||
+    (sdgList.length > 0 ? sdgList.join("; ") : "—");
+  const citedByUrl = publication.citedByLink || publication.cited_by_link;
+
+  // Citations formatters
+  const apaCitation = `${authorsString} (${publication.year}). ${publication.title}. ${
+    publication.journal || "Pangasinan State University Research Archive"
+  }.`;
+  const bibtexCitation = `@article{psu_${publication.id || "paper"},
+  title = {${publication.title}},
+  author = {${authorsList.join(" and ")}},
+  journal = {${publication.journal || "PSU Asingan Research Archive"}},
+  year = {${publication.year}},
+  publisher = {Pangasinan State University}
+}`;
+
+  const copyToClipboard = (text: string, format: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedFormat(format);
+    toast.success(`Copied ${format} citation to clipboard!`);
+    setTimeout(() => setCopiedFormat(null), 2000);
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: publication.title,
+        text: `Check out this publication: ${publication.title}`,
+        url: window.location.href,
+      });
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      toast.success("Page link copied to clipboard!");
+    }
+  };
+
+  const handleExportSingleExcel = () => {
+    try {
+      exportSinglePublicationToExcel(publication);
+      toast.success("Exported official 2-Sheet Excel report (Publication Sheet + Citation Sheet)!");
+    } catch (err: any) {
+      toast.error(`Excel export failed: ${err?.message || "Unknown error"}`);
+    }
+  };
+
+  const filteredCitingPapers = citingPapers.filter((cp) => {
+    if (!citingSearch.trim()) return true;
+    const q = citingSearch.toLowerCase();
+    const cTitle = String(cp.title || "").toLowerCase();
+    const cAuthors = Array.isArray(cp.authors)
+      ? cp.authors.join(", ").toLowerCase()
+      : String(cp.authors || "").toLowerCase();
+    const cJournal = String(cp.journal || "").toLowerCase();
+    return cTitle.includes(q) || cAuthors.includes(q) || cJournal.includes(q);
+  });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Back Button */}
-      <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4">
-        <ArrowLeft className="w-4 h-4 mr-2" />
-        Back
-      </Button>
+    <div className="space-y-6 pb-12">
+      {/* Top Bar: Navigation & Export / Enrich Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <Button
+          variant="ghost"
+          onClick={() =>
+            window.history.length > 1
+              ? navigate(-1)
+              : navigate("/dashboard/publications")
+          }
+          className="w-fit"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Publications
+        </Button>
 
-      {/* Publication Header */}
-      <Card>
-        <CardContent className="p-8">
-          <div className="mb-4">
-            <div className="flex items-center gap-2 flex-wrap mb-3">
-              <Badge className="bg-blue-600">Research Publication</Badge>
-              {Array.isArray(publication.authors) && hasExternalCollaborators(publication.authors) ? (
-                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
-                  PSU + External Collaboration
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            className="gap-1.5 text-xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Enriching Metadata & Citations..." : "Refresh & Enrich Data"}
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={handleExportSingleExcel}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 text-xs font-semibold shadow-xs"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Export Paper Excel (.xlsx)
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Publication Header Card */}
+      <Card className="border-border/70 shadow-xs overflow-hidden">
+        <CardContent className="p-6 md:p-8 space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+            <div className="flex-1 space-y-4">
+              {/* Top Badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="font-mono text-xs">
+                  {publication.year}
                 </Badge>
-              ) : Array.isArray(publication.authors) && isPSUPaper(publication.authors) ? (
-                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-800">
-                  Pure PSU Research Paper
+                <Badge className="bg-emerald-600 text-white text-xs">
+                  {publication.citations || 0} Total Citations
                 </Badge>
-              ) : null}
-            </div>
-            <h1 className="text-3xl text-gray-900 mb-4">{publication.title}</h1>
-          </div>
-
-          {/* Metadata Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="flex items-start gap-3">
-              <Users className="w-5 h-5 text-gray-500 mt-0.5" />
-              <div>
-                <p className="text-sm text-gray-600 mb-1.5">Authors & Affiliation Breakdown</p>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {Array.isArray(publication.authors) ? (
-                    categorizeAuthors(publication.authors).map((cat, aIdx) => (
-                      <span
-                        key={aIdx}
-                        className={`text-xs px-2.5 py-1 rounded-md font-medium inline-flex items-center gap-1.5 ${
-                          cat.isPsu
-                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                            : "bg-slate-100 text-slate-700 border border-slate-200"
-                        }`}
-                        title={
-                          cat.isPsu
-                            ? "PSU Faculty Member"
-                            : "External / Non-PSU Collaborator"
-                        }
-                      >
-                        {cat.isPsu ? (
-                          <UserCheck className="w-3 h-3 text-emerald-600" />
-                        ) : (
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                        )}
-                        <span>{cat.name}</span>
-                        <span className="text-[10px] opacity-75">
-                          ({cat.isPsu ? "PSU" : "External"})
-                        </span>
-                      </span>
-                    ))
-                  ) : (
-                    <p className="text-gray-900">{publication.authors}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <BookOpen className="w-5 h-5 text-gray-500 mt-0.5" />
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Journal / Conference</p>
-                <p className="text-gray-900">{publication.journal}</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <Calendar className="w-5 h-5 text-gray-500 mt-0.5" />
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Publication Year</p>
-                <p className="text-gray-900">{publication.year}</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <Quote className="w-5 h-5 text-gray-500 mt-0.5" />
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Total Citations</p>
-                <p className="text-2xl text-gray-900">{publication.citations}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Abstract */}
-          {publication.abstract && (
-            <div className="pt-6 border-t border-gray-200">
-              <h3 className="text-lg text-gray-900 mb-2">Abstract</h3>
-              <p className="text-gray-700 leading-relaxed">{publication.abstract}</p>
-            </div>
-          )}
-
-          {/* Source Link */}
-          {publication.url && (
-            <div className="pt-4">
-              <Button
-                variant="outline"
-                onClick={() => window.open(publication.url, "_blank")}
-                className="text-blue-600 border-blue-300 hover:bg-blue-50"
-              >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                View Original Paper
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Impact Analysis Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <TrendingUp className="w-6 h-6 text-blue-600" />
-            <CardTitle>Impact Analysis</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Impact Score */}
-          {(publication as any).impactScore != null && (publication as any).impactScore > 0 && (
-            <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Research Impact Score</p>
-                <p className="text-3xl text-green-700">{(publication as any).impactScore}/10</p>
-              </div>
-              <div className="w-32 h-32">
-                <svg viewBox="0 0 36 36" className="transform -rotate-90">
-                  <path
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="#d1fae5"
-                    strokeWidth="3"
-                  />
-                  <path
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="#10b981"
-                    strokeWidth="3"
-                    strokeDasharray={`${((publication as any).impactScore / 10) * 100}, 100`}
-                  />
-                </svg>
-              </div>
-            </div>
-          )}
-
-          {/* Citation Trend Graph */}
-          {citationTrendData.length > 0 && (
-            <div>
-              <h3 className="text-lg text-gray-900 mb-4">Citation Trend Over Time</h3>
-              <ResponsiveContainer width="100%" height={300} key={`citation-trend-container-${id}`}>
-                <LineChart data={citationTrendData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" key={`grid-${id}`} />
-                  <XAxis dataKey="year" stroke="#6b7280" key={`xaxis-${id}`} />
-                  <YAxis stroke="#6b7280" key={`yaxis-${id}`} />
-                  <Tooltip
-                    key={`tooltip-${id}`}
-                    contentStyle={{
-                      backgroundColor: "white",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="citations"
-                    stroke="#3b82f6"
-                    strokeWidth={3}
-                    dot={{ fill: "#3b82f6", r: 5 }}
-                    name="Citations"
-                    key={`line-${id}`}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Citing Publications */}
-      {(citingPapers.length > 0 || publication.citations > 0) && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Papers Citing This Research ({citingPapers.length > 0 ? citingPapers.length : publication.citations})</CardTitle>
-              {publication.citedByLink && (
-                <Button
+                <Badge variant="secondary" className="text-xs font-mono">
+                  {indexingStr}
+                </Badge>
+                <Badge
                   variant="outline"
-                  size="sm"
-                  onClick={() => window.open(publication.citedByLink, "_blank")}
-                  className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                  className="text-xs border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300"
                 >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  View All on Google Scholar
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {citingPapers.length > 0 ? (
-              <div className="space-y-4">
-                <div className="space-y-4">
-                  {paginatedCitingPapers.map((paper: any, index: number) => {
-                    const globalIndex = (citationPage - 1) * CITATIONS_PER_PAGE + index + 1;
+                  <Globe className="w-3 h-3 mr-1" />
+                  {levelStr}
+                </Badge>
+                {assignedResearcherName && (
+                  <Badge
+                    variant="outline"
+                    className="text-xs border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300"
+                  >
+                    <User className="w-3 h-3 mr-1" />
+                    Assigned: {assignedResearcherName}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Title */}
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground leading-snug">
+                {publication.title}
+              </h1>
+
+              {/* Authors Section (Lead Researcher & Co-Researchers) */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Users className="w-4 h-4" />
+                  <span>
+                    Authors — Lead Researcher & Co-Researchers ({authorsList.length})
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {authorsList.map((authorName: string, index: number) => {
+                    const matchedFaculty = findAuthorFacultyProfile(
+                      authorName,
+                      researchers
+                    );
+                    const isLead = index === 0;
+
+                    if (matchedFaculty) {
+                      return (
+                        <Link
+                          key={index}
+                          to={`/dashboard/faculty/${matchedFaculty.id}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 transition-colors text-xs font-medium"
+                        >
+                          <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                          <span>{authorName}</span>
+                          <Badge className="bg-blue-600 text-white text-[10px] px-1.5 py-0 ml-0.5">
+                            {isLead ? "Lead • PSU" : "Co-Author • PSU"}
+                          </Badge>
+                        </Link>
+                      );
+                    }
+
                     return (
                       <div
-                        key={`citing-${id}-${globalIndex}`}
-                        className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all"
+                        key={index}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted/60 border border-border text-foreground text-xs"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs font-semibold text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
-                                #{globalIndex}
-                              </span>
-                              <h4 className="text-gray-900 font-medium">{paper.title}</h4>
-                            </div>
-                            {paper.authors && (
-                              <p className="text-sm text-gray-600 mb-1">{paper.authors}</p>
-                            )}
-                            {paper.year && (
-                              <p className="text-sm text-gray-500">Published in {paper.year}</p>
-                            )}
-                          </div>
-                          {paper.link && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(paper.link, "_blank")}
-                              className="shrink-0 text-blue-600 border-blue-200 hover:bg-blue-50"
-                            >
-                              <ExternalLink className="w-4 h-4 mr-2" />
-                              View Paper
-                            </Button>
-                          )}
-                        </div>
+                        <User className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span>{authorName}</span>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 ml-0.5 text-muted-foreground"
+                        >
+                          {isLead ? "Lead Researcher" : "Co-Researcher"}
+                        </Badge>
                       </div>
                     );
                   })}
                 </div>
-
-                {/* Pagination Controls */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500">
-                    <span>
-                      Showing {(citationPage - 1) * CITATIONS_PER_PAGE + 1}–{Math.min(citationPage * CITATIONS_PER_PAGE, citingPapers.length)} of {citingPapers.length} citing papers
-                    </span>
-                    <span className="text-gray-300">|</span>
-                    <span className="flex items-center gap-1">
-                      Per page:
-                      {[10, 25, 50].map((sz) => (
-                        <button
-                          key={`sz-${sz}`}
-                          onClick={() => { setCitationsPerPage(sz); setCitationPage(1); }}
-                          className={`px-1.5 py-0.5 rounded text-xs transition-colors ${
-                            citationsPerPage === sz
-                              ? "bg-blue-100 text-blue-700 font-semibold"
-                              : "text-gray-500 hover:text-gray-900"
-                          }`}
-                        >
-                          {sz}
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                  {totalCitationPages > 1 && (
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={citationPage === 1}
-                        onClick={() => setCitationPage(p => Math.max(1, p - 1))}
-                        className="h-8 text-xs px-2.5"
-                      >
-                        Previous
-                      </Button>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: totalCitationPages }, (_, i) => i + 1)
-                          .filter(pageNum => 
-                            pageNum === 1 || 
-                            pageNum === totalCitationPages || 
-                            Math.abs(pageNum - citationPage) <= 1
-                          )
-                          .reduce<(number | string)[]>((acc, pageNum, idx, arr) => {
-                            if (idx > 0 && pageNum - (arr[idx - 1] as number) > 1) {
-                              acc.push(`dots-${pageNum}`);
-                            }
-                            acc.push(pageNum);
-                            return acc;
-                          }, [])
-                          .map((item) => {
-                            if (typeof item === 'string') {
-                              return <span key={item} className="px-1 text-gray-400 text-xs">...</span>;
-                            }
-                            return (
-                              <Button
-                                key={`page-${item}`}
-                                variant={citationPage === item ? "default" : "outline"}
-                                size="sm"
-                                className={`h-8 w-8 p-0 text-xs ${citationPage === item ? "bg-blue-600 text-white" : ""}`}
-                                onClick={() => setCitationPage(item)}
-                              >
-                                {item}
-                              </Button>
-                            );
-                          })}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={citationPage === totalCitationPages}
-                        onClick={() => setCitationPage(p => Math.min(totalCitationPages, p + 1))}
-                        className="h-8 text-xs px-2.5"
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  )}
-                </div>
               </div>
-            ) : (
-              <div className="text-center py-8 space-y-3">
-                <Quote className="w-10 h-10 text-gray-300 mx-auto" />
-                <div>
-                  <p className="text-gray-600 mb-1">
-                    This publication has been cited <strong>{publication.citations}</strong> time{publication.citations !== 1 ? "s" : ""}.
-                  </p>
-                  {publication.citedByLink ? (
-                    <Button
-                      variant="default"
-                      className="mt-3 bg-blue-600 hover:bg-blue-700"
-                      onClick={() => window.open(publication.citedByLink, "_blank")}
-                    >
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      View Citing Papers on Google Scholar
-                    </Button>
-                  ) : publication.url ? (
-                    <Button
-                      variant="outline"
-                      className="mt-3"
-                      onClick={() => window.open(publication.url, "_blank")}
-                    >
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      View on Source
-                    </Button>
+            </div>
+
+            {/* Right Quick Action Buttons */}
+            <div className="flex flex-row lg:flex-col gap-2 shrink-0 flex-wrap">
+              {publication.url && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5"
+                  onClick={() => window.open(publication.url, "_blank")}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open Link of Evidence
+                </Button>
+              )}
+              {citedByUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs gap-1.5"
+                  onClick={() => window.open(citedByUrl, "_blank")}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  Google Scholar Citations
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs gap-1.5"
+                onClick={handleShare}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Share Paper
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* SECTION 1: OFFICIAL EXCEL PUBLICATION SHEET DATA */}
+      <Card className="border-border/70 shadow-xs overflow-hidden">
+        <CardHeader className="bg-blue-950/5 dark:bg-blue-950/20 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+              <CardTitle className="text-base font-bold">
+                Official Excel Report Data — Publication Sheet & Citation Columns 1–8
+              </CardTitle>
+            </div>
+            <CardDescription className="text-xs mt-0.5">
+              Complete bibliographic and indexing fields used when generating the researcher's official PSU RDO Excel workbook
+            </CardDescription>
+          </div>
+          {!isEditingExcel ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditingExcel(true)}
+              className="text-xs h-8 gap-1.5 shrink-0"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Edit Excel Fields
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsEditingExcel(false)}
+                disabled={savingExcel}
+                className="text-xs h-8 gap-1"
+              >
+                <X className="w-3.5 h-3.5" />
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveExcelFields}
+                disabled={savingExcel}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 gap-1.5"
+              >
+                {savingExcel ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                Save Changes
+              </Button>
+            </div>
+          )}
+        </CardHeader>
+
+        <CardContent className="p-6">
+          {!isEditingExcel ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60 md:col-span-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  1. Article / Title of Research Output
+                </span>
+                <p className="text-sm font-semibold text-foreground leading-snug">
+                  {publication.title}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60 md:col-span-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  2. Author(s) (Lead Researcher & Co-Researchers)
+                </span>
+                <p className="text-sm font-medium text-foreground leading-snug">
+                  {authorsString || "—"}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  3. Date of Publication
+                </span>
+                <p className="text-sm font-mono font-semibold text-foreground">
+                  {pubDateStr}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  4. Title of Journal or Publication
+                </span>
+                <p className="text-sm font-medium text-foreground">
+                  {publication.journal || "—"}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  5. Vol. No. & Issue No.
+                </span>
+                <p className="text-sm font-mono font-medium text-foreground">
+                  {volIssueStr}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  6. ISSN / ISBN / DOI
+                </span>
+                <p className="text-sm font-mono font-medium text-foreground break-all">
+                  {issnDoiStr}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  7. Index (Scopus / WoS / Google Scholar)
+                </span>
+                <Badge className="bg-emerald-600 text-white text-xs font-mono mt-0.5">
+                  {indexingStr}
+                </Badge>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  8. Level (International / National)
+                </span>
+                <p className="text-sm font-semibold text-foreground">
+                  {levelStr}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  9. Keywords
+                </span>
+                <p className="text-xs font-medium text-foreground leading-relaxed">
+                  {keywordsStr}
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-muted/30 border border-border/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                  10. Link of Evidence
+                </span>
+                {publication.url ? (
+                  <a
+                    href={publication.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline break-all inline-flex items-center gap-1"
+                  >
+                    <span>{publication.url}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Title of Journal or Publication
+                </label>
+                <Input
+                  value={editForm.journal}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, journal: e.target.value }))
+                  }
+                  placeholder="e.g., Asian Journal of Multidisciplinary Studies"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Date of Publication
+                </label>
+                <Input
+                  value={editForm.publication_date}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      publication_date: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., October 2020 or 2020"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Vol. No. & Issue No.
+                </label>
+                <Input
+                  value={editForm.volume_issue}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      volume_issue: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., Vol. 3, No. 2, pp. 42-50"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  ISSN / ISBN / DOI
+                </label>
+                <Input
+                  value={editForm.issn_isbn}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, issn_isbn: e.target.value }))
+                  }
+                  placeholder="e.g., 2651-6691 or 10.1109/..."
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Index (Scopus / WoS / Google Scholar)
+                </label>
+                <Input
+                  value={editForm.journal_indexing}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      journal_indexing: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g., Google Scholar, Scopus"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Level (International / National)
+                </label>
+                <select
+                  value={editForm.publication_level}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      publication_level: e.target.value,
+                    }))
+                  }
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs"
+                >
+                  <option value="International">International</option>
+                  <option value="National">National</option>
+                  <option value="Regional">Regional</option>
+                  <option value="Institutional">Institutional</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-xs font-semibold text-foreground">
+                  Keywords (semicolon or comma separated)
+                </label>
+                <Input
+                  value={editForm.keywords}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, keywords: e.target.value }))
+                  }
+                  placeholder="e.g., Contextualized teaching; Basic statistics; Education"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">
+                  Link of Evidence (URL)
+                </label>
+                <Input
+                  value={editForm.url}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({ ...prev, url: e.target.value }))
+                  }
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* SECTION 2: COMPLETE CITATION SHEET TABLE (ALL CITING PAPERS & CO-AUTHORS) */}
+      <Card className="border-border/70 shadow-xs overflow-hidden">
+        <CardHeader className="bg-teal-950/5 dark:bg-teal-950/20 border-b border-border/60">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Quote className="w-4 h-4 text-teal-600" />
+                <CardTitle className="text-base font-bold">
+                  Official Citation Sheet — Papers Citing This Research ({citingPapers.length} Recorded / {publication.citations || 0} Total)
+                </CardTitle>
+              </div>
+              <CardDescription className="text-xs mt-0.5">
+                Lists every citing article along with all citing authors (lead researcher and co-researchers), journal title, volume/issue/page, year published, quarter, and evidence link
+              </CardDescription>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {citingPapers.length > 0 && (
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    value={citingSearch}
+                    onChange={(e) => setCitingSearch(e.target.value)}
+                    placeholder="Filter citing authors or titles..."
+                    className="pl-8 h-8 text-xs"
+                  />
+                </div>
+              )}
+              {citedByUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 gap-1.5 shrink-0"
+                  onClick={() => window.open(citedByUrl, "_blank")}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Scholar Cited-By
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          {filteredCitingPapers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-teal-900/90 text-white uppercase tracking-wider text-[10px] font-bold">
+                  <tr>
+                    <th className="p-3 w-12 text-center border-r border-teal-800">#</th>
+                    <th className="p-3 min-w-[230px] border-r border-teal-800">
+                      Author(s) Who Cited the Research Output
+                      <span className="block text-[9px] font-normal text-teal-200 normal-case">
+                        Lead Researcher & All Co-Researchers
+                      </span>
+                    </th>
+                    <th className="p-3 min-w-[260px] border-r border-teal-800">
+                      Title of Article Where the Research Output Was Cited
+                    </th>
+                    <th className="p-3 min-w-[180px] border-r border-teal-800">
+                      Title of Journal
+                    </th>
+                    <th className="p-3 min-w-[120px] text-center border-r border-teal-800">
+                      Vol. / Issue / Page No.
+                    </th>
+                    <th className="p-3 w-28 text-center border-r border-teal-800">
+                      City / Year Published
+                    </th>
+                    <th className="p-3 w-24 text-center border-r border-teal-800">
+                      Quarter
+                    </th>
+                    <th className="p-3 w-28 text-center">Link</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/70">
+                  {filteredCitingPapers.map((citingPaper: any, idx: number) => {
+                    const citingAuthors = parseAuthorsList(citingPaper.authors);
+                    const citingJournal =
+                      citingPaper.journal || "Academic Publication / Google Scholar";
+                    const citingVolIssue = citingPaper.volume_issue || "—";
+                    const citingYear = citingPaper.year
+                      ? String(citingPaper.year)
+                      : "—";
+                    const citingQuarter = citingPaper.quarter || "First";
+
+                    return (
+                      <tr
+                        key={citingPaper.id || idx}
+                        className="hover:bg-muted/30 transition-colors align-top"
+                      >
+                        <td className="p-3 text-center font-mono font-bold text-muted-foreground border-r border-border/50">
+                          {idx + 1}
+                        </td>
+                        <td className="p-3 border-r border-border/50">
+                          {citingAuthors.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <p className="font-semibold text-foreground leading-snug">
+                                {citingAuthors.join(", ")}
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {citingAuthors.map((ca, cIdx) => (
+                                  <span
+                                    key={cIdx}
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                      cIdx === 0
+                                        ? "bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20"
+                                        : "bg-muted text-muted-foreground"
+                                    }`}
+                                  >
+                                    {cIdx === 0 ? `Lead: ${ca}` : ca}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground italic">
+                              Author metadata pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 font-semibold text-foreground leading-snug border-r border-border/50">
+                          {citingPaper.title}
+                          {citingPaper.doi_issn && (
+                            <span className="block text-[10px] font-mono font-normal text-muted-foreground mt-1">
+                              DOI/ISSN: {citingPaper.doi_issn}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-foreground/90 font-medium border-r border-border/50">
+                          {citingJournal}
+                        </td>
+                        <td className="p-3 text-center font-mono text-muted-foreground border-r border-border/50">
+                          {citingVolIssue}
+                        </td>
+                        <td className="p-3 text-center font-mono font-semibold text-foreground border-r border-border/50">
+                          {citingYear}
+                        </td>
+                        <td className="p-3 text-center font-medium text-muted-foreground border-r border-border/50">
+                          {citingQuarter}
+                        </td>
+                        <td className="p-3 text-center">
+                          {citingPaper.link ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-[11px] px-2.5 gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                              onClick={() => window.open(citingPaper.link, "_blank")}
+                            >
+                              <span>View Paper</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-10 text-center space-y-3">
+              <Quote className="w-10 h-10 text-muted-foreground/40 mx-auto" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {publication.citations > 0
+                    ? `This publication has ${publication.citations} recorded citation(s).`
+                    : "No citing papers recorded yet for this publication."}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {publication.citations > 0
+                    ? 'Click "Refresh & Enrich Data" above or view on Google Scholar to inspect citing articles.'
+                    : "When external researchers cite this paper in indexed journals, their full author list and article details will appear here automatically."}
+                </p>
+              </div>
+              {citedByUrl && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(citedByUrl, "_blank")}
+                  className="mt-2 gap-1.5 text-xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  View Citing Papers on Google Scholar
+                </Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* SECTION 3: ABSTRACT & SDG CHECK SIDE-BY-SIDE */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Abstract & Instant Citation Formats */}
+        <Card className="border-border/70 shadow-xs">
+          <CardHeader>
+            <CardTitle className="text-base font-bold">
+              Abstract & Citation Formats
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Full abstract and standardized reference strings
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="p-4 rounded-xl bg-muted/30 border border-border/60 text-sm text-foreground/90 leading-relaxed">
+              {publication.abstract ||
+                "No abstract on file for this publication. Stored in institutional registry."}
+            </div>
+
+            <div className="space-y-2.5 pt-2 border-t border-border/50">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Quote className="w-3.5 h-3.5" />
+                Copy Standardized Citation
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyToClipboard(apaCitation, "APA 7th")}
+                  className="justify-start gap-2 h-9 text-xs"
+                >
+                  {copiedFormat === "APA 7th" ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
                   ) : (
-                    <p className="text-sm text-gray-400">
-                      Individual citing papers will appear here as they are indexed.
-                    </p>
+                    <Copy className="w-3.5 h-3.5" />
                   )}
-                </div>
+                  Copy APA 7th Format
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyToClipboard(bibtexCitation, "BibTeX")}
+                  className="justify-start gap-2 h-9 text-xs font-mono"
+                >
+                  {copiedFormat === "BibTeX" ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-500" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                  Copy BibTeX Entry
+                </Button>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Additional Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <Quote className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-600 mb-1">Average Citations/Year</p>
-              <p className="text-2xl text-gray-900">
-                {(publication.citations / yearsActive).toFixed(1)}
-              </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <TrendingUp className="w-8 h-8 text-green-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-600 mb-1">Citation Velocity</p>
-              <p className="text-2xl text-gray-900">
-                {citationTrendData.length > 0
-                  ? citationTrendData[citationTrendData.length - 1].citations
-                  : "N/A"}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">Last year</p>
+        {/* UN SDG Check */}
+        <Card className="border-border/70 shadow-xs">
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-emerald-600" />
+                <CardTitle className="text-base font-bold">
+                  UN SDG Check & CHED Alignment
+                </CardTitle>
+              </div>
+              <CardDescription className="text-xs mt-0.5">
+                AI Sustainable Development Goals evaluation
+              </CardDescription>
             </div>
-          </CardContent>
-        </Card>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleReclassifySDG}
+              disabled={isClassifying}
+              className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+            >
+              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+              {isClassifying ? "Analyzing..." : "Re-evaluate AI"}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              {sdgList.map((sdg, idx) => {
+                const tailoredWhy = getRationaleForSDG(sdg);
+                return (
+                  <div
+                    key={sdg}
+                    className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold text-white ${
+                          idx === 0 ? "bg-emerald-600" : "bg-blue-600"
+                        }`}
+                      >
+                        {idx === 0 ? "Primary SDG" : "Secondary SDG"}
+                      </span>
+                      <span className="text-sm font-bold text-foreground">
+                        {sdg}
+                      </span>
+                    </div>
+                    {tailoredWhy ? (
+                      <p className="text-xs text-muted-foreground leading-relaxed italic">
+                        "{tailoredWhy}"
+                      </p>
+                    ) : (
+                      rawRationale &&
+                      !rawRationale.startsWith("{") &&
+                      idx === 0 && (
+                        <p className="text-xs text-muted-foreground leading-relaxed italic">
+                          "{rawRationale}"
+                        </p>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
-              <p className="text-sm text-gray-600 mb-1">Co-Authors</p>
-              <p className="text-2xl text-gray-900">
-                {Array.isArray(publication.authors) ? publication.authors.length : 1}
-              </p>
+            <div className="pt-2 border-t border-border/50">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                Philippine CHED / DOST Priority Area
+              </span>
+              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs font-medium text-blue-800 dark:text-blue-300">
+                {publication.ched_priority ||
+                  publication.chedPriority ||
+                  "Smart Education and Pedagogical Advancement"}
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* SECTION 4: CITATION VELOCITY CHART (If trend data exists) */}
+      {citationTrendData.length > 0 && (
+        <Card className="border-border/70 shadow-xs">
+          <CardHeader>
+            <CardTitle className="text-base font-bold">
+              Citations Over Time
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Annual citation trajectory for this publication ({ (publication.citations / yearsActive).toFixed(1) } avg citations/year)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={citationTrendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="year" stroke="#6b7280" fontSize={12} />
+                <YAxis stroke="#6b7280" fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "8px",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="citations"
+                  stroke="#2563eb"
+                  strokeWidth={2.5}
+                  name="Citations"
+                  dot={{ fill: "#2563eb", r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

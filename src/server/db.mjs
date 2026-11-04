@@ -163,6 +163,11 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE publications ADD COLUMN jc3_points REAL DEFAULT 0.0`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN ched_priority TEXT`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN doi TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN keywords TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN issn_isbn TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN volume_issue TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN publication_date TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN publication_level TEXT DEFAULT 'International'`); } catch {}
 
   // 5. Citation Trends Table (yearly citations per publication)
   db.exec(`
@@ -184,9 +189,18 @@ export function initDatabase() {
       authors TEXT,
       year INTEGER,
       link TEXT,
+      journal TEXT,
+      volume_issue TEXT,
+      quarter TEXT,
+      doi_issn TEXT,
       FOREIGN KEY (publication_id) REFERENCES publications(id) ON DELETE CASCADE
     );
   `);
+
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN journal TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN volume_issue TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN quarter TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN doi_issn TEXT`); } catch {}
 
   // 7. Apify Scraper Tokens Table (Support for multiple tokens, switching, and auto-failover)
   db.exec(`
