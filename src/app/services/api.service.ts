@@ -30,9 +30,25 @@ export interface ScholarSearchResult {
   citations: number;
   abstract?: string;
   url?: string;
+  pdfUrl?: string | null;
   citedByLink?: string;
   citedByTotal?: number;
   fromCache?: boolean;
+}
+
+export interface ScholarSearchResponse {
+  results: ScholarSearchResult[];
+  fromCache: boolean;
+  searchSource?: 'cache' | 'direct' | 'apify' | 'none';
+  sourceLabel?: string;
+  captchaDetected?: boolean;
+  count: number;
+  page?: number;
+  hasMore?: boolean;
+  usedToken?: boolean;
+  requiresApify?: boolean;
+  message: string;
+  tokenUsage?: ApifyTokenUsage | null;
 }
 
 export interface ScholarAuthorDetail {
@@ -434,20 +450,18 @@ class ApiService {
     });
   }
 
+
   // 5. Google Scholar & Scraper Caching
-  async searchGoogleScholar(query: string, refresh = false): Promise<{
-    results: ScholarSearchResult[];
-    fromCache: boolean;
-    searchSource?: 'cache' | 'direct' | 'apify' | 'none';
-    sourceLabel?: string;
-    captchaDetected?: boolean;
-    count: number;
-    requiresApify?: boolean;
-    message: string;
-    tokenUsage?: ApifyTokenUsage | null;
-  }> {
+  async searchGoogleScholar(
+    query: string,
+    options?: { page?: number; refresh?: boolean } | boolean
+  ): Promise<ScholarSearchResponse> {
+    const isLegacyBoolean = typeof options === 'boolean';
+    const refresh = isLegacyBoolean ? options : Boolean(options?.refresh);
+    const page = !isLegacyBoolean && options?.page !== undefined ? options.page : 0;
     const refreshParam = refresh ? '&refresh=true' : '';
-    return this.request(`/search/google-scholar?q=${encodeURIComponent(query)}${refreshParam}`);
+    const pageParam = page > 0 ? `&page=${page}` : '';
+    return this.request<ScholarSearchResponse>(`/search/google-scholar?q=${encodeURIComponent(query)}${pageParam}${refreshParam}`);
   }
 
   async fetchScholarProfile(scholarUrl: string): Promise<FetchScholarProfileResponse> {
@@ -609,7 +623,7 @@ class ApiService {
   }): Promise<{
     success: boolean;
     sdg: { primarySDG: string; secondarySDG: string; rationale: string; chedPriority: string };
-    audit: { indexing: string; nbc461Points: number; isPredatory: number; confidence: string };
+    audit: { indexing: string; jc3Points?: number; nbc461Points: number; isPredatory: number; confidence: string };
   }> {
     return this.request('/ai/classify-sdg', {
       method: 'POST',
@@ -694,6 +708,7 @@ export interface SDGPaperItem {
   sdgTags?: string[];
   ownerName?: string;
   journalIndexing?: string;
+  jc3Points?: number;
   nbc461Points?: number;
 }
 

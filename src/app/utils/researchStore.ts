@@ -150,20 +150,31 @@ export function setAuthToken(token: string) {
   } catch {}
 }
 
-export function getCurrentUser(): SessionUser {
+export function getStoredUser(): SessionUser | null {
   try {
     const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (stored) return JSON.parse(stored);
   } catch {
-    // Fallback below
+    return null;
   }
-  return { role: "admin", name: "Admin User", username: "admin" };
+  return null;
+}
+
+export function isAuthenticated(): boolean {
+  return getStoredUser() !== null;
+}
+
+export function getCurrentUser(): SessionUser | null {
+  return getStoredUser();
 }
 
 export function setCurrentUser(user: SessionUser, token?: string) {
   sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(user));
   if (token) {
     setAuthToken(token);
+  } else {
+    // Ensure session token exists even in offline or fallback logins
+    setAuthToken(`psu_local_token_${Date.now()}_${user.role}`);
   }
 }
 
@@ -172,8 +183,9 @@ export function clearCurrentUser() {
   sessionStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
-export function updateCurrentUser(updates: Partial<SessionUser>): SessionUser {
+export function updateCurrentUser(updates: Partial<SessionUser>): SessionUser | null {
   const current = getCurrentUser();
+  if (!current) return null;
   const updated: SessionUser = { ...current, ...updates };
   setCurrentUser(updated);
   window.dispatchEvent(new Event("current-user-updated"));

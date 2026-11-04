@@ -30,6 +30,7 @@ import {
 } from "./ui/command";
 import { useTheme } from "../utils/themeContext";
 import { apiService } from "../services/api.service";
+import { getCurrentUser } from "../utils/researchStore";
 import { toast } from "sonner";
 
 interface CommandPaletteProps {
@@ -40,6 +41,8 @@ interface CommandPaletteProps {
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const currentUser = getCurrentUser();
+  const isAdmin = currentUser?.role === "admin";
   const [researchers, setResearchers] = useState<Array<{ id: string; name: string; department: string }>>([]);
 
   useEffect(() => {
@@ -58,6 +61,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   };
 
   const runBatchClassify = async () => {
+    if (!isAdmin) {
+      toast.error("Access Denied: Only administrators can run batch classification.");
+      return;
+    }
     toast.loading("Running Gemini Flash UN SDG Classifier on campus research...", { id: "batch-sdg" });
     try {
       const res = await apiService.batchClassifySDG();
@@ -75,7 +82,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <CommandEmpty>No results found.</CommandEmpty>
 
         {/* AI & Institutional Quick Actions */}
-        <CommandGroup heading="⚡ AI & Institutional Tools">
+        <CommandGroup heading="⚡ AI & Research Tools">
           <CommandItem
             onSelect={() =>
               handleSelect(() => {
@@ -101,47 +108,59 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             <Target className="mr-2 h-4 w-4 text-emerald-600" />
             <span>UN SDG Impact Radar & Research Evidence Directory</span>
           </CommandItem>
-          <CommandItem
-            onSelect={() => handleSelect(runBatchClassify)}
-            className="cursor-pointer"
-          >
-            <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
-            <span>Batch Auto-Tag All Publications with UN SDGs (Gemini Flash)</span>
-          </CommandItem>
+          {isAdmin && (
+            <CommandItem
+              onSelect={() => handleSelect(runBatchClassify)}
+              className="cursor-pointer"
+            >
+              <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
+              <span>Batch Auto-Tag All Publications with UN SDGs (Gemini Flash)</span>
+            </CommandItem>
+          )}
         </CommandGroup>
 
         <CommandSeparator />
 
         {/* Navigation */}
         <CommandGroup heading="📍 Navigation">
-          <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard"))}>
-            <LayoutDashboard className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span>Executive Dashboard</span>
-          </CommandItem>
+          {isAdmin && (
+            <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard"))}>
+              <LayoutDashboard className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Executive Dashboard</span>
+            </CommandItem>
+          )}
           <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/search-engine"))}>
             <Search className="mr-2 h-4 w-4 text-muted-foreground" />
             <span>Scholar Search & Paper Claim Engine</span>
           </CommandItem>
           <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/publications"))}>
             <FileText className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span>Publications Repository (Dense Table & Kanban)</span>
+            <span>
+              {isAdmin
+                ? "Publications Repository (Dense Table & Kanban)"
+                : "My Publications & Submissions"}
+            </span>
           </CommandItem>
           <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/researchers"))}>
             <Users className="mr-2 h-4 w-4 text-muted-foreground" />
             <span>Faculty Researchers Directory</span>
           </CommandItem>
-          <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/impact"))}>
-            <TrendingUp className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span>Citations & Impact Analytics</span>
-          </CommandItem>
-          <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/reports"))}>
-            <FileBarChart className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span>Accreditation & SUC Leveling Reports</span>
-          </CommandItem>
-          <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/admin"))}>
-            <Shield className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span>Institutional Admin Controls</span>
-          </CommandItem>
+          {isAdmin && (
+            <>
+              <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/impact"))}>
+                <TrendingUp className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span>Citations & Impact Analytics</span>
+              </CommandItem>
+              <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/reports"))}>
+                <FileBarChart className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span>Accreditation & SUC Leveling Reports</span>
+              </CommandItem>
+              <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard/admin"))}>
+                <Shield className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span>Institutional Admin Controls</span>
+              </CommandItem>
+            </>
+          )}
         </CommandGroup>
 
         {/* Faculty Jump */}

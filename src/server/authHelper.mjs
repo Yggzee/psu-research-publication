@@ -228,6 +228,7 @@ export function sanitizePublicationInput(data, caller, isCreate = false) {
       sdgRationale: data.sdgRationale || data.sdg_rationale,
       chedPriority: data.chedPriority || data.ched_priority,
       journalIndexing: data.journalIndexing || data.journal_indexing,
+      jc3Points: data.jc3Points !== undefined ? Number(data.jc3Points) : (data.jc3_points !== undefined ? Number(data.jc3_points) : null),
       nbc461Points: data.nbc461Points !== undefined ? Number(data.nbc461Points) : null,
       isPredatoryFlag: data.isPredatoryFlag !== undefined ? Boolean(data.isPredatoryFlag) : null,
       citingPapers: data.citingPapers,
@@ -237,7 +238,7 @@ export function sanitizePublicationInput(data, caller, isCreate = false) {
   // For non-admin (Faculty/Instructor):
   // 1. Force approvalStatus to 'pending' (cannot self-approve!)
   // 2. Lock owner to authenticated caller
-  // 3. nbc461Points cannot be arbitrarily dictated (set to null so auditJournalReputation calculates it)
+  // 3. jc3Points/nbc461Points cannot be arbitrarily dictated (set to null so auditJournalReputation calculates it)
   return {
     title: data.title?.trim(),
     authors: data.authors,
@@ -261,6 +262,7 @@ export function sanitizePublicationInput(data, caller, isCreate = false) {
     sdgRationale: null,
     chedPriority: null,
     journalIndexing: null, // Computed server-side
+    jc3Points: null,       // Computed server-side from audited journal
     nbc461Points: null,    // Computed server-side from audited journal
     isPredatoryFlag: null, // Computed server-side
     citingPapers: data.citingPapers,

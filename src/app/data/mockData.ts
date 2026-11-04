@@ -12,6 +12,28 @@ export interface Publication {
   citedByLink?: string;
   citationTrend?: { year: number; citations: number; id: string }[];
   impactScore?: number;
+  jc3Points?: number;
+  jc3_points?: number;
+  nbc461Points?: number;
+  nbc461_points?: number;
+  journal_indexing?: string;
+  journalIndexing?: string;
+  is_predatory_flag?: number | boolean;
+  sdg_tags?: string | string[];
+  sdgTags?: string[];
+  sdg_rationale?: string;
+  sdgRationale?: string;
+  ched_priority?: string;
+  approval_status?: string;
+  approvalStatus?: string;
+  research_status?: string;
+  researchStatus?: string;
+  isPublic?: boolean;
+  is_public?: number | boolean;
+  owner_name?: string;
+  ownerName?: string;
+  owner_id?: string;
+  ownerId?: string;
   citingPapers?: {
     title: string;
     authors?: string;

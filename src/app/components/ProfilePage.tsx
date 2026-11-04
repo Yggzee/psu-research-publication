@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { PageHeader, StatCard, SectionCard, StatusBadge } from "./common";
 
 export function ProfilePage() {
-  const [currentUser, setCurrentUserState] = useState<SessionUser>(getCurrentUser());
+  const [currentUser, setCurrentUserState] = useState<SessionUser>(() => getCurrentUser() || { role: "instructor", name: "Researcher" });
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [stats, setStats] = useState({ totalPublications: 0, totalCitations: 0 });
@@ -103,7 +103,7 @@ export function ProfilePage() {
           scholarUrl: res.user.scholarUrl,
           googleScholarId: res.user.googleScholarId,
         });
-        setCurrentUserState(updated);
+        if (updated) setCurrentUserState(updated);
         setIsEditing(false);
         toast.success("Profile updated successfully!");
       } else {
@@ -118,7 +118,7 @@ export function ProfilePage() {
         scholarUrl: formData.scholarUrl,
         googleScholarId: formData.googleScholarId,
       });
-      setCurrentUserState(updated);
+      if (updated) setCurrentUserState(updated);
       setIsEditing(false);
       toast.success("Profile saved locally!");
     } finally {

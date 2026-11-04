@@ -1147,10 +1147,17 @@ export async function handleApiRequest(req, res) {
           }
         }
 
+        const jc3 = p.jc3_points !== null && p.jc3_points !== undefined
+          ? Number(p.jc3_points)
+          : (p.nbc461_points ? (p.nbc461_points >= 25 ? 50.0 : p.nbc461_points >= 15 ? 30.0 : p.nbc461_points >= 10 ? 20.0 : 10.0) : 10.0);
+
         return {
           ...p,
           authors: JSON.parse(p.authors || '[]'),
           isPublic: Boolean(p.is_public),
+          jc3Points: jc3,
+          jc3_points: jc3,
+          nbc461Points: p.nbc461_points,
           citedByLink: citedByLink || null,
           citingPapers: citing,
         };
@@ -1240,10 +1247,17 @@ export async function handleApiRequest(req, res) {
         }
       }
 
+      const jc3 = p.jc3_points !== null && p.jc3_points !== undefined
+        ? Number(p.jc3_points)
+        : (p.nbc461_points ? (p.nbc461_points >= 25 ? 50.0 : p.nbc461_points >= 15 ? 30.0 : p.nbc461_points >= 10 ? 20.0 : 10.0) : 10.0);
+
       return sendJson(200, {
         ...p,
         authors: JSON.parse(p.authors || '[]'),
         isPublic: Boolean(p.is_public),
+        jc3Points: jc3,
+        jc3_points: jc3,
+        nbc461Points: p.nbc461_points,
         citationTrend: trends,
         citingPapers: citing,
         citedByLink: citedByLink || null,
@@ -1295,6 +1309,7 @@ export async function handleApiRequest(req, res) {
       let sdgRationale = sanitized.sdgRationale || null;
       let chedPriority = sanitized.chedPriority || null;
       let journalIndex = sanitized.journalIndexing || null;
+      let jc3Points = sanitized.jc3Points !== null && sanitized.jc3Points !== undefined ? sanitized.jc3Points : null;
       let nbcPoints = sanitized.nbc461Points !== null ? sanitized.nbc461Points : 5.0;
       let isPredatory = sanitized.isPredatoryFlag !== null ? (sanitized.isPredatoryFlag ? 1 : 0) : 0;
 
@@ -1309,9 +1324,10 @@ export async function handleApiRequest(req, res) {
         }
       }
 
-      if (!journalIndex) {
+      if (!journalIndex || jc3Points === null) {
         const audit = auditJournalReputation(sanitized.journal || '');
-        journalIndex = audit.indexing;
+        if (!journalIndex) journalIndex = audit.indexing;
+        if (jc3Points === null) jc3Points = audit.jc3Points;
         nbcPoints = audit.nbc461Points;
         isPredatory = audit.isPredatory;
       }
@@ -1322,8 +1338,8 @@ export async function handleApiRequest(req, res) {
           impact_score, owner_id, owner_name, source, approval_status,
           research_status, is_public, file_name, cited_by_link,
           sdg_tags, sdg_rationale, ched_priority, journal_indexing,
-          nbc461_points, is_predatory_flag, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          jc3_points, nbc461_points, is_predatory_flag, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         sanitized.title,
@@ -1346,6 +1362,7 @@ export async function handleApiRequest(req, res) {
         sdgRationale,
         chedPriority,
         journalIndex,
+        jc3Points,
         nbcPoints,
         isPredatory,
         now
@@ -1931,144 +1948,85 @@ export async function handleApiRequest(req, res) {
     }
 
     // ----------------------------------------------------
-    // 5. GOOGLE SCHOLAR SEARCH & PERSISTENT SCRAPING CACHE
+    // 5. GOOGLE SCHOLAR SEARCH & LIVE SCRAPING (10 PAPERS PER PAGE)
     // ----------------------------------------------------
     if (pathname === '/api/search/google-scholar' && method === 'GET') {
       const query = (url.searchParams.get('q') || '').trim();
-      const forceRefresh = url.searchParams.get('refresh') === 'true';
+      const page = Math.max(0, parseInt(url.searchParams.get('page') || '0', 10));
+      const limit = 10;
 
       if (!query) {
-        return sendJson(200, await attachTokenUsage({ results: [], fromCache: true }));
+        return sendJson(200, await attachTokenUsage({ results: [], fromCache: true, page: 0, hasMore: false, count: 0 }));
       }
 
-      // Query normalization for smart searching (e.g. "Lastname, Firstname" -> "Firstname Lastname")
-      let cleanQuery = query.trim();
-      if (cleanQuery.includes(',') && !cleanQuery.includes('AND') && !cleanQuery.includes('OR')) {
-        const parts = cleanQuery.split(',').map((p) => p.trim());
-        if (parts.length === 2 && parts[0] && parts[1]) {
-          cleanQuery = `${parts[1]} ${parts[0]}`;
-        }
-      }
+      const cleanQuery = query;
 
-      // STEP 1: Check database cache FIRST (exact or like match on title, authors, or query)
-      const cached = db.prepare(`
-        SELECT id, title, authors, journal, year, citations, abstract, url, cited_by_link 
-        FROM scraped_publications 
-        WHERE LOWER(title) LIKE LOWER(?) 
-           OR LOWER(authors) LIKE LOWER(?) 
-           OR LOWER(search_query) LIKE LOWER(?)
-      `).all(`%${cleanQuery}%`, `%${cleanQuery}%`, `%${cleanQuery}%`);
-
-      // Also check local institutional publications database
-      const localPubs = db.prepare(`
-        SELECT id, title, authors, journal, year, citations, abstract, url, cited_by_link
-        FROM publications 
-        WHERE LOWER(title) LIKE LOWER(?) 
-           OR LOWER(authors) LIKE LOWER(?) 
-           OR LOWER(owner_name) LIKE LOWER(?)
-      `).all(`%${cleanQuery}%`, `%${cleanQuery}%`, `%${cleanQuery}%`);
-
-      const combinedCached = [];
-      const seenTitles = new Set();
-
-      for (const p of [...cached, ...localPubs]) {
-        const normTitle = (p.title || '').trim().toLowerCase();
-        if (!normTitle || seenTitles.has(normTitle)) continue;
-        seenTitles.add(normTitle);
-
-        let parsedAuthors = [];
-        try {
-          parsedAuthors = Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]');
-        } catch {
-          parsedAuthors = typeof p.authors === 'string' ? p.authors.split(',').map((a) => a.trim()) : [];
-        }
-
-        combinedCached.push({
-          ...p,
-          authors: parsedAuthors,
-          citedByLink: p.cited_by_link || null,
-          fromCache: true,
-        });
-      }
-
-      // If we have 10 or more cached results and no force-refresh requested, return immediately
-      if (!forceRefresh && combinedCached.length >= 10) {
-        return sendJson(200, await attachTokenUsage({
-          results: combinedCached,
-          fromCache: true,
-          searchSource: 'cache',
-          sourceLabel: 'Local Database Cache',
-          count: combinedCached.length,
-          message: `Loaded ${combinedCached.length} publications instantly from local database cache (0 token credits used)`,
-        }));
-      }
-
-      // STEP 2: Live Fetch from Google Scholar (Direct + Apify fallback)
-      // Prioritize the free built-in direct scraper first to preserve Apify token credits as much as possible
+      // STEP 1: Live Fetch directly from Google Scholar (Free, built-in, 0 token credits)
       let liveResults = [];
       let captchaBlocked = false;
       try {
-        liveResults = await scrapeGoogleScholarDirect(cleanQuery, 2);
+        liveResults = await scrapeGoogleScholarDirect(cleanQuery, page, limit);
         captchaBlocked = Boolean(liveResults.captchaBlocked);
       } catch (err) {
-        console.warn('[ScholarSearch] Direct search fallback:', err.message);
+        console.warn('[ScholarSearch] Direct search error:', err.message);
       }
 
-      // If direct scraping gave good results, save and return immediately without consuming any Apify token
+      // If direct scraping succeeded, save papers to DB cache and return immediately
       if (liveResults.length > 0) {
-        const insertScraped = db.prepare(`
-          INSERT OR REPLACE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        const now = new Date().toISOString();
-
-        for (const item of liveResults) {
-          insertScraped.run(
-            item.id,
-            item.title,
-            JSON.stringify(item.authors),
-            item.journal,
-            item.year,
-            item.citations,
-            item.abstract,
-            item.url,
-            item.citedByLink,
-            cleanQuery,
-            now
-          );
-        }
-
-        // Merge with existing local publications
-        for (const p of localPubs) {
-          const normTitle = (p.title || '').trim().toLowerCase();
-          if (!seenTitles.has(normTitle)) {
-            seenTitles.add(normTitle);
-            let parsedAuthors = [];
-            try {
-              parsedAuthors = Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]');
-            } catch {
-              parsedAuthors = typeof p.authors === 'string' ? p.authors.split(',').map((a) => a.trim()) : [];
-            }
-            liveResults.push({
-              ...p,
-              authors: parsedAuthors,
-              citedByLink: p.cited_by_link || null,
-              fromCache: true,
-            });
+        try {
+          const insertScraped = db.prepare(`
+            INSERT OR REPLACE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          const now = new Date().toISOString();
+          for (const item of liveResults) {
+            insertScraped.run(
+              item.id,
+              item.title,
+              JSON.stringify(item.authors),
+              item.journal,
+              item.year,
+              item.citations,
+              item.abstract,
+              item.url,
+              item.citedByLink,
+              cleanQuery,
+              now
+            );
           }
+        } catch (dbErr) {
+          console.warn('[ScholarSearch] DB save error:', dbErr.message);
         }
 
         return sendJson(200, await attachTokenUsage({
           results: liveResults,
           fromCache: false,
           searchSource: 'direct',
-          sourceLabel: 'Built-in Direct Search (Free)',
+          sourceLabel: 'Direct Google Scholar (Free)',
+          usedToken: false,
+          page,
+          hasMore: liveResults.hasMore ?? (liveResults.length === limit),
           count: liveResults.length,
-          message: `Retrieved ${liveResults.length} publications directly from Google Scholar via built-in scraper (0 Apify token credits used)`,
+          message: `Retrieved ${liveResults.length} papers directly from Google Scholar (0 scraper tokens used)`,
         }));
       }
 
-      // STEP 3: Fallback to Apify Google Scholar Scraper (Only used if direct scraping failed or hit CAPTCHA)
+      // If Google Scholar had zero results naturally (not a CAPTCHA lock)
+      if (!captchaBlocked) {
+        return sendJson(200, await attachTokenUsage({
+          results: [],
+          fromCache: false,
+          searchSource: 'direct',
+          sourceLabel: 'Direct Google Scholar (Free)',
+          usedToken: false,
+          page,
+          hasMore: false,
+          count: 0,
+          message: `Google Scholar returned 0 results for "${cleanQuery}".`,
+        }));
+      }
+
+      // STEP 2: Fallback to Apify Google Scholar Scraper (Only used if direct scraping hit CAPTCHA/429)
       const tokenRows = db.prepare(`
         SELECT * FROM apify_tokens ORDER BY is_active DESC, created_at DESC
       `).all();
@@ -2090,31 +2048,18 @@ export async function handleApiRequest(req, res) {
       }
 
       if (candidateTokens.length === 0) {
-        // If no Apify tokens, return whatever cache we had
-        if (combinedCached.length > 0) {
-          return sendJson(200, await attachTokenUsage({
-            results: combinedCached,
-            fromCache: true,
-            searchSource: 'cache',
-            sourceLabel: 'Local Database Cache',
-            captchaDetected: captchaBlocked,
-            count: combinedCached.length,
-            message: captchaBlocked
-              ? `Google Scholar anti-bot CAPTCHA detected. Loaded ${combinedCached.length} publications from local database cache.`
-              : `Loaded ${combinedCached.length} publications from local database cache`,
-          }));
-        }
         return sendJson(200, await attachTokenUsage({
           results: [],
           fromCache: false,
           searchSource: 'none',
-          sourceLabel: 'No Service Available',
+          sourceLabel: 'No Token Configured',
           count: 0,
+          page,
+          hasMore: false,
           requiresApify: true,
-          captchaDetected: captchaBlocked,
-          message: captchaBlocked
-            ? 'Google Scholar presented a CAPTCHA challenge ("unusual traffic"). Connect an Apify token to bypass the anti-bot lock.'
-            : 'Google Scholar search returned 0 results. Connect an Apify token for additional redundancy.',
+          captchaDetected: true,
+          usedToken: false,
+          message: 'Google Scholar presented a CAPTCHA challenge ("unusual traffic"). Connect an Apify token to bypass the anti-bot lock.',
         }));
       }
 
@@ -2122,7 +2067,6 @@ export async function handleApiRequest(req, res) {
       let rawItems = null;
       let usedTokenName = '';
 
-      // Try tokens in order
       for (const cand of candidateTokens) {
         try {
           const targetActor = cand.actorId.includes('lite')
@@ -2132,8 +2076,8 @@ export async function handleApiRequest(req, res) {
 
           const isLite = targetActor.includes('lite');
           const bodyPayload = isLite
-            ? { searchTerms: [cleanQuery], maxResults: 100 }
-            : { q: cleanQuery, query: cleanQuery, queries: [cleanQuery], max_pages: 5, maxResults: 100 };
+            ? { searchTerms: [cleanQuery], maxResults: limit }
+            : { q: cleanQuery, query: cleanQuery, queries: [cleanQuery], max_pages: 1, start_page: page + 1, maxResults: limit };
 
           const apifyRes = await fetch(
             `https://api.apify.com/v2/acts/${actorUrlSegment}/run-sync-get-dataset-items?token=${cand.token}`,
@@ -2165,46 +2109,32 @@ export async function handleApiRequest(req, res) {
       }
 
       if (!rawItems) {
-        // Fallback to cache if Apify failed
-        if (combinedCached.length > 0) {
-          return sendJson(200, await attachTokenUsage({
-            results: combinedCached,
-            fromCache: true,
-            count: combinedCached.length,
-            message: `Loaded ${combinedCached.length} publications from local cache`,
-          }));
-        }
         return sendJson(502, await attachTokenUsage({
           error: `Google Scholar scraping failed: ${lastError}`,
           results: [],
           fromCache: false,
+          page,
+          hasMore: false,
+          requiresApify: true,
+          captchaDetected: true,
         }));
       }
 
       const items = Array.isArray(rawItems) ? rawItems : [];
-
-      // Save every scraped publication to SQLite cache so we never scrape it again!
       const insertScraped = db.prepare(`
-        INSERT OR IGNORE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at)
+        INSERT OR REPLACE INTO scraped_publications (id, title, authors, journal, year, citations, abstract, url, cited_by_link, search_query, scraped_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      // Also save citing papers when available
-      const insertCitingPaper = db.prepare(`
-        INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link)
-        VALUES (?, ?, ?, ?, ?, ?)
       `);
 
       const formattedResults = [];
       const now = new Date().toISOString();
 
-      for (const raw of items) {
+      for (const raw of items.slice(0, limit)) {
         if (!raw || raw.error) continue;
 
         const title = (raw.paper_title || raw.title || raw.name || '').trim();
         if (!title) continue;
 
-        // Smart author extraction
         let authors = [];
         if (Array.isArray(raw.publication_info?.authors)) {
           authors = raw.publication_info.authors
@@ -2224,12 +2154,10 @@ export async function handleApiRequest(req, res) {
             authors = [authorPart.trim()];
           }
         }
-
         if (authors.length === 0) {
           authors = [cleanQuery];
         }
 
-        // Journal and Year extraction
         let journal = (raw.source || raw.journal || '').trim();
         if (!journal && raw.publication_info?.summary) {
           journal = raw.publication_info.summary.trim();
@@ -2252,7 +2180,6 @@ export async function handleApiRequest(req, res) {
         const paperUrl = raw.link || raw.url || raw.resources?.[0]?.link || '';
         const id = raw.result_id || raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-        // Extract cited_by link early so we can save it with the scraped publication
         const citedByLink = raw.inline_links?.cited_by?.link || raw.inline_links?.cited_by_link || '';
         const citedByTotal = parseInt(raw.inline_links?.cited_by_total ?? raw.inline_links?.cited_by?.total ?? 0, 10) || 0;
 
@@ -2269,23 +2196,6 @@ export async function handleApiRequest(req, res) {
           cleanQuery,
           now
         );
-
-        // Extract and save citing papers (papers that cite this one)
-
-        // Some scrapers return related_articles or cited_by_results directly
-        const citingResults = raw.cited_by_results || raw.inline_links?.cited_by_results || [];
-        if (Array.isArray(citingResults)) {
-          for (const cite of citingResults) {
-            if (!cite || !cite.title) continue;
-            const citeId = cite.result_id || cite.id || `cite-${id}-${Math.random().toString(36).slice(2, 7)}`;
-            const citeAuthors = Array.isArray(cite.authors)
-              ? cite.authors.map(a => typeof a === 'string' ? a : a?.name || '').filter(Boolean).join(', ')
-              : (cite.publication_info?.summary?.split('-')?.[0]?.trim() || cite.authors || '');
-            const citeYear = parseInt(cite.year || '', 10) || null;
-            const citeLink = cite.link || cite.url || '';
-            insertCitingPaper.run(citeId, id, cite.title, citeAuthors, citeYear, citeLink);
-          }
-        }
 
         formattedResults.push({
           id,
@@ -2307,6 +2217,9 @@ export async function handleApiRequest(req, res) {
         fromCache: false,
         searchSource: 'apify',
         sourceLabel: `Apify Token (${usedTokenName})`,
+        usedToken: true,
+        page,
+        hasMore: formattedResults.length === limit,
         count: formattedResults.length,
         message: `Direct search was challenged by Google CAPTCHA. Successfully routed through Apify Token "${usedTokenName}" to retrieve ${formattedResults.length} publications.`,
       }, true));
@@ -2552,13 +2465,14 @@ export async function handleApiRequest(req, res) {
         db.prepare(`
           UPDATE publications
           SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?,
-              journal_indexing = ?, nbc461_points = ?, is_predatory_flag = ?
+              journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?
           WHERE id = ?
         `).run(
           tagsJson,
           sdgResult.rationale,
           sdgResult.chedPriority,
           auditResult.indexing,
+          auditResult.jc3Points,
           auditResult.nbc461Points,
           auditResult.isPredatory,
           publicationId
@@ -2592,13 +2506,14 @@ export async function handleApiRequest(req, res) {
           db.prepare(`
             UPDATE publications
             SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?,
-                journal_indexing = ?, nbc461_points = ?, is_predatory_flag = ?
+                journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?
             WHERE id = ?
           `).run(
             tagsJson,
             sdgResult.rationale,
             sdgResult.chedPriority,
             auditResult.indexing,
+            auditResult.jc3Points,
             auditResult.nbc461Points,
             auditResult.isPredatory,
             pub.id
@@ -2626,7 +2541,7 @@ export async function handleApiRequest(req, res) {
       const caller = authenticateCaller(req);
 
       const approvedPubs = db.prepare(`
-        SELECT id, title, authors, year, journal, citations, abstract, sdg_tags, sdg_rationale, ched_priority, nbc461_points, owner_name, owner_id
+        SELECT id, title, authors, year, journal, citations, abstract, sdg_tags, sdg_rationale, ched_priority, jc3_points, nbc461_points, owner_name, owner_id
         FROM publications
         WHERE approval_status = 'approved'
         ORDER BY citations DESC, year DESC
@@ -2677,14 +2592,14 @@ export async function handleApiRequest(req, res) {
           'Researchers Directory (/researchers): Complete faculty roster across departments with publication totals and citation metrics.',
           'Search Engine (/search): Live Google Scholar crawler with automatic deduplication using normalized title matching.',
           'SDG Impact Matrix (/sdg-matrix): Interactive matrix categorizing research across all 17 UN Sustainable Development Goals and CHED priority disciplines.',
-          'Research Inspector Drawer: Detailed drawer per paper showing NBC 461 points, citation growth graph, citing paper links, and journal predatory audit.',
+          'Research Inspector Drawer: Detailed drawer per paper showing JC3 (KRA II) points, citation growth graph, citing paper links, and journal accreditation/indexing audit.',
           'Accreditation Reporting Hub (/reports): Generates exportable Excel spreadsheets and summaries for CHED audits, SUC Leveling, and AACCUP accreditation.',
           'Admin Portal (/admin): User management, sending secure email invites, approving self-registered faculty accounts.'
         ],
-        nbc461Guidelines: {
-          tiers: 'Scopus/Web of Science = 25 pts, CHED Recognized/International Refereed = 15 pts, National Refereed = 10 pts, Institutional Baseline = 5 pts',
-          authorship: 'Sole Author = 100% of base points; Lead Author = 60%; Co-Authors = share remaining 40% equally',
-          fourAreas: 'NBC 461 promotion evaluates: (1) Instruction, (2) Research (managed by this system), (3) Extension, (4) Professional Development. Final evaluation is processed by HRMO.'
+        jc3Guidelines: {
+          tiers: 'Scopus/Web of Science = 50 pts; CHED Recognized/International Refereed/ACI = 30 pts; National/Regional Refereed = 20 pts; Refereed Conference/Institutional = 10 pts; Institutional Baseline = 5 pts',
+          authorship: 'Sole Author = 100% of base points; Lead Author = 60%; Co-Authors = share remaining 40% equally, or declared % share',
+          kraII: 'DBM-CHED JC No. 3, s. 2022 evaluates KRA II: Research, Invention, and Creative Work with a maximum cap of 100 points per cycle. Valid Scopus/WoS citations earn +5.0 points each.'
         },
         accreditationGuidelines: {
           aaccup: 'AACCUP evaluates program quality and faculty research culture. It does not use individual publication point quotas, but requires documented verified faculty publications and institutional impact.',
@@ -2833,7 +2748,7 @@ export async function handleApiRequest(req, res) {
       const pubs = db.prepare(`
         SELECT id, title, authors, abstract, journal, year, citations, url,
                sdg_tags, sdg_rationale, ched_priority, owner_id, owner_name,
-               journal_indexing, nbc461_points
+               journal_indexing, jc3_points, nbc461_points
         FROM publications
         WHERE approval_status = 'approved'
         ORDER BY citations DESC, year DESC
@@ -2917,6 +2832,7 @@ export async function handleApiRequest(req, res) {
           sdgTags: tags,
           ownerName: p.owner_name || '',
           journalIndexing: p.journal_indexing || 'Institutional Archive',
+          jc3Points: p.jc3_points !== null && p.jc3_points !== undefined ? Number(p.jc3_points) : (p.nbc461_points ? (p.nbc461_points >= 25 ? 50 : 30) : 10),
           nbc461Points: p.nbc461_points || 5.0,
         };
 

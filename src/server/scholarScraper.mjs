@@ -9,7 +9,7 @@ function cleanText(str) {
   if (!str) return '';
   return str
     .replace(/<[^>]+>/g, '')
-    .replace(/^\[[A-Z]+\]\s*/gi, '')
+    .replace(/^(\s*\[[^\]]+\]\s*)+/gi, '')
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')
     .replace(/&amp;/g, '&')
@@ -19,112 +19,149 @@ function cleanText(str) {
     .trim();
 }
 
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 /**
- * Directly scrapes Google Scholar search results for a given query
+ * Directly scrapes Google Scholar search results for a given query (1 page / 10 results by default)
  */
-export async function scrapeGoogleScholarDirect(query, maxPages = 2) {
+export async function scrapeGoogleScholarDirect(query, pageOrOptions = 0, limit = 10) {
+  let page = 0;
+  let start = 0;
+  if (typeof pageOrOptions === 'object' && pageOrOptions !== null) {
+    page = Number(pageOrOptions.page) || 0;
+    start = Number(pageOrOptions.start ?? page * 10) || 0;
+    limit = Number(pageOrOptions.limit) || 10;
+  } else if (typeof pageOrOptions === 'number') {
+    page = pageOrOptions;
+    start = page * 10;
+  }
+
   const allResults = [];
   const seenTitles = new Set();
   let captchaBlocked = false;
 
-  for (let page = 0; page < maxPages; page++) {
-    const start = page * 10;
-    const url = `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}&hl=en&start=${start}`;
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        }
-      });
-      if (res.status === 429) {
-        captchaBlocked = true;
-        break;
+  const url = `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}&hl=en&start=${start}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
       }
-      if (!res.ok) break;
+    });
 
+    if (res.status === 429) {
+      captchaBlocked = true;
+    } else if (res.ok) {
       const html = await res.text();
       if (html.includes('detected unusual traffic') || html.includes('recaptcha') || html.includes('captcha')) {
         captchaBlocked = true;
-        break;
+      } else {
+        // Robust pattern matching individual Google Scholar result blocks
+        const itemRegex = /<div class="gs_r gs_or[^"]*"[^>]*>([\s\S]*?)<\/div>\s*(?=<div class="gs_r gs_or|<div id="gs_res_ccl_bot"|$)/g;
+        const matches = [...html.matchAll(itemRegex)];
+
+        for (const m of matches) {
+          if (allResults.length >= limit) break;
+          const block = m[1];
+
+          // 1. Title and publisher URL
+          const titleMatch = block.match(/<h3[^>]* class="gs_rt"[^>]*>([\s\S]*?)<\/h3>/);
+          if (!titleMatch) continue;
+
+          const cleanTitle = cleanText(titleMatch[1]);
+          if (!cleanTitle) continue;
+
+          const linkMatch = titleMatch[1].match(/href="([^"]+)"/);
+          let paperUrl = linkMatch ? linkMatch[1].replace(/&amp;/g, '&') : '';
+
+          // 2. Direct PDF / file link
+          const pdfMatch = block.match(/<div class="gs_or_ggsm"[^>]*>[\s\S]*?href="([^"]+)"/i) ||
+                           block.match(/<div class="gs_ggs[^"]*"[^>]*>[\s\S]*?href="([^"]+)"/i);
+          const pdfUrl = pdfMatch ? pdfMatch[1].replace(/&amp;/g, '&') : '';
+
+          if (!paperUrl && pdfUrl) {
+            paperUrl = pdfUrl;
+          }
+          if (!paperUrl) {
+            paperUrl = `https://scholar.google.com/scholar?q=${encodeURIComponent(cleanTitle)}`;
+          }
+
+          // 3. Authors, Year, and Journal/Source from gs_a
+          const authorMatch = block.match(/<div class="gs_a">([\s\S]*?)<\/div>/);
+          const authorSummary = authorMatch ? cleanText(authorMatch[1]) : '';
+          const parts = authorSummary.split(/\s+-\s+/);
+
+          const authorsPart = parts[0] || '';
+          let authors = [];
+          if (authorsPart) {
+            authors = authorsPart.split(',').map((a) => a.trim().replace(/…$/, '').trim()).filter(Boolean);
+          }
+          if (authors.length === 0) {
+            authors = [query];
+          }
+
+          const ym = authorSummary.match(/\b(19\d{2}|20\d{2})\b/);
+          const year = ym ? parseInt(ym[1], 10) : new Date().getFullYear();
+
+          let journal = 'Academic Publication';
+          if (parts.length > 2) {
+            journal = parts[1].replace(/,?\s*\b(19\d{2}|20\d{2})\b/g, '').trim() || parts[2].trim();
+          } else if (parts.length === 2) {
+            journal = parts[1].replace(/,?\s*\b(19\d{2}|20\d{2})\b/g, '').trim() || parts[1].trim();
+          }
+
+          // 4. Snippet / Abstract from gs_rs
+          const snippetMatch = block.match(/<div class="gs_rs">([\s\S]*?)<\/div>/);
+          const snippet = snippetMatch ? cleanText(snippetMatch[1]) : '';
+
+          // 5. Cites link, count, and cites ID
+          const citesMatch = block.match(/href="(\/scholar\?cites=(\d+)[^"]*)"[^>]*>Cited by (\d+)</i);
+          let citedByLink = '';
+          let citations = 0;
+          let citesId = '';
+          if (citesMatch) {
+            citesId = citesMatch[2];
+            citedByLink = `https://scholar.google.com${citesMatch[1].replace(/&amp;/g, '&')}`;
+            citations = parseInt(citesMatch[3], 10) || 0;
+          }
+
+          const firstAuthor = authors[0] || '';
+          const dedupKey = citesId ? `cites:${citesId}` : `${cleanTitle}|${firstAuthor}|${year}`.toLowerCase();
+          if (seenTitles.has(dedupKey)) continue;
+          seenTitles.add(dedupKey);
+
+          const id = citesId ? `gs-${citesId}` : `gs-${hashString(cleanTitle.toLowerCase() + firstAuthor.toLowerCase() + (year || ''))}`;
+
+          allResults.push({
+            id,
+            title: cleanTitle,
+            authors,
+            journal,
+            year,
+            citations,
+            abstract: snippet,
+            url: paperUrl,
+            pdfUrl: pdfUrl || null,
+            citedByLink,
+            fromCache: false
+          });
+        }
       }
-
-      const re = /<div class="gs_ri">([\s\S]*?)<\/div>\s*<\/div>/g;
-      const matches = [...html.matchAll(re)];
-      if (matches.length === 0) break;
-
-      for (const m of matches) {
-        const block = m[1];
-        const titleMatch = block.match(/<h3[^>]* class="gs_rt"[^>]*>([\s\S]*?)<\/h3>/);
-        if (!titleMatch) continue;
-
-        const linkMatch = titleMatch[1].match(/href="([^"]+)"/);
-        const cleanTitle = cleanText(titleMatch[1]);
-        if (!cleanTitle || seenTitles.has(cleanTitle.toLowerCase())) continue;
-        seenTitles.add(cleanTitle.toLowerCase());
-
-        const authorMatch = block.match(/<div class="gs_a">([\s\S]*?)<\/div>/);
-        const authorSummary = authorMatch ? cleanText(authorMatch[1]) : '';
-
-        const snippetMatch = block.match(/<div class="gs_rs">([\s\S]*?)<\/div>/);
-        const snippet = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-
-        // Cites link and count
-        const citesMatch = block.match(/href="(\/scholar\?cites=(\d+)[^"]*)"[^>]*>Cited by (\d+)</i);
-        let citedByLink = '';
-        let citations = 0;
-        let citesId = '';
-        if (citesMatch) {
-          citesId = citesMatch[2];
-          citedByLink = `https://scholar.google.com${citesMatch[1].replace(/&amp;/g, '&')}`;
-          citations = parseInt(citesMatch[3], 10) || 0;
-        }
-
-        // Year extraction
-        const ym = authorSummary.match(/\b(19\d{2}|20\d{2})\b/);
-        const year = ym ? parseInt(ym[1], 10) : new Date().getFullYear();
-
-        // Authors extraction
-        const authorPart = authorSummary.split('-')[0]?.trim() || '';
-        let authors = [];
-        if (authorPart) {
-          authors = authorPart.split(',').map(a => a.trim()).filter(Boolean);
-        }
-        if (authors.length === 0) {
-          authors = [query];
-        }
-
-        // Journal
-        const parts = authorSummary.split('-');
-        let journal = 'Academic Publication';
-        if (parts.length > 1) {
-          journal = parts[1].trim();
-        }
-
-        const id = citesId ? `gs-${citesId}` : `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const paperUrl = linkMatch ? linkMatch[1].replace(/&amp;/g, '&') : '';
-
-        allResults.push({
-          id,
-          title: cleanTitle,
-          authors,
-          journal,
-          year,
-          citations,
-          abstract: snippet,
-          url: paperUrl,
-          citedByLink,
-          fromCache: false
-        });
-      }
-    } catch (err) {
-      console.warn('[ScholarScraper] Direct search page error:', err.message);
-      break;
     }
+  } catch (err) {
+    console.warn('[ScholarScraper] Direct search page error:', err.message);
   }
 
   allResults.captchaBlocked = captchaBlocked;
+  allResults.hasMore = allResults.length === limit;
   return allResults;
 }
 

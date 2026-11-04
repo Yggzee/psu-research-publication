@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router";
+import { Outlet, useNavigate, useLocation, Navigate } from "react-router";
 import {
   LayoutDashboard,
   Users,
@@ -114,6 +114,11 @@ export function DashboardLayout() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
+
+  // Defensive check in case component mounted without valid session
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
 
   // Check pending registrations count for admin
   useEffect(() => {
@@ -242,7 +247,10 @@ export function DashboardLayout() {
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white dark:bg-card border-r border-border/70 flex-col z-20">
         {/* Logo */}
         <div className="p-5 border-b border-border/70">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/dashboard")}>
+          <div
+            className="flex items-center gap-3 cursor-pointer"
+            onClick={() => navigate(currentUser.role === "admin" ? "/dashboard" : "/dashboard/publications")}
+          >
             <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain" />
             <div>
               <h2 className="text-sm font-bold text-foreground tracking-tight">Research Portal</h2>
@@ -307,7 +315,13 @@ export function DashboardLayout() {
           {/* Slide-over menu */}
           <div className="relative flex flex-col w-72 max-w-[80vw] bg-white dark:bg-card border-r border-border/70 z-10 shadow-2xl">
             <div className="p-5 border-b border-border/70 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-3 cursor-pointer"
+                onClick={() => {
+                  navigate(currentUser.role === "admin" ? "/dashboard" : "/dashboard/publications");
+                  setMobileMenuOpen(false);
+                }}
+              >
                 <img src={psuLogo} alt="PSU Logo" className="w-9 h-9 object-contain" />
                 <div>
                   <h2 className="text-sm font-bold text-foreground">Research Portal</h2>
@@ -446,7 +460,7 @@ export function DashboardLayout() {
                   </p>
                   <p className="text-[11px] text-muted-foreground leading-tight">
                     {currentUser.role === "admin"
-                      ? "Administrator"
+                      ? "Campus Research Coordinator"
                       : `${currentUser.department || "Faculty"} Instructor`}
                   </p>
                 </div>

@@ -61,11 +61,11 @@ const SPECIFIC_SUGGESTIONS: SpecificPrompt[] = [
     statement: "How does the system prevent saving duplicate research papers from Google Scholar?",
   },
   {
-    id: "sys-nbc461",
+    id: "sys-jc3",
     category: "System Features",
-    badge: "NBC 461 & Indexing",
+    badge: "JC3 (KRA II) & Indexing",
     badgeColor: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800",
-    statement: "How are NBC 461 points and journal indexing status evaluated in this system?",
+    statement: "How are JC3 points (KRA II) and journal indexing status evaluated in this system?",
   },
   {
     id: "res-sdg4",

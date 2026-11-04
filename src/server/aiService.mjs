@@ -186,14 +186,14 @@ function routeQuestion(q, publications = []) {
     return 'my_publications';
   }
 
-  const isPointSubject = /\b(nbc\s*461|points?|pts|scores?|credits?|calculate|calculation|calculator|formula)\b/.test(s);
+  const isPointSubject = /\b(jc\s*3|jc3|nbc\s*461|nbc|points?|pts|scores?|credits?|calculate|calculation|calculator|formula|kra\s*ii|criterion\s*a)\b/.test(s);
   const isResearcherSubject = /\b(researchers?|faculty|professors?)\b/.test(s);
   const isPublicationSubject = /\b(publications?|papers?|articles?|works?|researches)\b/.test(s);
   // Analytical / comparative questions need the LLM, not a canned list
-  const isAnalytical = /\b(most|least|best|top|highest|lowest|contribut\w*|compare|why|rank\w*|nbc|impact|productive)\b/.test(s);
+  const isAnalytical = /\b(most|least|best|top|highest|lowest|contribut\w*|compare|why|rank\w*|jc3|nbc|impact|productive)\b/.test(s);
   const isCitationSubject = /\b(citations?|cited)\b/.test(s);
 
-  // 3. Specific: NBC 461 Points for a SPECIFIC paper mentioned in the question
+  // 3. Specific: JC3 / Publication Points for a SPECIFIC paper mentioned in the question
   if (isPointSubject && publications && publications.length > 0) {
     const matchedPaper = publications.find(p => {
       const titleClean = (p.title || '').replace(/^\[[A-Z]\]\s*/i, '').toLowerCase();
@@ -210,9 +210,9 @@ function routeQuestion(q, publications = []) {
     }
   }
 
-  // 4. General NBC 461 Points calculation & formulas, or direct query "show me numbers"
-  if ((isPointSubject && /\b(nbc\s*461|numbers?|formula|calculate|calculation|how|breakdown|rules?|points?|rate)\b/.test(s)) || /^show\s+me\s+(the\s+)?numbers?[\s.?!]*$/i.test(s)) {
-    return 'nbc461_calc';
+  // 4. General JC3 / KRA II Points calculation & formulas, or direct query "show me numbers"
+  if ((isPointSubject && /\b(jc\s*3|jc3|nbc\s*461|nbc|kra\s*ii|numbers?|formula|calculate|calculation|how|breakdown|rules?|points?|rate)\b/.test(s)) || /^show\s+me\s+(the\s+)?numbers?[\s.?!]*$/i.test(s)) {
+    return 'jc3_calc';
   }
 
   // 5. Specific: Most cited / top paper ONLY
@@ -276,7 +276,7 @@ function handleRoutedQuestion(routeInfo, publications, meta) {
 
     case 'specific_paper_points': {
       const p = matchedPaper;
-      const base = Number(p.nbc461_points) || (p.journal?.toLowerCase().includes('scopus') ? 25 : 15);
+      const base = Number(p.jc3_points) || Number(p.nbc461_points) || (p.journal?.toLowerCase().includes('scopus') ? 50 : 30);
       let authorsList = [];
       try {
         authorsList = Array.isArray(p.authors)
@@ -293,15 +293,15 @@ function handleRoutedQuestion(routeInfo, publications, meta) {
       const coNames = authorsList.slice(1).join(', ') || 'Co-authors';
 
       const authorshipText = totalAuthors === 1
-        ? `• Sole Author (${leadName}): ${base.toFixed(2)} points (100% of base points)`
-        : `• Lead Author (${leadName}): ${leadPts} points (60% of base points)\n• Co-Authors (${coNames}): ${coPts} points each (40% shared equally among ${coCount} co-author${coCount > 1 ? 's' : ''})`;
+        ? `• Sole Author (${leadName}): ${base.toFixed(2)} pts (100% of base points)`
+        : `• Lead Author (${leadName}): ${leadPts} pts (60% standard share)\n• Co-Authors (${coNames}): ${coPts} pts each (40% shared equally among ${coCount} co-author${coCount > 1 ? 's' : ''})`;
 
-      return `"${p.title}" (${p.year}) is allocated ${base.toFixed(1)} NBC 461 base points under ${p.journal_indexing || 'Institutional Refereed'}.
+      return `"${p.title}" (${p.year}) is evaluated at ${base.toFixed(1)} base points under DBM-CHED JC3 (KRA II: Research Outputs - ${p.journal_indexing || 'Institutional Refereed'}).
 
-Authorship Point Breakdown:
+Authorship Point Allocation (KRA II Criterion A):
 ${authorshipText}
 
-You can view or adjust this paper's details in the Research Inspector Drawer.`;
+You can simulate custom percentage shares or inspect citations in the Research Inspector Drawer.`;
     }
 
     case 'navigation':
@@ -321,21 +321,27 @@ You can view or adjust this paper's details in the Research Inspector Drawer.`;
       return `You currently have ${u.publicationsCount} approved research publications with ${u.citationsCount} total citations in your profile.`;
     }
 
+    case 'jc3_calc':
     case 'nbc461_calc':
-      return `In this system, NBC 461 research publication points are calculated using Journal Indexing and Authorship Role:
+      return `In this system, faculty research publication points are evaluated under DBM-CHED Joint Circular No. 3, series of 2022 (JC3), replacing the legacy NBC 461 framework:
 
-1. Base Points by Journal Tier:
-• Scopus / Web of Science (IEEE, Elsevier, Springer, Nature, etc.): 25 points
-• CHED Recognized / Refereed International (DOAJ, PLOS, etc.): 15 points
-• National / Institutional Refereed (PSU Journal, Philippine journals): 10 points
-• Institutional Refereed / Baseline Conference: 5 points
+1. Base Indicator Points by Journal Venue (KRA II - Criterion A):
+• Scopus / Web of Science (WoS) (IEEE, Elsevier, Springer, Nature, Wiley, ACM): 50.0 points
+• CHED Recognized / Refereed International / ACI: 30.0 points
+• National / Regional Peer-Reviewed Journals: 20.0 points
+• Refereed Conference Proceedings / Institutional Journals: 10.0 points
+• Institutional Refereed / Repository Output: 5.0 points
 
-2. Authorship Distribution Formula:
-• Sole Author: 100% of base points (e.g., 25 pts for Scopus)
-• Lead Author: 60% of base points (e.g., 15 pts for Scopus)
-• Co-Authors: Share the remaining 40% equally among themselves
+2. Authorship Contribution Formula:
+• Points Earned = Base Indicator Points × (Contribution % / 100)
+• Sole Author: 100% of base points (e.g., 50.0 pts for Scopus)
+• Lead Author: 60% preset (e.g., 30.0 pts for Scopus)
+• Co-Authors: Remaining 40% split among co-authors, or declared % contribution
 
-You can view and test this interactive calculation for any paper using the Research Inspector Drawer.`;
+3. Research Citations:
+• International citations in Scopus/WoS indexed articles earn +5.0 points per citation (up to the KRA II 100-point cycle cap).
+
+You can inspect any paper and simulate custom percentage shares in the Research Inspector Drawer.`;
 
     case 'researchers_only': {
       const count = meta.totalResearchers ?? list.length;
@@ -367,7 +373,7 @@ You can view and test this interactive calculation for any paper using the Resea
     }
 
     case 'features': {
-      return `Here are the key features of the Research Publication Tracking System:\n\n1. Google Scholar Search: Import published literature with automatic duplicate prevention.\n2. UN SDG Impact Matrix: Automatically categorizes publications into the 17 UN Sustainable Development Goals.\n3. Research Inspector: Evaluates citation metrics, NBC 461 points, and verifies journal indexing.\n4. Researcher Directory: Tracks faculty research outputs, citations, and co-authorship.\n5. Accreditation Reports: Generates export-ready reports for CHED, SUC Leveling, and AACCUP accreditation.`;
+      return `Here are the key features of the Research Publication Tracking System:\n\n1. Google Scholar Search: Import published literature with automatic duplicate prevention.\n2. UN SDG Impact Matrix: Automatically categorizes publications into the 17 UN Sustainable Development Goals.\n3. Research Inspector: Evaluates citation metrics, JC3 points (KRA II), and verifies journal indexing.\n4. Researcher Directory: Tracks faculty research outputs, citations, and co-authorship.\n5. Accreditation Reports: Generates export-ready reports for CHED, SUC Leveling, and AACCUP accreditation.`;
     }
 
     case 'general_status':
@@ -628,12 +634,13 @@ Respond with ONLY raw valid JSON (no markdown formatting, no backticks):
 }
 
 /**
- * Audit journal indexing and predatory reputation
+ * Audit journal indexing and predatory reputation under DBM-CHED JC3 (KRA II: Research Outputs)
  */
 export function auditJournalReputation(journalName = '') {
   if (!journalName || journalName.trim().length === 0) {
     return {
       indexing: 'Unindexed',
+      jc3Points: 5.0,
       nbc461Points: 5.0,
       isPredatory: 0,
       confidence: 'Institutional Baseline',
@@ -642,39 +649,96 @@ export function auditJournalReputation(journalName = '') {
 
   const j = journalName.toLowerCase();
 
-  // Known high-index markers
-  if (j.includes('ieee') || j.includes('springer') || j.includes('elsevier') || j.includes('acm') || j.includes('nature') || j.includes('scopus') || j.includes('sciencedirect') || j.includes('wiley')) {
+  // Tier 1: Scopus / Web of Science (WoS) / Clarivate Analytics (50.0 pts in JC3)
+  if (
+    j.includes('ieee') ||
+    j.includes('springer') ||
+    j.includes('elsevier') ||
+    j.includes('acm') ||
+    j.includes('nature') ||
+    j.includes('scopus') ||
+    j.includes('sciencedirect') ||
+    j.includes('wiley') ||
+    j.includes('clarivate') ||
+    j.includes('web of science') ||
+    j.includes('taylor & francis') ||
+    j.includes('taylor and francis') ||
+    j.includes('sage') ||
+    j.includes('oxford') ||
+    j.includes('cambridge')
+  ) {
     return {
-      indexing: 'Scopus / Web of Science',
+      indexing: 'Scopus / Web of Science (WoS)',
+      jc3Points: 50.0,
       nbc461Points: 25.0,
       isPredatory: 0,
-      confidence: 'Verified Top-Tier International Index',
+      confidence: 'Verified Top-Tier International Index (Scopus / WoS)',
     };
   }
 
-  if (j.includes('international journal') || j.includes('asean') || j.includes('ched') || j.includes('doaj') || j.includes('plos') || j.includes('mdpi')) {
+  // Tier 2: CHED-Recognized / Refereed International / ACI / DOAJ / PLOS (30.0 pts in JC3)
+  if (
+    j.includes('international journal') ||
+    j.includes('asean') ||
+    j.includes('ched') ||
+    j.includes('doaj') ||
+    j.includes('plos') ||
+    j.includes('mdpi') ||
+    j.includes('frontiers') ||
+    j.includes('biomed') ||
+    j.includes('hindawi')
+  ) {
     return {
-      indexing: 'CHED Recognized / Refereed International',
+      indexing: 'CHED Recognized / Refereed International / ACI',
+      jc3Points: 30.0,
       nbc461Points: 15.0,
       isPredatory: 0,
-      confidence: 'Recognized Refereed Venue',
+      confidence: 'Recognized International Refereed Journal',
     };
   }
 
-  if (j.includes('philippine') || j.includes('national') || j.includes('university') || j.includes('psu') || j.includes('journal of science')) {
+  // Tier 3: National / Regional Peer-Reviewed (20.0 pts in JC3)
+  if (
+    j.includes('philippine') ||
+    j.includes('national') ||
+    j.includes('journal of science') ||
+    j.includes('asia') ||
+    j.includes('southeast asian')
+  ) {
     return {
-      indexing: 'National / Institutional Refereed',
+      indexing: 'National / Regional Refereed',
+      jc3Points: 20.0,
       nbc461Points: 10.0,
       isPredatory: 0,
-      confidence: 'National/Regional Refereed Journal',
+      confidence: 'National / Regional Peer-Reviewed Journal',
     };
   }
 
+  // Tier 4: Refereed Conference Proceedings / Institutional Journal (10.0 pts in JC3)
+  if (
+    j.includes('conference') ||
+    j.includes('proceedings') ||
+    j.includes('symposium') ||
+    j.includes('university') ||
+    j.includes('psu') ||
+    j.includes('college')
+  ) {
+    return {
+      indexing: 'Refereed Conference Proceedings / Institutional',
+      jc3Points: 10.0,
+      nbc461Points: 5.0,
+      isPredatory: 0,
+      confidence: 'Refereed Conference Proceedings / Institutional Journal',
+    };
+  }
+
+  // Tier 5: Institutional Repository / Baseline (5.0 pts in JC3)
   return {
-    indexing: 'Institutional Refereed',
+    indexing: 'Institutional Refereed / Repository',
+    jc3Points: 5.0,
     nbc461Points: 5.0,
     isPredatory: 0,
-    confidence: 'Peer-Reviewed Conference / Institutional Repository',
+    confidence: 'Peer-Reviewed Institutional Repository Output',
   };
 }
 
@@ -700,7 +764,7 @@ export async function askCampusIntelligence(question, publications = [], systemM
 
 I can assist you with:
 1. System Activity: Current repository metrics, active researchers, and system records.
-2. System Features: How Google Scholar claiming, UN SDG matrix, NBC 461 points, or search tools work.
+2. System Features: How Google Scholar claiming, UN SDG matrix, JC3 (KRA II) points, or search tools work.
 3. Research Purposes: Campus research clusters, institutional impact, and accreditation alignment.
 4. Specific Research: Summaries, authors, methodology, findings, and citations of any PSU paper.
 
@@ -739,14 +803,14 @@ How may I assist you with our system or research repository today?`,
     citations: p.citations || 0,
     journal: p.journal || 'PSU Archive',
     indexing: p.journal_indexing || 'Institutional Refereed',
-    nbcPoints: p.nbc461_points || 5.0,
+    jc3Points: p.jc3_points || (p.nbc461_points ? (p.nbc461_points >= 25 ? 50.0 : p.nbc461_points >= 15 ? 30.0 : p.nbc461_points >= 10 ? 20.0 : 10.0) : 10.0),
     abstract: p.abstract ? p.abstract.slice(0, 350) : 'Full text on archive',
     sdg: p.sdg_tags ? (typeof p.sdg_tags === 'string' ? p.sdg_tags : JSON.stringify(p.sdg_tags)) : 'General Research',
     rationale: p.sdg_rationale || '',
   }));
 
   const contextText = paperSummaries
-    .map(p => `[Ref ${p.refId}] "${p.title}" (${p.year}) by ${p.authors} | Journal: ${p.journal} | Indexing: ${p.indexing} | NBC 461 Base: ${p.nbcPoints} pts | Citations: ${p.citations}\nUN SDGs: ${p.sdg}\nAbstract: ${p.abstract}`)
+    .map(p => `[Ref ${p.refId}] "${p.title}" (${p.year}) by ${p.authors} | Journal: ${p.journal} | Indexing: ${p.indexing} | JC3 Base: ${p.jc3Points} pts | Citations: ${p.citations}\nUN SDGs: ${p.sdg}\nAbstract: ${p.abstract}`)
     .join('\n\n');
 
   const historySnippet = (history || [])
@@ -777,11 +841,20 @@ CURRENT USER & SYSTEM CONTEXT:
 - System Pages & Modules:
 ${(systemMetadata.pages || systemMetadata.features || []).map(f => '  * ' + f).join('\n')}
 
-NBC 461 RESEARCH POINT RULES IN THIS SYSTEM:
-- Journal Tiers: Scopus/Web of Science = 25 pts; CHED Recognized/International Refereed = 15 pts; National Refereed = 10 pts; Institutional Baseline = 5 pts.
-- Authorship Multipliers: Sole Author = 100% (full base points); Lead Author = 60%; Co-Authors = share remaining 40% equally.
+JC3 (DBM-CHED JOINT CIRCULAR NO. 3, S. 2022) RESEARCH POINT RULES:
+- KRA II (Research, Invention, and Creative Work) - Criterion A (Research Outputs Published):
+  * Scopus / Web of Science (WoS) / Clarivate Analytics Indexed: 50 base points (Sole Author).
+  * ASEAN Citation Index (ACI) / CHED-Recognized / International Refereed Journals: 30 base points (Sole Author).
+  * National / Regional Refereed Journals: 20 base points (Sole Author).
+  * Refereed Conference Proceedings / Institutional Refereed Journals: 10 base points (Sole Author).
+  * Institutional Repository / Departmental Baseline: 5 base points.
+- Authorship Multipliers / Contribution Sharing:
+  * Sole Author: 100% of base points.
+  * Lead Author: 60% of base points.
+  * Co-Authors: Share 40% equally among co-authors, or declared percentage share.
+  * Citations: Valid citations in Scopus/WoS indexed articles earn +5.0 points each.
+  * Maximum cap: 100 points maximum for KRA II per evaluation cycle.
 - Evaluated interactively in the Research Inspector Drawer.
-- Faculty Promotion: NBC 461 evaluates 4 main areas: (1) Instruction, (2) Research (tracked by this system), (3) Extension, and (4) Professional Development. Final promotion thresholds and requirements are administered by the university HRMO.
 
 ${historySnippet ? `RECENT CONVERSATION HISTORY:\n${historySnippet}\n` : ''}
 CAMPUS RESEARCH PUBLICATIONS CONTEXT:
@@ -845,7 +918,7 @@ USER QUESTION: "${trimmedQ}"`;
     // Check if question asks about what is going on in system
     if (qLower.includes('going on') || qLower.includes('system status') || qLower.includes('overview of system')) {
       return {
-        answer: `Current Status of the PSU Asingan Research Publication Tracking System:\n\n• Total Publications on File: ${publications.length} verified research papers.\n• Faculty Researchers: Registered faculty members actively tracking academic outputs.\n• Primary Research Pillars: Leading contributions in SDG 4 (Quality Education: STEM and mathematics pedagogy), SDG 9 (Industry & Innovation), SDG 8 (Decent Work), and SDG 3 (Good Health & Well-being).\n• Institutional Readiness: SUC Leveling and AACCUP accreditation metrics are actively monitored with automated citation tracking and NBC 461 point calculations.`,
+        answer: `Current Status of the PSU Asingan Research Publication Tracking System:\n\n• Total Publications on File: ${publications.length} verified research papers.\n• Faculty Researchers: Registered faculty members actively tracking academic outputs.\n• Primary Research Pillars: Leading contributions in SDG 4 (Quality Education: STEM and mathematics pedagogy), SDG 9 (Industry & Innovation), SDG 8 (Decent Work), and SDG 3 (Good Health & Well-being).\n• Institutional Readiness: SUC Leveling, AACCUP accreditation, and DBM-CHED JC3 evaluation metrics are actively monitored with automated citation tracking and KRA II point calculations.`,
         citedPapers: [],
         source: 'heuristic',
       };
@@ -854,7 +927,7 @@ USER QUESTION: "${trimmedQ}"`;
     // Check if question asks what a feature does
     if (qLower.includes('what does this do') || qLower.includes('what does the') || qLower.includes('how does')) {
       return {
-        answer: `System Features Guide:\n\n1. Google Scholar Search & Auto-Caching: Enables searching published literature, automatically caching records locally in SQLite, and preventing duplicate imports through title normalization.\n2. UN SDG Impact Matrix: Utilizes AI to categorize campus publications across all 17 United Nations Sustainable Development Goals and Philippine CHED priorities.\n3. Research Inspector Drawer: Evaluates citation trends, NBC 461 points, and verifies academic journal indexing.\n4. Dynamic Researcher Directory: Tracks individual faculty outputs, citation sums, and co-authorship records.`,
+        answer: `System Features Guide:\n\n1. Google Scholar Search & Auto-Caching: Enables searching published literature, automatically caching records locally in SQLite, and preventing duplicate imports through title normalization.\n2. UN SDG Impact Matrix: Utilizes AI to categorize campus publications across all 17 United Nations Sustainable Development Goals and Philippine CHED priorities.\n3. Research Inspector Drawer: Evaluates citation trends, JC3 Points (KRA II), and verifies academic journal indexing.\n4. Dynamic Researcher Directory: Tracks individual faculty outputs, citation sums, and co-authorship records.`,
         citedPapers: [],
         source: 'heuristic',
       };

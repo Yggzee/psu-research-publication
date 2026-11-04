@@ -40,7 +40,7 @@ const emptyForm = {
 };
 
 export function InstructorPublicationsPage() {
-  const user = getCurrentUser();
+  const user = getCurrentUser() || { name: "Instructor", instructorId: "", role: "instructor" as const };
   const [publications, setPublications] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState("mine");
   const [showForm, setShowForm] = useState(false);
@@ -380,7 +380,7 @@ export function InstructorPublicationsPage() {
                           className="h-6 text-[11px] px-2 gap-1 text-ai hover:bg-ai-soft"
                         >
                           <Sparkles className="h-3 w-3" />
-                          <span>Inspect & NBC 461 Points</span>
+                          <span>Inspect & JC3 Points</span>
                         </Button>
                       </div>
                     </div>

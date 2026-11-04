@@ -34,6 +34,8 @@ export interface InspectedPublication {
   sdg_tags?: string | string[];
   sdg_rationale?: string;
   journal_indexing?: string;
+  jc3_points?: number;
+  jc3Points?: number;
   nbc461_points?: number;
   ched_priority?: string;
   is_predatory_flag?: number;
@@ -55,7 +57,8 @@ export function PublicationInspectorDrawer({
 }: PublicationInspectorDrawerProps) {
   const [activeTab, setActiveTab] = useState("overview");
   const [isClassifying, setIsClassifying] = useState(false);
-  const [authorRole, setAuthorRole] = useState<"sole" | "lead" | "co">("lead");
+  const [authorRole, setAuthorRole] = useState<"sole" | "lead" | "co" | "custom">("lead");
+  const [customContribution, setCustomContribution] = useState<number>(50);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
 
   if (!isOpen || !publication) return null;
@@ -152,6 +155,7 @@ export function PublicationInspectorDrawer({
           sdg_rationale: res.sdg.rationale,
           ched_priority: res.sdg.chedPriority,
           journal_indexing: res.audit.indexing,
+          jc3_points: res.audit.jc3Points || (res.audit.nbc461Points >= 25 ? 50 : 30),
           nbc461_points: res.audit.nbc461Points,
         };
         if (onUpdate) onUpdate(updated);
@@ -163,15 +167,27 @@ export function PublicationInspectorDrawer({
     }
   };
 
-  // NBC 461 Points calculation
-  const basePoints = publication.nbc461_points || (publication.journal?.toLowerCase().includes("scopus") ? 25 : 15);
+  // JC3 (DBM-CHED Joint Circular No. 3, s. 2022) Points calculation
+  // KRA II: Research, Invention, and Creative Work (Criterion A: Research Outputs Published)
+  const basePoints = publication.jc3_points || publication.jc3Points || (
+    publication.nbc461_points
+      ? (publication.nbc461_points >= 25 ? 50 : publication.nbc461_points >= 15 ? 30 : publication.nbc461_points >= 10 ? 20 : 10)
+      : (publication.journal?.toLowerCase().includes("scopus") || publication.journal?.toLowerCase().includes("ieee") ? 50 : 30)
+  );
+
   const totalCoAuthors = Math.max(1, authorsList.length);
-  const calculatedPoints =
+  const contributionPercentage =
     authorRole === "sole"
-      ? basePoints
+      ? 100
       : authorRole === "lead"
-      ? Number((basePoints * 0.6).toFixed(2))
-      : Number(((basePoints * 0.4) / Math.max(1, totalCoAuthors - 1)).toFixed(2));
+      ? 60
+      : authorRole === "co"
+      ? Math.round((40 / Math.max(1, totalCoAuthors - 1)) * 10) / 10
+      : customContribution;
+
+  const calculatedPoints = Number(((basePoints * contributionPercentage) / 100).toFixed(2));
+  const citationBonus = Math.min(50, (publication.citations || 0) * 5);
+  const totalWithCitations = Math.min(100, Number((calculatedPoints + citationBonus).toFixed(2)));
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-xs flex justify-end transition-opacity">
@@ -224,11 +240,11 @@ export function PublicationInspectorDrawer({
                 UN SDG & CHED
               </TabsTrigger>
               <TabsTrigger
-                value="nbc461"
+                value="jc3"
                 className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-purple-600 rounded-none px-1 text-xs font-semibold"
               >
                 <Award className="h-4 w-4 mr-1.5 text-purple-600" />
-                NBC 461 Points
+                JC3 Points (KRA II)
               </TabsTrigger>
               <TabsTrigger
                 value="audit"
@@ -390,68 +406,148 @@ export function PublicationInspectorDrawer({
               </div>
             </TabsContent>
 
-            {/* TAB 3: NBC 461 / SUC LEVELING CALCULATOR */}
-            <TabsContent value="nbc461" className="mt-0 space-y-6">
+            {/* TAB 3: DBM-CHED JC3 (KRA II: RESEARCH OUTPUTS) CALCULATOR */}
+            <TabsContent value="jc3" className="mt-0 space-y-6">
               <div className="p-4 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/50">
-                <h4 className="text-sm font-bold text-purple-900 dark:text-purple-300">
-                  NBC 461 & SUC Leveling Points Estimator
-                </h4>
-                <p className="text-xs text-purple-700 dark:text-purple-400 mt-0.5">
-                  Calculates institutional promotion and research incentive credits based on authorship hierarchy.
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-purple-900 dark:text-purple-300">
+                    DBM-CHED JC No. 3, s. 2022 Evaluator
+                  </h4>
+                  <Badge variant="outline" className="text-[10px] bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-300">
+                    KRA II - Criterion A
+                  </Badge>
+                </div>
+                <p className="text-xs text-purple-700 dark:text-purple-400 mt-1">
+                  Evaluates faculty research outputs published under the Philippine State University system promotion framework (replacing NBC 461).
                 </p>
               </div>
 
               {/* Authorship selector */}
               <div className="space-y-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Select Your Author Contribution
-                </label>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Author Contribution Role
+                  </label>
+                  <span className="text-xs font-mono font-bold text-purple-600 dark:text-purple-400">
+                    {contributionPercentage}% Share
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
                   <Button
                     type="button"
                     variant={authorRole === "sole" ? "default" : "outline"}
-                    className={authorRole === "sole" ? "bg-purple-600 hover:bg-purple-700 text-xs" : "text-xs"}
+                    className={authorRole === "sole" ? "bg-purple-600 hover:bg-purple-700 text-xs px-2" : "text-xs px-2"}
                     onClick={() => setAuthorRole("sole")}
                   >
-                    Sole Author (100%)
+                    Sole (100%)
                   </Button>
                   <Button
                     type="button"
                     variant={authorRole === "lead" ? "default" : "outline"}
-                    className={authorRole === "lead" ? "bg-purple-600 hover:bg-purple-700 text-xs" : "text-xs"}
+                    className={authorRole === "lead" ? "bg-purple-600 hover:bg-purple-700 text-xs px-2" : "text-xs px-2"}
                     onClick={() => setAuthorRole("lead")}
                   >
-                    Lead Author (60%)
+                    Lead (60%)
                   </Button>
                   <Button
                     type="button"
                     variant={authorRole === "co" ? "default" : "outline"}
-                    className={authorRole === "co" ? "bg-purple-600 hover:bg-purple-700 text-xs" : "text-xs"}
+                    className={authorRole === "co" ? "bg-purple-600 hover:bg-purple-700 text-xs px-2" : "text-xs px-2"}
                     onClick={() => setAuthorRole("co")}
                   >
-                    Co-Author (Split 40%)
+                    Co-Author
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={authorRole === "custom" ? "default" : "outline"}
+                    className={authorRole === "custom" ? "bg-purple-600 hover:bg-purple-700 text-xs px-2" : "text-xs px-2"}
+                    onClick={() => setAuthorRole("custom")}
+                  >
+                    Custom %
                   </Button>
                 </div>
+
+                {authorRole === "custom" && (
+                  <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-muted/40 border border-gray-200 dark:border-gray-800 space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Declared Contribution Share:</span>
+                      <span className="font-mono font-bold text-purple-600">{customContribution}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={100}
+                      value={customContribution}
+                      onChange={(e) => setCustomContribution(Number(e.target.value))}
+                      className="w-full accent-purple-600 cursor-pointer"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Point Output Card */}
-              <div className="p-6 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-lg text-center space-y-2">
-                <p className="text-xs font-semibold tracking-wider uppercase text-purple-100">
-                  Estimated NBC 461 Credit Earned
-                </p>
-                <div className="text-4xl font-black font-mono tracking-tight">
-                  {calculatedPoints} <span className="text-lg font-normal text-purple-200">pts</span>
+              <div className="p-6 rounded-2xl bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 text-white shadow-xl text-center space-y-3">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-xs text-[11px] font-semibold text-purple-100">
+                  <Award className="h-3.5 w-3.5" />
+                  JC3 Evaluated Points Earned
                 </div>
-                <p className="text-xs text-purple-100/90 pt-1">
-                  Base Venue Value: {basePoints} pts • Total Listed Authors: {totalCoAuthors}
-                </p>
+                
+                <div className="text-5xl font-black font-mono tracking-tight text-white drop-shadow-sm">
+                  {calculatedPoints} <span className="text-xl font-normal text-purple-200">pts</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 text-left border-t border-white/20">
+                  <div className="bg-white/10 rounded-lg p-2.5">
+                    <p className="text-[10px] text-purple-200 uppercase font-semibold">Base Venue Points</p>
+                    <p className="text-sm font-bold font-mono text-white">{basePoints} pts</p>
+                    <p className="text-[10px] text-purple-200 truncate">{publication.journal_indexing || "Institutional Refereed"}</p>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-2.5">
+                    <p className="text-[10px] text-purple-200 uppercase font-semibold">Author Share</p>
+                    <p className="text-sm font-bold font-mono text-white">{contributionPercentage}%</p>
+                    <p className="text-[10px] text-purple-200">{totalCoAuthors} listed author{totalCoAuthors > 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+
+                {publication.citations > 0 && (
+                  <div className="pt-1 text-xs text-purple-100 bg-white/10 rounded-lg p-2.5 flex items-center justify-between">
+                    <span>Citation Impact Bonus (+5/cite):</span>
+                    <span className="font-mono font-bold text-emerald-300">+{citationBonus} pts</span>
+                  </div>
+                )}
               </div>
 
-              <div className="text-xs text-muted-foreground space-y-1 p-3 rounded-xl bg-muted/40 border border-border/50">
-                <p className="font-semibold text-foreground">Accreditation Guidelines:</p>
-                <p>• Scopus / Web of Science indexed journals: 25.0 max base points.</p>
-                <p>• CHED Recognized / Refereed International: 15.0 max base points.</p>
-                <p>• Institutional or National Refereed: 10.0 max base points.</p>
+              {/* Statutory DBM-CHED JC3 Guidelines */}
+              <div className="text-xs text-muted-foreground space-y-2 p-4 rounded-xl bg-muted/40 border border-border/50">
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-foreground">DBM-CHED JC No. 3, s. 2022 Venue Tiers:</p>
+                  <span className="text-[10px] text-purple-600 font-semibold">KRA II Cap: 100 pts/cycle</span>
+                </div>
+                <div className="space-y-1 text-[11px] leading-relaxed">
+                  <p className="flex justify-between">
+                    <span>• Internationally Indexed (Scopus / Web of Science):</span>
+                    <strong className="text-foreground font-mono">50.0 pts</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>• CHED Recognized / ASEAN Citation Index (ACI) / Refereed Int'l:</span>
+                    <strong className="text-foreground font-mono">30.0 pts</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>• National / Regional Peer-Reviewed Journals:</span>
+                    <strong className="text-foreground font-mono">20.0 pts</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>• Refereed Conference Proceedings / Institutional Journals:</span>
+                    <strong className="text-foreground font-mono">10.0 pts</strong>
+                  </p>
+                  <p className="flex justify-between">
+                    <span>• Institutional Repository / Departmental Baseline:</span>
+                    <strong className="text-foreground font-mono">5.0 pts</strong>
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                  Formula: Points = Base Points × (Contribution % / 100). Valid external citations in indexed journals add +5.0 points per citation up to the KRA II evaluation cycle limit.
+                </div>
               </div>
             </TabsContent>
 

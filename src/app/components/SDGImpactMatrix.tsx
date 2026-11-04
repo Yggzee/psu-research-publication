@@ -212,6 +212,8 @@ export function SDGImpactMatrix() {
     sdg_tags: paper.sdgTags,
     sdg_rationale: paper.sdgRationale,
     journal_indexing: paper.journalIndexing,
+    jc3_points: paper.jc3Points,
+    jc3Points: paper.jc3Points,
     nbc461_points: paper.nbc461Points,
     ched_priority: paper.chedPriority,
     owner_name: paper.ownerName,
@@ -609,9 +611,9 @@ export function SDGImpactMatrix() {
                               <Quote className="w-3 h-3 text-brand" />
                               {paper.citations} citations
                             </Badge>
-                            {paper.nbc461Points && (
+                            {(paper.jc3Points !== undefined || paper.nbc461Points !== undefined) && (
                               <Badge variant="secondary" className="text-xs font-mono">
-                                NBC 461: {paper.nbc461Points} pts
+                                JC3: {paper.jc3Points || (paper.nbc461Points ? (paper.nbc461Points >= 25 ? 50 : 30) : 10)} pts
                               </Badge>
                             )}
                           </div>

@@ -33,7 +33,7 @@ interface ChatMessage {
 const SUGGESTED_QUESTIONS = [
   "How many research publications and faculty profiles are currently tracked in our system?",
   "How does the system prevent saving duplicate research papers from Google Scholar?",
-  "How are NBC 461 points and journal indexing status evaluated in this system?",
+  "How are JC3 points (KRA II) and journal indexing status evaluated in this system?",
   "What are our campus research clusters and how do they address UN SDG 4 (Quality Education)?",
   "What does the study on predicting college students' academic performance using machine learning talk about?",
   "What are the key clinical findings and purpose of the paper on operative management of acetabular fractures?",
@@ -44,7 +44,7 @@ export function AskCampusAI() {
     {
       id: "welcome",
       sender: "ai",
-      text: "Hello! I am your **PSU Asingan Campus Research Intelligence Assistant**. I am dedicated to helping you explore our research tracking system, examine faculty publications, and navigate institutional metrics.\n\n**Institutional Areas Covered:**\n• **System Status & Metrics:** Real-time publication counts, registered faculty, and citation tracking\n• **System Capabilities:** Google Scholar imports, duplicate prevention guard, UN SDG radar, and NBC 461 audits\n• **Campus Researches & Purposes:** University research clusters, community impacts, and sustainable development alignment\n• **Individual Paper Breakdowns:** Summaries of specific campus publications, methods, authors, and clinical/educational findings\n\n*Note: I strictly maintain institutional boundaries and do not answer personal or off-topic questions.* Select a suggested inquiry below or ask a specific question to begin.",
+      text: "Hello! I am your **PSU Asingan Campus Research Intelligence Assistant**. I am dedicated to helping you explore our research tracking system, examine faculty publications, and navigate institutional metrics.\n\n**Institutional Areas Covered:**\n• **System Status & Metrics:** Real-time publication counts, registered faculty, and citation tracking\n• **System Capabilities:** Google Scholar imports, duplicate prevention guard, UN SDG radar, and JC3 (KRA II) audits\n• **Campus Researches & Purposes:** University research clusters, community impacts, and sustainable development alignment\n• **Individual Paper Breakdowns:** Summaries of specific campus publications, methods, authors, and clinical/educational findings\n\n*Note: I strictly maintain institutional boundaries and do not answer personal or off-topic questions.* Select a suggested inquiry below or ask a specific question to begin.",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);

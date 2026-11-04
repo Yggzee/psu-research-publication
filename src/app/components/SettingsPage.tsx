@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { PageHeader, PageTabs } from "./common";
 
 export function SettingsPage() {
-  const currentUser = getCurrentUser();
+  const currentUser = getCurrentUser() || { id: "", username: "", role: "instructor" as const, name: "User" };
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [activeTab, setActiveTab] = useState("appearance");
 

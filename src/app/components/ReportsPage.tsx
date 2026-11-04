@@ -503,11 +503,11 @@ export function ReportsPage() {
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
-              label="SUC Leveling Points"
+              label="JC3 (KRA II) Points"
               value={publicationsList
                 .reduce(
                   (acc, p) =>
-                    acc + (p.nbc461_points || (p.journal?.toLowerCase().includes("scopus") ? 25 : 15)),
+                    acc + (p.jc3_points || p.jc3Points || (p.nbc461_points ? (p.nbc461_points >= 25 ? 50 : p.nbc461_points >= 15 ? 30 : p.nbc461_points >= 10 ? 20 : 10) : (p.journal?.toLowerCase().includes("scopus") ? 50 : 30))),
                   0
                 )
                 .toFixed(1)}
@@ -523,11 +523,11 @@ export function ReportsPage() {
                     (p.journal || "").toLowerCase().includes("scopus")
                 ).length
               }
-              subtitle="25 points each"
+              subtitle="50 points base each"
               icon={Award}
             />
             <StatCard
-              label="CHED Refereed"
+              label="CHED / ACI Refereed"
               value={
                 publicationsList.filter(
                   (p) =>
@@ -535,7 +535,7 @@ export function ReportsPage() {
                     !(p.journal || "").toLowerCase().includes("scopus")
                 ).length
               }
-              subtitle="15 points each"
+              subtitle="30 points base each"
               icon={FileText}
             />
             <StatCard
@@ -550,10 +550,10 @@ export function ReportsPage() {
             <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-border/60">
               <div>
                 <CardTitle className="text-sm font-semibold text-foreground">
-                  Official SUC Leveling & AACCUP Exhibit Table
+                  Official DBM-CHED JC3 & AACCUP Exhibit Table
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Institutional portfolio formatted for accreditation auditors and faculty promotion audits
+                  Institutional portfolio formatted for DBM-CHED JC3 faculty promotion and accreditation audits
                 </CardDescription>
               </div>
               <Button
@@ -576,7 +576,7 @@ export function ReportsPage() {
                     <th className="p-3.5 min-w-[140px]">Journal Venue & Index</th>
                     <th className="p-3.5 w-20 text-center">Year</th>
                     <th className="p-3.5 min-w-[110px]">UN SDG Goal</th>
-                    <th className="p-3.5 w-24 text-right">NBC 461 Pts</th>
+                    <th className="p-3.5 w-24 text-right">JC3 Points</th>
                     <th className="p-3.5 w-28 text-center">Audit Status</th>
                   </tr>
                 </thead>
@@ -595,6 +595,12 @@ export function ReportsPage() {
                           }
                         })()
                       : [];
+
+                    const jc3Pts = pub.jc3_points || pub.jc3Points || (
+                      pub.nbc461_points
+                        ? (pub.nbc461_points >= 25 ? 50 : pub.nbc461_points >= 15 ? 30 : pub.nbc461_points >= 10 ? 20 : 10)
+                        : (pub.journal?.toLowerCase().includes("scopus") ? 50 : 30)
+                    );
 
                     return (
                       <tr key={pub.id} className="hover:bg-muted/30 transition-colors">
@@ -615,7 +621,7 @@ export function ReportsPage() {
                           </span>
                         </td>
                         <td className="p-3.5 text-right font-mono font-semibold text-brand">
-                          {pub.nbc461_points || (pub.journal?.toLowerCase().includes("scopus") ? 25 : 15)} pts
+                          {jc3Pts} pts
                         </td>
                         <td className="p-3.5 text-center">
                           <StatusBadge status="verified" />

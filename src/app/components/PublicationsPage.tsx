@@ -411,7 +411,7 @@ export function PublicationsPage() {
                   <th className="p-3.5 w-20 text-center">Year</th>
                   <th className="p-3.5 w-24 text-center">Citations</th>
                   <th className="p-3.5 min-w-[120px]">UN SDG Goal</th>
-                  <th className="p-3.5 w-24 text-right">NBC 461</th>
+                  <th className="p-3.5 w-24 text-right">JC3 (KRA II)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -430,6 +430,12 @@ export function PublicationsPage() {
                         }
                       })()
                     : [];
+
+                  const jc3Pts = pub.jc3_points || pub.jc3Points || (
+                    pub.nbc461_points
+                      ? (pub.nbc461_points >= 25 ? 50 : pub.nbc461_points >= 15 ? 30 : pub.nbc461_points >= 10 ? 20 : 10)
+                      : (pub.journal?.toLowerCase().includes("scopus") ? 50 : 30)
+                  );
 
                   return (
                     <tr
@@ -474,7 +480,7 @@ export function PublicationsPage() {
                         )}
                       </td>
                       <td className="p-3.5 text-right font-mono font-bold text-purple-600 dark:text-purple-400">
-                        {pub.nbc461_points || (pub.journal?.toLowerCase().includes("scopus") ? 25 : 15)} pts
+                        {jc3Pts} pts
                       </td>
                     </tr>
                   );
@@ -491,6 +497,11 @@ export function PublicationsPage() {
           {filteredAndSortedPublications.map((pub) => {
             const isSelected = selectedIds.includes(pub.id);
             const authorsStr = Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors;
+            const jc3Pts = pub.jc3_points || pub.jc3Points || (
+              pub.nbc461_points
+                ? (pub.nbc461_points >= 25 ? 50 : pub.nbc461_points >= 15 ? 30 : pub.nbc461_points >= 10 ? 20 : 10)
+                : (pub.journal?.toLowerCase().includes("scopus") ? 50 : 30)
+            );
 
             return (
               <Card
@@ -532,7 +543,7 @@ export function PublicationsPage() {
                       {pub.journal || "PSU Asingan Archive"}
                     </span>
                     <span className="font-mono font-bold text-purple-600 dark:text-purple-400">
-                      {pub.nbc461_points || 15} pts
+                      JC3: {jc3Pts} pts
                     </span>
                   </div>
                 </CardContent>

@@ -26,7 +26,11 @@ import {
   Search,
   Filter,
   Users,
+  Award,
+  Sparkles,
+  Star,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -34,10 +38,12 @@ import { Label } from "./ui/label";
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { useNavigate } from "react-router";
 import {
   FACULTY_DATA_KEY,
   getManagedResearchers,
   saveManagedResearchers,
+  getCurrentUser,
   type ManagedResearcher,
 } from "../utils/researchStore";
 import {
@@ -75,6 +81,9 @@ const emptyForm = {
 };
 
 export function AdminPage() {
+  const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+
   const [researchers, setResearchers] = useState<ManagedResearcher[]>([]);
   const [pendingClaims, setPendingClaims] = useState<any[]>([]);
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistration[]>([]);
@@ -124,6 +133,60 @@ export function AdminPage() {
     scholarUrl?: string;
     details?: any;
   } | null>(null);
+
+  const [isClassifyingSDG, setIsClassifyingSDG] = useState(false);
+
+  const handleRunSDGClassification = async () => {
+    setIsClassifyingSDG(true);
+    toast.loading("Running Gemini Flash UN SDG classifier on campus publications...", { id: "sdg-batch" });
+    try {
+      const res = await apiService.batchClassifySDG();
+      toast.success(`✓ Successfully auto-tagged ${res.processed} campus publications into UN SDGs!`, { id: "sdg-batch" });
+      await loadData();
+    } catch (err: any) {
+      toast.error(`Auto-classification error: ${err.message}`, { id: "sdg-batch" });
+    } finally {
+      setIsClassifyingSDG(false);
+    }
+  };
+
+  const coordinatorData = useMemo(() => {
+    const found = researchers.find((r) => {
+      const id = (r.instructorId || r.id || "").toUpperCase();
+      const name = (r.name || "").toLowerCase();
+      const email = (r.email || "").toLowerCase();
+      return (
+        id === "PSU-002" ||
+        name.includes("garin") ||
+        name.includes("rodelio") ||
+        email.includes("rodeliogarin")
+      );
+    });
+
+    if (found) {
+      return {
+        name: found.name || "Sir Rodelio M. Garin",
+        instructorId: found.instructorId || "PSU-002",
+        department: found.department || "BSIT",
+        email: found.email || "rodeliogarin@gmail.com",
+        scholarUrl: found.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
+        totalPublications: Math.max(found.totalPublications || 0, 16),
+        totalCitations: Math.max(found.totalCitations || 0, 95),
+        photoUrl: found.photoUrl || "https://scholar.google.com/citations/images/avatar_scholar_128.png",
+      };
+    }
+
+    return {
+      name: "Sir Rodelio M. Garin",
+      instructorId: "PSU-002",
+      department: "BSIT",
+      email: "rodeliogarin@gmail.com",
+      scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
+      totalPublications: 16,
+      totalCitations: 95,
+      photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
+    };
+  }, [researchers]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -252,8 +315,8 @@ export function AdminPage() {
   };
 
   const editResearcher = (researcher: ManagedResearcher) => {
-    const parts = researcher.name.split(" ");
-    const lastName = parts.length > 1 ? parts.slice(1).join(" ") : parts[0];
+    const parts = (researcher.name || "").trim().split(" ");
+    const lastName = parts.length > 1 ? parts.slice(1).join(" ") : parts[0] || "";
     const firstName = parts.length > 1 ? parts[0] : "";
 
     setForm({
@@ -386,12 +449,17 @@ export function AdminPage() {
 
   // Filtered Roster
   const filteredResearchers = useMemo(() => {
+    const query = rosterSearch.trim().toLowerCase();
     return researchers.filter((r) => {
+      const name = (r.name || "").toLowerCase();
+      const id = (r.instructorId || r.id || "").toLowerCase();
+      const email = (r.email || "").toLowerCase();
+
       const matchesSearch =
-        !rosterSearch.trim() ||
-        r.name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
-        r.instructorId.toLowerCase().includes(rosterSearch.toLowerCase()) ||
-        (r.email && r.email.toLowerCase().includes(rosterSearch.toLowerCase()));
+        !query ||
+        name.includes(query) ||
+        id.includes(query) ||
+        email.includes(query);
 
       const matchesDept =
         rosterDeptFilter === "all" || r.department === rosterDeptFilter;
@@ -429,12 +497,36 @@ export function AdminPage() {
     },
   ];
 
+  if (!currentUser || currentUser.role !== "admin") {
+    return (
+      <div className="min-h-[500px] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full border-destructive/30 bg-destructive/5 text-center p-6 space-y-4">
+          <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto">
+            <Shield className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-foreground">Institutional Admin Access Restricted</h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              You do not have administrative privileges to manage faculty rosters, system credentials, or campus registrations.
+            </p>
+          </div>
+          <Button
+            onClick={() => navigate("/dashboard/publications")}
+            className="w-full bg-brand text-white hover:bg-brand/90"
+          >
+            Return to My Publications
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* 1. Page Header */}
       <PageHeader
-        title="Admin Console"
-        description="Manage faculty researcher profiles, review registration queues, and configure scraping tokens"
+        title="Campus Research Administration & Governance"
+        description="Pangasinan State University – Asingan Campus • Office of the Campus Research Coordinator"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -474,6 +566,101 @@ export function AdminPage() {
           </div>
         }
       />
+
+      {/* 2. Personalized Coordinator Dossier & Command Header */}
+      <Card className="relative overflow-hidden border-border/80 bg-gradient-to-br from-card via-card to-blue-50/50 dark:to-blue-950/20 shadow-xs">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-brand/5 rounded-full blur-3xl pointer-events-none" />
+        <CardContent className="p-4 sm:p-6 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            {/* Left: Coordinator Identity */}
+            <div className="flex items-center gap-3.5 sm:gap-5 min-w-0">
+              <div className="relative shrink-0">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-brand/40 shadow-md bg-muted">
+                  <img
+                    src={coordinatorData.photoUrl || "https://scholar.google.com/citations/images/avatar_scholar_128.png"}
+                    alt={coordinatorData.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div
+                  className="absolute -bottom-1 -right-1 bg-amber-500 text-white rounded-full p-1.5 shadow-xs border-2 border-card"
+                  title="Verified Campus Research Coordinator"
+                >
+                  <Award className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-xl font-bold text-foreground tracking-tight">
+                    Sir Rodelio M. Garin
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">
+                    <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                    Campus Research Coordinator
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-muted text-muted-foreground border border-border">
+                    PSU-002
+                  </span>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  Pangasinan State University – Asingan Campus • Department of Information Technology (BSIT)
+                </p>
+
+                <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-muted-foreground pt-0.5 flex-wrap">
+                  <span className="font-medium text-foreground">
+                    <strong className="text-brand font-semibold">{coordinatorData.totalPublications}</strong> Publications
+                  </span>
+                  <span>•</span>
+                  <span className="font-medium text-foreground">
+                    <strong className="text-brand font-semibold">{coordinatorData.totalCitations}</strong> Citations
+                  </span>
+                  <span>•</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
+                    DBM-CHED JC3 Evaluator
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Quick Coordinator Actions */}
+            <div className="flex items-center gap-2 flex-wrap lg:justify-end shrink-0 pt-3 lg:pt-0 border-t lg:border-0 border-border/50">
+              <a
+                href={coordinatorData.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en"}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-border/80 bg-background hover:bg-muted/60 text-foreground transition-all shadow-2xs"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-brand" />
+                <span>Google Scholar</span>
+                <ExternalLink className="w-3 h-3 text-muted-foreground" />
+              </a>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openScholarReview("PSU-002", "Sir Rodelio M. Garin", coordinatorData.scholarUrl)}
+                className="h-8 text-xs gap-1.5 border-brand/30 text-brand hover:bg-brand-soft"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Sync My Papers</span>
+              </Button>
+
+              <Button
+                size="sm"
+                onClick={handleRunSDGClassification}
+                disabled={isClassifyingSDG}
+                className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                title="Batch auto-tag all campus research with UN SDGs via Gemini Flash"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${isClassifyingSDG ? "animate-spin" : ""}`} />
+                <span>Auto-Tag UN SDGs</span>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 2. Feedback Banners */}
       {actionSuccessMsg && (
@@ -842,74 +1029,95 @@ export function AdminPage() {
               />
             ) : (
               <div className="divide-y divide-border/60">
-                {filteredResearchers.map((researcher) => (
-                  <div
-                    key={researcher.instructorId}
-                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-muted/60 border border-border/70 flex items-center justify-center font-bold text-xs text-foreground shrink-0">
-                        {researcher.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-foreground truncate">
-                            {researcher.name}
-                          </p>
-                          <StatusBadge
-                            status={researcher.isFaculty ? "active" : "unpublished"}
-                            label={researcher.isFaculty ? "Faculty" : "Non-Teaching"}
-                          />
-                          {researcher.scholarUrl && (
-                            <a
-                              href={researcher.scholarUrl.startsWith("http") ? researcher.scholarUrl : `https://scholar.google.com/citations?user=${researcher.scholarUrl}&hl=en`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-medium"
-                            >
-                              <GraduationCap className="w-3 h-3" /> Scholar Linked <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
+                {filteredResearchers.map((researcher) => {
+                  const isCoordinator =
+                    (researcher.instructorId || "").toUpperCase() === "PSU-002" ||
+                    (researcher.name || "").toLowerCase().includes("garin");
+                  const initial = (researcher.name || "R").trim().charAt(0).toUpperCase() || "R";
+
+                  return (
+                    <div
+                      key={researcher.instructorId || researcher.id}
+                      className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-9 h-9 rounded-xl border flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden ${
+                          isCoordinator
+                            ? "ring-2 ring-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/40"
+                            : "bg-muted/60 border-border/70 text-foreground"
+                        }`}>
+                          {researcher.photoUrl ? (
+                            <img src={researcher.photoUrl} alt={researcher.name || "Researcher"} className="w-full h-full object-cover" />
+                          ) : (
+                            initial
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          ID: <strong className="font-mono">{researcher.instructorId}</strong> • {researcher.department} {researcher.email && `• ${researcher.email}`}
-                        </p>
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-foreground truncate">
+                              {researcher.name || "Unnamed Faculty"}
+                            </p>
+                            {isCoordinator && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1 shadow-2xs">
+                                <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                                Campus Research Coordinator
+                              </span>
+                            )}
+                            <StatusBadge
+                              status={researcher.isFaculty ? "active" : "unpublished"}
+                              label={researcher.isFaculty ? "Faculty" : "Non-Teaching"}
+                            />
+                            {researcher.scholarUrl && (
+                              <a
+                                href={researcher.scholarUrl.startsWith("http") ? researcher.scholarUrl : `https://scholar.google.com/citations?user=${researcher.scholarUrl}&hl=en`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-medium"
+                              >
+                                <GraduationCap className="w-3 h-3" /> Scholar Linked <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            ID: <strong className="font-mono">{researcher.instructorId || "N/A"}</strong> • {researcher.department || "BSIT"} {researcher.email && `• ${researcher.email}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-center w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border/40 justify-start sm:justify-end">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openScholarReview(researcher.instructorId, researcher.name, researcher.scholarUrl)}
+                          className="h-8 text-xs gap-1.5 text-brand border-brand/30 hover:bg-brand-soft"
+                        >
+                          <GraduationCap className="w-3.5 h-3.5" />
+                          <span>Sync Scholar</span>
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => editResearcher(researcher)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                          title="Edit profile"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteTarget({ id: researcher.instructorId, name: researcher.name })}
+                          className="h-8 w-8 p-0 text-danger hover:bg-danger-soft hover:text-danger"
+                          title="Remove researcher"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0 self-start sm:self-center w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border/40 justify-start sm:justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openScholarReview(researcher.instructorId, researcher.name, researcher.scholarUrl)}
-                        className="h-8 text-xs gap-1.5 text-brand border-brand/30 hover:bg-brand-soft"
-                      >
-                        <GraduationCap className="w-3.5 h-3.5" />
-                        <span>Sync Scholar</span>
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => editResearcher(researcher)}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                        title="Edit profile"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </Button>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setDeleteTarget({ id: researcher.instructorId, name: researcher.name })}
-                        className="h-8 w-8 p-0 text-danger hover:bg-danger-soft hover:text-danger"
-                        title="Remove researcher"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </SectionCard>
@@ -982,6 +1190,41 @@ export function AdminPage() {
       {/* ===================================================================== */}
       {activeTab === "integrations" && (
         <div className="space-y-6">
+          <SectionCard
+            title="Campus Research Unit Governance"
+            description="Official research monitoring & quality assurance authority for PSU Asingan Campus"
+          >
+            <div className="p-4 sm:p-5 rounded-xl bg-muted/20 border border-border/70 space-y-3 text-xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-border/50">
+                <span className="font-semibold text-foreground">Designated Research Coordinator:</span>
+                <span className="font-bold text-brand text-sm inline-flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-amber-500" />
+                  Sir Rodelio M. Garin
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-muted-foreground pt-1">
+                <div>
+                  <span className="block text-[11px] font-semibold text-foreground">Office & Campus Unit</span>
+                  <span>Office of the Campus Research Coordinator • PSU Asingan</span>
+                </div>
+                <div>
+                  <span className="block text-[11px] font-semibold text-foreground">Faculty & Department</span>
+                  <span>PSU-002 • Department of Information Technology (BSIT)</span>
+                </div>
+                <div>
+                  <span className="block text-[11px] font-semibold text-foreground">Evaluation Standard</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    DBM-CHED Joint Circular No. 3 (JC3) KRA II
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[11px] font-semibold text-foreground">SDG Alignment Model</span>
+                  <span>Gemini Flash AI Multilabel Classifier (17 UN SDGs)</span>
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+
           <SectionCard
             title="Google Scholar Scraping Tokens"
             description="Manage Apify API token rotation and monthly usage limits for resilient Google Scholar imports"

@@ -5,7 +5,7 @@ const STORAGE_PREFIX = "psu_campus_ai_sessions_";
 
 export function getChatStorageKey(userId?: string): string {
   const current = getCurrentUser();
-  const id = userId || current.id || current.instructorId || current.username || "guest";
+  const id = userId || current?.id || current?.instructorId || current?.username || "guest";
   return `${STORAGE_PREFIX}${id}`;
 }
 
@@ -43,7 +43,7 @@ export function setLocalChatSessions(sessions: AIChatSession[], userId?: string)
  */
 export async function fetchAndSyncChatSessions(userId?: string): Promise<AIChatSession[]> {
   const current = getCurrentUser();
-  const effectiveUserId = userId || current.id || current.instructorId || current.username || "guest";
+  const effectiveUserId = userId || current?.id || current?.instructorId || current?.username || "guest";
   
   const local = getLocalChatSessions(effectiveUserId);
 
@@ -91,7 +91,7 @@ export async function fetchAndSyncChatSessions(userId?: string): Promise<AIChatS
  */
 export async function persistChatSession(session: AIChatSession, userId?: string): Promise<void> {
   const current = getCurrentUser();
-  const effectiveUserId = userId || current.id || current.instructorId || current.username || "guest";
+  const effectiveUserId = userId || current?.id || current?.instructorId || current?.username || "guest";
   
   const local = getLocalChatSessions(effectiveUserId);
   const existingIdx = local.findIndex((s) => s.id === session.id);
@@ -127,7 +127,7 @@ export async function persistChatSession(session: AIChatSession, userId?: string
  */
 export async function deleteChatSession(sessionId: string, userId?: string): Promise<void> {
   const current = getCurrentUser();
-  const effectiveUserId = userId || current.id || current.instructorId || current.username || "guest";
+  const effectiveUserId = userId || current?.id || current?.instructorId || current?.username || "guest";
 
   const local = getLocalChatSessions(effectiveUserId);
   const filtered = local.filter((s) => s.id !== sessionId);
@@ -145,7 +145,7 @@ export async function deleteChatSession(sessionId: string, userId?: string): Pro
  */
 export async function clearAllChatSessions(userId?: string): Promise<void> {
   const current = getCurrentUser();
-  const effectiveUserId = userId || current.id || current.instructorId || current.username || "guest";
+  const effectiveUserId = userId || current?.id || current?.instructorId || current?.username || "guest";
 
   setLocalChatSessions([], effectiveUserId);
 

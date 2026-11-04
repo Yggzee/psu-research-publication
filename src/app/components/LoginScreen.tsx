@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import { Mail, Lock, User, Building, GraduationCap, Link2, CheckCircle2, AlertCircle, ArrowRight, Loader2, Sparkles, ExternalLink } from "lucide-react";
 import { Button } from "./ui/button";
@@ -10,13 +10,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import psuLogo from "figma:asset/0f3e65de85ff26584e9a3039d47bcf17ff6e6368.png";
 import psuBuilding from "../../imports/psu_newbuilding.jpg";
-import { getManagedResearchers, setCurrentUser } from "../utils/researchStore";
+import { getManagedResearchers, setCurrentUser, getCurrentUser } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
 
 const DEPARTMENTS = ["BSIT", "BSBA", "BSE", "BEE", "BTLED", "BIT", "Non Teaching"];
 
 export function LoginScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get("redirect") || (location.state as any)?.from;
+
+  // If already logged in, redirect away from login screen
+  const currentUser = getCurrentUser();
+  if (currentUser) {
+    const destination = currentUser.role === "admin" ? "/dashboard" : "/dashboard/publications";
+    return <Navigate to={destination} replace />;
+  }
+
   const [activeTab, setActiveTab] = useState<"login" | "register">("login");
 
   // Login State
@@ -56,6 +67,16 @@ export function LoginScreen() {
 
     const inputId = email.trim();
 
+    const resolveTargetUrl = (role: "admin" | "instructor") => {
+      if (redirectParam && redirectParam.startsWith("/dashboard")) {
+        if (role === "instructor" && redirectParam.startsWith("/dashboard/admin")) {
+          return "/dashboard/publications";
+        }
+        return redirectParam;
+      }
+      return role === "admin" ? "/dashboard" : "/dashboard/publications";
+    };
+
     try {
       // 1. Try real SQLite Database authentication
       const res = await apiService.login(inputId, password);
@@ -71,11 +92,7 @@ export function LoginScreen() {
           photoUrl: res.user.photoUrl,
         }, res.token);
 
-        if (res.user.role === "admin") {
-          navigate("/dashboard");
-        } else {
-          navigate("/dashboard/search-engine");
-        }
+        navigate(resolveTargetUrl(res.user.role));
         return;
       }
     } catch (err: any) {
@@ -107,6 +124,26 @@ export function LoginScreen() {
           member.password === password,
       );
 
+      if (
+        (inputId.toLowerCase() === "psu-002" || inputId.toLowerCase() === "rodeliogarin@gmail.com") &&
+        password === "123456"
+      ) {
+        setCurrentUser({
+          role: "admin",
+          instructorId: "PSU-002",
+          name: "Sir Rodelio M. Garin",
+          username: "PSU-002",
+          email: "rodeliogarin@gmail.com",
+          department: "Campus Research Unit / BSIT",
+          isFaculty: true,
+          photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
+          scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
+          googleScholarId: "x6PdtN8AAAAJ",
+        });
+        navigate(resolveTargetUrl("admin"));
+        return;
+      }
+
       if (instructor) {
         setCurrentUser({
           role: "instructor",
@@ -116,7 +153,7 @@ export function LoginScreen() {
           isFaculty: instructor.isFaculty,
           photoUrl: instructor.photoUrl,
         });
-        navigate("/dashboard/search-engine");
+        navigate(resolveTargetUrl("instructor"));
         return;
       }
 
@@ -124,8 +161,17 @@ export function LoginScreen() {
         (inputId.toLowerCase() === "admin" || inputId.toLowerCase() === "admin@psu.edu.ph") &&
         password === "admin"
       ) {
-        setCurrentUser({ role: "admin", name: "Administrator", username: "admin" });
-        navigate("/dashboard");
+        setCurrentUser({
+          role: "admin",
+          name: "Sir Rodelio M. Garin",
+          username: "admin",
+          email: "admin@psu.edu.ph",
+          department: "Campus Research Unit / BSIT",
+          photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
+          scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
+          googleScholarId: "x6PdtN8AAAAJ",
+        });
+        navigate(resolveTargetUrl("admin"));
         return;
       }
 

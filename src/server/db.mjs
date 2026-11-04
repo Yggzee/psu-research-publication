@@ -160,6 +160,7 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE publications ADD COLUMN journal_indexing TEXT`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN is_predatory_flag INTEGER DEFAULT 0`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN nbc461_points REAL DEFAULT 0.0`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN jc3_points REAL DEFAULT 0.0`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN ched_priority TEXT`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN doi TEXT`); } catch {}
 
@@ -266,10 +267,10 @@ export function initDatabase() {
       'admin',
       'admin@psu.edu.ph',
       'admin',
-      'Admin User',
+      'Sir Rodelio M. Garin',
       'admin',
-      'Administration',
-      0,
+      'Campus Research Unit / BSIT',
+      1,
       new Date().toISOString()
     );
     console.log('[Database] Default admin user initialized (admin / admin).');

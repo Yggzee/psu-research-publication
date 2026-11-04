@@ -166,7 +166,7 @@ export function exportResearchMatrixToExcel(options: ExcelExportOptions): void {
     { label: "Journal / Venue", wch: 28, align: "left" },
     { label: "Indexing", wch: 20, align: "center" },
     { label: "Year", wch: 10, align: "center" },
-    { label: "NBC 461 Points", wch: 16, align: "center" },
+    { label: "JC3 Points (KRA II)", wch: 20, align: "center" },
     { label: "Total Citations", wch: 15, align: "center" },
     { label: "Scholar Citations", wch: 23, align: "center" },
     { label: "Publication Link", wch: 18, align: "center" },
@@ -198,7 +198,11 @@ export function exportResearchMatrixToExcel(options: ExcelExportOptions): void {
     );
 
     const totalCites = Number(pub.citations) || 0;
-    const points = Number(pub.nbc461_points) || 5.0;
+    const points = Number(pub.jc3_points) || Number(pub.jc3Points) || (
+      pub.nbc461_points
+        ? (pub.nbc461_points >= 25 ? 50.0 : pub.nbc461_points >= 15 ? 30.0 : pub.nbc461_points >= 10 ? 20.0 : 10.0)
+        : (pub.journal?.toLowerCase().includes("scopus") ? 50.0 : 30.0)
+    );
     totalCitationsSum += totalCites;
     totalPointsSum += points;
 
@@ -306,7 +310,7 @@ export function exportResearchMatrixToExcel(options: ExcelExportOptions): void {
       }
     };
 
-    // Col I: NBC 461 Points — CENTERED
+    // Col I: JC3 Points (KRA II) — CENTERED
     wsPubs[`I${curRow}`] = {
       t: "n",
       v: points,
@@ -451,7 +455,7 @@ export function exportResearchMatrixToExcel(options: ExcelExportOptions): void {
     };
   });
 
-  // Total NBC 461 Points
+  // Total JC3 Points
   wsPubs[`I${curRow}`] = {
     t: "n",
     v: totalPointsSum,
@@ -522,7 +526,7 @@ export function exportResearchMatrixToExcel(options: ExcelExportOptions): void {
 
   wsCitations["A3"] = {
     t: "s",
-    v: `Individual verification links for accreditation, NBC 461, and academic audit   |   Generated: ${exportDateStr}`,
+    v: `Individual verification links for accreditation, DBM-CHED JC3 promotion, and academic audit   |   Generated: ${exportDateStr}`,
     s: {
       font: { name: "Calibri", sz: 9.5, italic: true, color: { rgb: COLOR_TEXT_MUTED } },
       alignment: { horizontal: "left", vertical: "center" }
