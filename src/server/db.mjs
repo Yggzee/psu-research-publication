@@ -176,6 +176,30 @@ export function initDatabase() {
   try {
     db.exec(`ALTER TABLE users ADD COLUMN google_scholar_id TEXT`);
   } catch {}
+  try {
+    db.exec(`ALTER TABLE researchers ADD COLUMN middle_initial TEXT`);
+  } catch {}
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN middle_initial TEXT`);
+  } catch {}
+
+  // 4b. Invitation Requests Table (Submitted from Login page by researchers asking for invitation)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invitation_requests (
+      id TEXT PRIMARY KEY,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      middle_initial TEXT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      instructor_id TEXT NOT NULL,
+      department TEXT DEFAULT 'BSIT',
+      scholar_url TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'invited' | 'rejected'
+      admin_notes TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
 
   // Intelligence & Capstone Innovations Migrations
   try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_tags TEXT`); } catch {}

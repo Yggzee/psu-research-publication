@@ -1529,6 +1529,7 @@ export async function handleApiRequest(req, res) {
       const data = await readJsonBody();
       const {
         firstName,
+        middleInitial,
         lastName,
         instructorId,
         password,
@@ -1539,6 +1540,7 @@ export async function handleApiRequest(req, res) {
         scholarUrl,
         googleScholarId,
         sendInvite = true,
+        invitationRequestId,
       } = data;
 
       if (!firstName || !lastName || !instructorId) {
@@ -1547,6 +1549,7 @@ export async function handleApiRequest(req, res) {
 
       const trimmedInstId = instructorId.trim();
       const trimmedEmail = (email || '').trim().toLowerCase();
+      const mi = (middleInitial || '').trim();
 
       if (!trimmedEmail) {
         return sendJson(400, { error: 'Email address is required to send verification & invitation.' });
@@ -1572,7 +1575,7 @@ export async function handleApiRequest(req, res) {
 
       const userId = `user-${Date.now()}`;
       const researcherId = `res-${Date.now()}`;
-      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+      const fullName = mi ? `${firstName.trim()} ${mi} ${lastName.trim()}` : `${firstName.trim()} ${lastName.trim()}`;
       const now = new Date().toISOString();
 
       const token = crypto.randomUUID();
@@ -1583,14 +1586,15 @@ export async function handleApiRequest(req, res) {
 
       // 1. Insert into users table
       db.prepare(`
-        INSERT INTO users (id, username, email, password, name, role, department, is_faculty, photo_url, scholar_url, google_scholar_id, status, verification_token, verification_token_expires_at, registration_type, has_scholar, created_at)
-        VALUES (?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?, ?, ?, ?, ?, 'admin_invite', ?, ?)
+        INSERT INTO users (id, username, email, password, name, middle_initial, role, department, is_faculty, photo_url, scholar_url, google_scholar_id, status, verification_token, verification_token_expires_at, registration_type, has_scholar, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?, ?, ?, ?, ?, 'admin_invite', ?, ?)
       `).run(
         userId,
         trimmedInstId,
         trimmedEmail,
         initialPassword,
         fullName,
+        mi || null,
         department,
         isFaculty ? 1 : 0,
         photoUrl || null,
@@ -1605,14 +1609,15 @@ export async function handleApiRequest(req, res) {
 
       // 2. Insert into researchers table
       db.prepare(`
-        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, photo_url, scholar_url, google_scholar_id, status, has_scholar, total_publications, total_citations, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, middle_initial, name, email, department, is_faculty, photo_url, scholar_url, google_scholar_id, status, has_scholar, total_publications, total_citations, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
       `).run(
         researcherId,
         userId,
         trimmedInstId,
         firstName.trim(),
         lastName.trim(),
+        mi || null,
         fullName,
         trimmedEmail,
         department,
@@ -1624,6 +1629,15 @@ export async function handleApiRequest(req, res) {
         scholarUrl ? 1 : 0,
         now
       );
+
+      // If invited from an invitation request, mark request as invited
+      if (invitationRequestId) {
+        try {
+          db.prepare("UPDATE invitation_requests SET status = 'invited' WHERE id = ?").run(invitationRequestId);
+        } catch (err) {
+          console.warn('Could not update invitation_requests status:', err);
+        }
+      }
 
       // Synchronize any pre-existing matching publications
       updateResearcherStats(db, researcherId);
@@ -1670,6 +1684,69 @@ export async function handleApiRequest(req, res) {
     }
 
     // ----------------------------------------------------
+    // PUBLIC: POST /api/invitation-requests
+    // ----------------------------------------------------
+    if (pathname === '/api/invitation-requests' && method === 'POST') {
+      const data = await readJsonBody();
+      const {
+        firstName,
+        lastName,
+        middleInitial,
+        email,
+        instructorId,
+        scholarUrl,
+      } = data;
+
+      if (!firstName || !lastName || !instructorId || !email) {
+        return sendJson(400, { error: 'First name, last name, email, and Instructor ID are required.' });
+      }
+
+      const trimmedInstId = instructorId.trim();
+      const trimmedEmail = email.trim().toLowerCase();
+      const mi = (middleInitial || '').trim();
+      const fullName = mi ? `${firstName.trim()} ${mi} ${lastName.trim()}` : `${firstName.trim()} ${lastName.trim()}`;
+
+      if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+        return sendJson(400, { error: 'Please enter a valid email address.' });
+      }
+
+      // Check if account already exists
+      const existingUser = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)').get(trimmedInstId, trimmedEmail);
+      if (existingUser) {
+        return sendJson(400, { error: 'An account with this Instructor ID or email already exists. You can sign in directly or ask the administrator to reset your password.' });
+      }
+
+      // Check if pending request already submitted
+      const existingRequest = db.prepare("SELECT id FROM invitation_requests WHERE (LOWER(instructor_id) = LOWER(?) OR LOWER(email) = LOWER(?)) AND status = 'pending'").get(trimmedInstId, trimmedEmail);
+      if (existingRequest) {
+        return sendJson(400, { error: 'An invitation request for this Instructor ID or email is already pending review by Sir Rodelio M. Garin.' });
+      }
+
+      const reqId = `req-${Date.now()}`;
+      const now = new Date().toISOString();
+
+      db.prepare(`
+        INSERT INTO invitation_requests (id, first_name, last_name, middle_initial, name, email, instructor_id, scholar_url, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+      `).run(
+        reqId,
+        firstName.trim(),
+        lastName.trim(),
+        mi || null,
+        fullName,
+        trimmedEmail,
+        trimmedInstId,
+        (scholarUrl || '').trim() || null,
+        now
+      );
+
+      return sendJson(201, {
+        success: true,
+        message: 'Your invitation request has been submitted successfully! Sir Rodelio M. Garin will review your credentials and issue your official invitation link.',
+      });
+    }
+
+    // ----------------------------------------------------
     // ADMIN ENDPOINTS GUARD: Only administrators can access /api/admin/*
     // ----------------------------------------------------
     if (pathname.startsWith('/api/admin/')) {
@@ -1677,6 +1754,23 @@ export async function handleApiRequest(req, res) {
       if (!isCallerAdmin(caller)) {
         return sendJson(403, { error: 'Forbidden: Administrator privileges required.' });
       }
+    }
+
+    // ----------------------------------------------------
+    // ADMIN: GET /api/admin/invitation-requests
+    // ----------------------------------------------------
+    if (pathname === '/api/admin/invitation-requests' && method === 'GET') {
+      const rows = db.prepare("SELECT * FROM invitation_requests WHERE status = 'pending' ORDER BY created_at DESC").all();
+      return sendJson(200, rows);
+    }
+
+    // ----------------------------------------------------
+    // ADMIN: POST /api/admin/invitation-requests/:id/dismiss
+    // ----------------------------------------------------
+    if (pathname.startsWith('/api/admin/invitation-requests/') && pathname.endsWith('/dismiss') && method === 'POST') {
+      const reqId = pathname.replace('/api/admin/invitation-requests/', '').replace('/dismiss', '');
+      db.prepare("UPDATE invitation_requests SET status = 'rejected' WHERE id = ?").run(reqId);
+      return sendJson(200, { success: true, message: 'Invitation request dismissed.' });
     }
 
     // ----------------------------------------------------

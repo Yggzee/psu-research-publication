@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router";
 import { motion } from "motion/react";
-import { Mail, Lock, User, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Loader2, Search, Globe } from "lucide-react";
+import { Mail, Lock, User, CheckCircle2, AlertCircle, ArrowLeft, Loader2, Send, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -31,9 +31,60 @@ export function LoginScreen() {
   const [loginStatusAlert, setLoginStatusAlert] = useState<{ status: string; message: string } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Ask for Invitation Modal State
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteForm, setInviteForm] = useState({
+    firstName: "",
+    lastName: "",
+    middleInitial: "",
+    email: "",
+    instructorId: "",
+    scholarUrl: "",
+  });
+  const [inviteError, setInviteError] = useState("");
+  const [isSubmittingInvite, setIsSubmittingInvite] = useState(false);
+  const [inviteSubmitted, setInviteSubmitted] = useState(false);
+
   // ----------------------------------------------------------------
   // Handlers
   // ----------------------------------------------------------------
+  const handleRequestInvite = async (e: FormEvent) => {
+    e.preventDefault();
+    setInviteError("");
+
+    if (!inviteForm.firstName.trim() || !inviteForm.lastName.trim() || !inviteForm.email.trim() || !inviteForm.instructorId.trim()) {
+      setInviteError("First name, last name, email address, and Instructor ID are required.");
+      return;
+    }
+
+    if (!inviteForm.email.includes("@") || !inviteForm.email.includes(".")) {
+      setInviteError("Please enter a valid email address.");
+      return;
+    }
+
+    setIsSubmittingInvite(true);
+    try {
+      const res = await apiService.requestInvitation({
+        firstName: inviteForm.firstName.trim(),
+        lastName: inviteForm.lastName.trim(),
+        middleInitial: inviteForm.middleInitial.trim() || undefined,
+        email: inviteForm.email.trim(),
+        instructorId: inviteForm.instructorId.trim(),
+        scholarUrl: inviteForm.scholarUrl.trim() || undefined,
+      });
+
+      if (res.success) {
+        setInviteSubmitted(true);
+      } else {
+        setInviteError(res.message || "Failed to submit invitation request.");
+      }
+    } catch (err: any) {
+      setInviteError(err.message || "An error occurred while submitting your invitation request.");
+    } finally {
+      setIsSubmittingInvite(false);
+    }
+  };
+
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoginError("");
@@ -166,8 +217,8 @@ export function LoginScreen() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-lg my-auto py-6"
         >
-          {/* Navigation back to Public Search */}
-          <div className="flex items-center justify-between mb-4">
+          {/* Navigation back to Public Search (Single back button) */}
+          <div className="mb-4">
             <Button
               type="button"
               variant="ghost"
@@ -178,14 +229,6 @@ export function LoginScreen() {
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Public Search</span>
             </Button>
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 font-medium"
-            >
-              <Search className="w-3 h-3" />
-              <span>Open Repository</span>
-            </button>
           </div>
 
           {/* Branding */}
@@ -282,32 +325,36 @@ export function LoginScreen() {
                 </Button>
               </form>
 
-              {/* Public Access Action & Invitation Note */}
-              <div className="mt-6 pt-4 border-t border-gray-100 text-center space-y-3">
-                <div className="space-y-1.5">
-                  <p className="text-xs text-gray-500 font-medium">Looking for publications or citing researches?</p>
+              {/* Researcher Onboarding & Invitation Request */}
+              <div className="mt-6 pt-4 border-t border-gray-100 space-y-3">
+                <div className="text-left bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 text-xs text-slate-600 space-y-2.5">
+                  <div className="space-y-1">
+                    <p className="font-semibold text-slate-800 flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-blue-600" />
+                      Faculty & Researcher Access
+                    </p>
+                    <p className="text-[11px] leading-relaxed text-slate-500">
+                      Researcher accounts are provisioned via administrator invitation. If you are a PSU researcher and have not yet been invited by Sir Rodelio M. Garin, you can ask for an invitation.
+                    </p>
+                  </div>
+
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => navigate("/")}
-                    className="w-full gap-2 text-xs font-semibold border-slate-200 text-slate-700 hover:text-blue-700 hover:bg-blue-50/60 h-10 shadow-2xs"
+                    size="sm"
+                    onClick={() => {
+                      setInviteSubmitted(false);
+                      setInviteError("");
+                      setShowInviteModal(true);
+                    }}
+                    className="w-full gap-2 text-xs font-semibold border-blue-200 text-blue-700 hover:bg-blue-50/80 bg-white h-9 shadow-2xs"
                   >
-                    <Search className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Explore Public Repository & Search</span>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Ask for Invitation</span>
                   </Button>
                 </div>
 
-                <div className="pt-2 text-left bg-slate-50 border border-slate-200/80 rounded-lg p-3 text-xs text-slate-600 space-y-1">
-                  <p className="font-semibold text-slate-800 flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-blue-600" />
-                    Faculty & Researcher Onboarding
-                  </p>
-                  <p className="text-[11px] leading-relaxed text-slate-500">
-                    Researcher accounts are provisioned exclusively via administrator invitation. If you have been invited by campus administration, please click the secure link sent to your email to activate your account.
-                  </p>
-                </div>
-
-                <p className="text-[11px] text-gray-400">
+                <p className="text-[11px] text-center text-gray-400">
                   Default administrator: <span className="font-mono font-medium text-gray-600">admin / admin</span>
                 </p>
               </div>
@@ -345,22 +392,183 @@ export function LoginScreen() {
                 <CheckCircle2 className="w-4 h-4 text-green-400" /> Admin Moderation
               </div>
             </div>
-
-            <div className="pt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate("/")}
-                className="gap-2 text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border-white/30 backdrop-blur-sm h-10 px-5 shadow-sm transition-all"
-              >
-                <Globe className="w-4 h-4 text-blue-200" />
-                <span>Visit Public Research Repository</span>
-                <ArrowRight className="w-3.5 h-3.5 text-blue-200" />
-              </Button>
-            </div>
           </div>
         </div>
       </motion.div>
+
+      {/* ===================================================================== */}
+      {/* ASK FOR INVITATION MODAL                                              */}
+      {/* ===================================================================== */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+            {!inviteSubmitted ? (
+              <>
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                      <Send className="w-4 h-4 text-blue-600" />
+                      <span>Ask for System Invitation</span>
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Submit your credentials to request an invitation from Sir Rodelio M. Garin.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInviteModal(false)}
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {inviteError && (
+                  <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200">
+                    {inviteError}
+                  </p>
+                )}
+
+                <form onSubmit={handleRequestInvite} className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="reqFirstName" className="text-xs font-semibold">First Name *</Label>
+                      <Input
+                        id="reqFirstName"
+                        value={inviteForm.firstName}
+                        onChange={(e) => setInviteForm({ ...inviteForm, firstName: e.target.value })}
+                        placeholder="e.g. Juan"
+                        className="h-9 text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="reqLastName" className="text-xs font-semibold">Last Name *</Label>
+                      <Input
+                        id="reqLastName"
+                        value={inviteForm.lastName}
+                        onChange={(e) => setInviteForm({ ...inviteForm, lastName: e.target.value })}
+                        placeholder="e.g. Dela Cruz"
+                        className="h-9 text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="reqMiddleInitial" className="text-xs font-semibold">Middle Initial</Label>
+                    <Input
+                      id="reqMiddleInitial"
+                      value={inviteForm.middleInitial}
+                      onChange={(e) => setInviteForm({ ...inviteForm, middleInitial: e.target.value })}
+                      placeholder="e.g. M."
+                      maxLength={5}
+                      className="h-9 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="reqEmail" className="text-xs font-semibold">Email Address *</Label>
+                    <Input
+                      id="reqEmail"
+                      type="email"
+                      value={inviteForm.email}
+                      onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                      placeholder="e.g. jdelacruz@psu.edu.ph or personal email"
+                      className="h-9 text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="reqInstructorId" className="text-xs font-semibold">Instructor / Employee ID *</Label>
+                    <Input
+                      id="reqInstructorId"
+                      value={inviteForm.instructorId}
+                      onChange={(e) => setInviteForm({ ...inviteForm, instructorId: e.target.value })}
+                      placeholder="e.g. INS-2024-001"
+                      className="h-9 text-xs font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="reqScholarUrl" className="text-xs font-semibold">Google Scholar Link (If available)</Label>
+                    <Input
+                      id="reqScholarUrl"
+                      type="url"
+                      value={inviteForm.scholarUrl}
+                      onChange={(e) => setInviteForm({ ...inviteForm, scholarUrl: e.target.value })}
+                      placeholder="https://scholar.google.com/citations?user=..."
+                      className="h-9 text-xs"
+                    />
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowInviteModal(false)}
+                      className="h-9 text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSubmittingInvite}
+                      size="sm"
+                      className="h-9 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                    >
+                      {isSubmittingInvite ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Submitting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Submit Invitation Request</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <div className="text-center py-4 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="text-base font-bold text-gray-900">Invitation Request Submitted!</h4>
+                <p className="text-xs text-gray-600 leading-relaxed max-w-sm mx-auto">
+                  Thank you! Your request has been forwarded to Campus Research Administrator Sir Rodelio M. Garin. Once approved, you will receive an official invitation link at <strong>{inviteForm.email}</strong> to activate your researcher profile.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setShowInviteModal(false);
+                    setInviteSubmitted(false);
+                    setInviteForm({
+                      firstName: "",
+                      lastName: "",
+                      middleInitial: "",
+                      email: "",
+                      instructorId: "",
+                      scholarUrl: "",
+                    });
+                  }}
+                  className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white px-5 mt-2"
+                >
+                  Done
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

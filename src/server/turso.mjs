@@ -142,6 +142,20 @@ export async function initTursoSchema() {
       total_runs INTEGER,
       created_at TEXT NOT NULL,
       last_tested_at TEXT
+    );`,
+    `CREATE TABLE IF NOT EXISTS invitation_requests (
+      id TEXT PRIMARY KEY,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      middle_initial TEXT,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      instructor_id TEXT NOT NULL,
+      department TEXT DEFAULT 'BSIT',
+      scholar_url TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_notes TEXT,
+      created_at TEXT NOT NULL
     );`
   ];
 

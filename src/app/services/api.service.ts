@@ -109,6 +109,20 @@ export interface FetchScholarProfileResponse {
   error?: string;
 }
 
+export interface InvitationRequest {
+  id: string;
+  first_name: string;
+  last_name: string;
+  middle_initial?: string;
+  name: string;
+  email: string;
+  instructor_id: string;
+  scholar_url?: string;
+  department?: string;
+  status: 'pending' | 'invited' | 'rejected';
+  created_at: string;
+}
+
 export interface PendingRegistration {
   id: string;
   name: string;
@@ -340,6 +354,7 @@ class ApiService {
 
   async createResearcher(data: {
     firstName: string;
+    middleInitial?: string;
     lastName: string;
     instructorId: string;
     password?: string;
@@ -350,6 +365,7 @@ class ApiService {
     scholarUrl?: string;
     googleScholarId?: string;
     sendInvite?: boolean;
+    invitationRequestId?: string;
   }) {
     return this.request<{
       success: boolean;
@@ -359,6 +375,33 @@ class ApiService {
     }>('/researchers', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  // Public: Request Invitation from Admin
+  async requestInvitation(data: {
+    firstName: string;
+    lastName: string;
+    middleInitial?: string;
+    email: string;
+    instructorId: string;
+    scholarUrl?: string;
+  }) {
+    return this.request<{ success: boolean; message: string }>('/invitation-requests', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Admin: Get invitation requests
+  async getInvitationRequests(): Promise<InvitationRequest[]> {
+    return this.request<InvitationRequest[]>('/admin/invitation-requests');
+  }
+
+  // Admin: Dismiss invitation request
+  async dismissInvitationRequest(id: string) {
+    return this.request<{ success: boolean; message: string }>(`/admin/invitation-requests/${id}/dismiss`, {
+      method: 'POST',
     });
   }
 

@@ -53,6 +53,7 @@ import {
   apiService,
   type PendingRegistration,
   type EmailLog,
+  type InvitationRequest,
 } from "../services/api.service";
 import { ApifyTokenManager } from "./ApifyTokenManager";
 import { ScholarImportModal } from "./ScholarImportModal";
@@ -73,6 +74,7 @@ const DEPARTMENTS = ["BSIT", "BSBA", "BSE", "BEE", "BTLED", "BIT", "Non Teaching
 const emptyForm = {
   lastName: "",
   firstName: "",
+  middleInitial: "",
   instructorId: "",
   password: "",
   department: "BSIT",
@@ -81,6 +83,7 @@ const emptyForm = {
   email: "",
   scholarUrl: "",
   sendInvite: true,
+  invitationRequestId: "",
 };
 
 export function AdminPage() {
@@ -90,6 +93,7 @@ export function AdminPage() {
   const [researchers, setResearchers] = useState<ManagedResearcher[]>([]);
   const [pendingClaims, setPendingClaims] = useState<any[]>([]);
   const [pendingRegistrations, setPendingRegistrations] = useState<PendingRegistration[]>([]);
+  const [invitationRequests, setInvitationRequests] = useState<InvitationRequest[]>([]);
   
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<string>("registrations");
@@ -248,12 +252,17 @@ export function AdminPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [researchersData, claimsData, registrationsData] = await Promise.all([
+      const [researchersData, claimsData, registrationsData, requestsData] = await Promise.all([
         apiService.getResearchers().catch(() => []),
         apiService.getClaims().catch(() => []),
         apiService.getPendingRegistrations().catch(() => []),
+        apiService.getInvitationRequests().catch(() => []),
         loadScraperSettings().catch(() => null),
       ]);
+
+      if (Array.isArray(requestsData)) {
+        setInvitationRequests(requestsData);
+      }
 
       if (Array.isArray(researchersData)) {
         const mapped: ManagedResearcher[] = (researchersData as any[]).map((r) => {
@@ -347,8 +356,12 @@ export function AdminPage() {
       return;
     }
 
+    const mi = form.middleInitial.trim();
+    const fullName = mi ? `${form.firstName.trim()} ${mi} ${form.lastName.trim()}` : `${form.firstName.trim()} ${form.lastName.trim()}`;
+
     const payload = {
       firstName: form.firstName.trim(),
+      middleInitial: mi || undefined,
       lastName: form.lastName.trim(),
       instructorId: form.instructorId.trim(),
       password: form.password ? form.password.trim() : undefined,
@@ -358,6 +371,7 @@ export function AdminPage() {
       photoUrl: form.photoUrl,
       scholarUrl: form.scholarUrl.trim(),
       sendInvite: form.sendInvite,
+      invitationRequestId: form.invitationRequestId || undefined,
     };
 
     try {
@@ -367,7 +381,7 @@ export function AdminPage() {
         const res = await apiService.createResearcher(payload);
         if (res.verificationLink) {
           setInviteResult({
-            name: `${payload.firstName} ${payload.lastName}`,
+            name: fullName,
             email: payload.email,
             verificationLink: res.verificationLink,
             message: res.message,
@@ -392,6 +406,7 @@ export function AdminPage() {
     setForm({
       lastName,
       firstName,
+      middleInitial: (researcher as any).middleInitial || (researcher as any).middle_initial || "",
       instructorId: researcher.instructorId,
       password: "",
       department: researcher.department || "BSIT",
@@ -400,6 +415,7 @@ export function AdminPage() {
       email: researcher.email || "",
       scholarUrl: researcher.scholarUrl || "",
       sendInvite: false,
+      invitationRequestId: "",
     });
     setEditingId(researcher.instructorId);
     setIsAdding(true);
@@ -529,6 +545,37 @@ export function AdminPage() {
     }
   };
 
+  const handleDismissInvitationRequest = async (id: string) => {
+    try {
+      await apiService.dismissInvitationRequest(id);
+      toast.success("Invitation request dismissed.");
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to dismiss request.");
+    }
+  };
+
+  const handleApproveInvitationRequest = (req: InvitationRequest) => {
+    setForm({
+      firstName: req.first_name,
+      lastName: req.last_name,
+      middleInitial: req.middle_initial || "",
+      instructorId: req.instructor_id,
+      email: req.email,
+      department: req.department || "BSIT",
+      isFaculty: true,
+      photoUrl: "",
+      scholarUrl: req.scholar_url || "",
+      password: "",
+      sendInvite: true,
+      invitationRequestId: req.id,
+    });
+    setEditingId(null);
+    setIsAdding(true);
+    setActiveTab("researchers");
+    toast.info(`Reviewing invitation for ${req.name}. Click 'Save & Dispatch Invitation' to send.`);
+  };
+
   const facultyCount = researchers.filter((member) => member.isFaculty).length;
   const nonTeachingCount = researchers.length - facultyCount;
 
@@ -557,10 +604,10 @@ export function AdminPage() {
   const adminTabs: TabItem[] = [
     {
       id: "registrations",
-      label: "Registrations & Invites",
-      count: pendingRegistrations.length,
+      label: "Invitations & Requests",
+      count: pendingRegistrations.length + invitationRequests.length,
       icon: UserCheck,
-      badge: pendingRegistrations.length > 0 ? "Pending" : undefined,
+      badge: (pendingRegistrations.length + invitationRequests.length) > 0 ? "Pending" : undefined,
     },
     {
       id: "researchers",
@@ -828,113 +875,198 @@ export function AdminPage() {
       {/* TAB 1: PENDING REGISTRATIONS & INVITATIONS                             */}
       {/* ===================================================================== */}
       {activeTab === "registrations" && (
-        <SectionCard
-          title="Researcher Invitation & Activation Queue"
-          description="Researchers invited by Admin. Once the researcher confirms their account via their invitation link, admit them to officially recognize their profile."
-          action={
-            <Badge variant="outline" className="font-mono text-xs">
-              {pendingRegistrations.length} pending
-            </Badge>
-          }
-        >
-          {pendingRegistrations.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="All Invitations Up to Date"
-              description="Invited faculty researchers awaiting activation will appear in this queue."
-            />
-          ) : (
-            <div className="divide-y divide-border/60">
-              {pendingRegistrations.map((item) => (
-                <div
-                  key={item.instructorId || item.id}
-                  className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1.5 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm text-foreground">{item.name}</p>
-                      
-                      <Badge variant="outline" className="text-[10px] font-medium">
-                        {item.registrationType === "self_registration" ? "Self-Registered" : "Admin Invited"}
-                      </Badge>
+        <div className="space-y-6">
+          {/* SECTION 1: INCOMING REQUESTS FROM FACULTY */}
+          <SectionCard
+            title="Incoming Invitation Requests from Faculty"
+            description="Faculty researchers who submitted an 'Ask for Invitation' request from the portal. Review their credentials and dispatch their official invitation."
+            action={
+              <Badge variant="outline" className="font-mono text-xs">
+                {invitationRequests.length} requests
+              </Badge>
+            }
+          >
+            {invitationRequests.length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="No Pending Invitation Requests"
+                description="When a faculty researcher asks for an invitation on the portal, their request will appear here for one-click approval."
+              />
+            ) : (
+              <div className="divide-y divide-border/60">
+                {invitationRequests.map((req) => (
+                  <div
+                    key={req.id}
+                    className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm text-foreground">{req.name}</p>
+                        {req.middle_initial && (
+                          <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+                            M.I.: {req.middle_initial}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 font-medium">
+                          Invitation Requested
+                        </Badge>
+                      </div>
 
-                      <span className="text-xs text-muted-foreground font-medium">
-                        {item.department} • {item.isFaculty ? "Faculty" : "Non-Teaching"}
-                      </span>
+                      <p className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
+                        <span>Instructor ID: <strong className="text-foreground font-mono">{req.instructor_id}</strong></span>
+                        <span>Email: <strong className="text-foreground">{req.email}</strong></span>
+                        <span>Requested: {new Date(req.created_at).toLocaleDateString()}</span>
+                      </p>
 
-                      {item.isEmailVerified ? (
-                        <StatusBadge status="verified" label="Email Verified" />
-                      ) : (
-                        <StatusBadge status="pending" label="Pending Email Verification" />
+                      {req.scholar_url && (
+                        <div className="pt-0.5 flex items-center gap-2">
+                          <a
+                            href={req.scholar_url.startsWith("http") ? req.scholar_url : `https://${req.scholar_url}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-medium"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>Google Scholar Link</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
                       )}
                     </div>
 
-                    <p className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
-                      <span>ID: <strong className="text-foreground">{item.instructorId}</strong></span>
-                      <span>Email: <strong className="text-foreground">{item.email}</strong></span>
-                      <span>Registered: {new Date(item.createdAt).toLocaleDateString()}</span>
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap shrink-0 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-0 border-border/40">
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveInvitationRequest(req)}
+                        className="bg-brand text-white hover:bg-brand/90 text-xs h-8 gap-1.5"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Invite Researcher</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDismissInvitationRequest(req.id)}
+                        className="text-muted-foreground hover:text-destructive text-xs h-8"
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </SectionCard>
 
-                    {item.scholarUrl && (
-                      <div className="pt-1 flex items-center gap-2">
-                        <a
-                          href={item.scholarUrl.startsWith("http") ? item.scholarUrl : `https://scholar.google.com/citations?user=${item.scholarUrl}&hl=en`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-medium"
-                        >
-                          <GraduationCap className="w-3.5 h-3.5" />
-                          <span>Google Scholar Profile</span>
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
+          {/* SECTION 2: INVITED RESEARCHERS AWAITING ACTIVATION */}
+          <SectionCard
+            title="Invited Researchers Awaiting Activation"
+            description="Researchers invited by Admin. Once the researcher confirms their account via their invitation link, admit them to officially recognize their profile."
+            action={
+              <Badge variant="outline" className="font-mono text-xs">
+                {pendingRegistrations.length} pending
+              </Badge>
+            }
+          >
+            {pendingRegistrations.length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="All Invitations Up to Date"
+                description="Invited faculty researchers awaiting activation will appear in this queue."
+              />
+            ) : (
+              <div className="divide-y divide-border/60">
+                {pendingRegistrations.map((item) => (
+                  <div
+                    key={item.instructorId || item.id}
+                    className="py-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm text-foreground">{item.name}</p>
+                        
+                        <Badge variant="outline" className="text-[10px] font-medium">
+                          {item.registrationType === "self_registration" ? "Self-Registered" : "Admin Invited"}
+                        </Badge>
+
+                        <span className="text-xs text-muted-foreground font-medium">
+                          {item.department} • {item.isFaculty ? "Faculty" : "Non-Teaching"}
+                        </span>
+
+                        {item.isEmailVerified ? (
+                          <StatusBadge status="verified" label="Email Verified" />
+                        ) : (
+                          <StatusBadge status="pending" label="Pending Email Verification" />
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2 flex-wrap shrink-0 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-0 border-border/40">
-                    {/* Admit Button */}
-                    <Button
-                      size="sm"
-                      onClick={() => handleAdmitRegistration(item.instructorId, item.name)}
-                      disabled={actionLoadingId === item.instructorId}
-                      className="bg-success text-white hover:bg-success/90 text-xs h-8 gap-1.5"
-                    >
-                      {actionLoadingId === item.instructorId ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5" />
+                      <p className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
+                        <span>ID: <strong className="text-foreground">{item.instructorId}</strong></span>
+                        <span>Email: <strong className="text-foreground">{item.email}</strong></span>
+                        <span>Registered: {new Date(item.createdAt).toLocaleDateString()}</span>
+                      </p>
+
+                      {item.scholarUrl && (
+                        <div className="pt-1 flex items-center gap-2">
+                          <a
+                            href={item.scholarUrl.startsWith("http") ? item.scholarUrl : `https://scholar.google.com/citations?user=${item.scholarUrl}&hl=en`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-brand hover:underline font-medium"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>Google Scholar Profile</span>
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        </div>
                       )}
-                      <span>Admit Researcher</span>
-                    </Button>
+                    </div>
 
-                    {/* Resend Verification */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleResendInvite(item.instructorId, item.email)}
-                      disabled={actionLoadingId === item.instructorId}
-                      className="text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>Resend Verification</span>
-                    </Button>
+                    <div className="flex items-center gap-2 flex-wrap shrink-0 w-full lg:w-auto pt-2 lg:pt-0 border-t lg:border-0 border-border/40">
+                      {/* Admit Button */}
+                      <Button
+                        size="sm"
+                        onClick={() => handleAdmitRegistration(item.instructorId, item.name)}
+                        disabled={actionLoadingId === item.instructorId}
+                        className="bg-success text-white hover:bg-success/90 text-xs h-8 gap-1.5"
+                      >
+                        {actionLoadingId === item.instructorId ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Check className="w-3.5 h-3.5" />
+                        )}
+                        <span>Admit Researcher</span>
+                      </Button>
 
-                    {/* Decline */}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setRejectTarget({ instructorId: item.instructorId, name: item.name })}
-                      className="text-xs h-8 text-danger hover:bg-danger-soft hover:text-danger"
-                    >
-                      <UserX className="w-3.5 h-3.5 mr-1" />
-                      <span>Decline</span>
-                    </Button>
+                      {/* Resend Verification */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleResendInvite(item.instructorId, item.email)}
+                        disabled={actionLoadingId === item.instructorId}
+                        className="text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Resend Verification</span>
+                      </Button>
+
+                      {/* Decline */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setRejectTarget({ instructorId: item.instructorId, name: item.name })}
+                        className="text-xs h-8 text-danger hover:bg-danger-soft hover:text-danger"
+                      >
+                        <UserX className="w-3.5 h-3.5 mr-1" />
+                        <span>Decline</span>
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
+                ))}
+              </div>
+            )}
+          </SectionCard>
+        </div>
       )}
 
       {/* ===================================================================== */}
@@ -966,6 +1098,17 @@ export function AdminPage() {
                     value={form.firstName}
                     onChange={(e) => setForm({ ...form, firstName: e.target.value })}
                     placeholder="e.g. Juan"
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Middle Initial</Label>
+                  <Input
+                    value={form.middleInitial}
+                    onChange={(e) => setForm({ ...form, middleInitial: e.target.value })}
+                    placeholder="e.g. M."
+                    maxLength={5}
                     className="h-8 text-xs"
                   />
                 </div>
