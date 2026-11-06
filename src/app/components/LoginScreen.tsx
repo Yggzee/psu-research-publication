@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { Mail, Lock, User, Building, GraduationCap, Link2, CheckCircle2, AlertCircle, ArrowRight, Loader2, Sparkles, ExternalLink } from "lucide-react";
+import { Mail, Lock, User, Building, GraduationCap, Link2, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Loader2, Sparkles, ExternalLink, Search, Globe } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -261,6 +261,28 @@ export function LoginScreen() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-lg my-auto py-6"
         >
+          {/* Navigation back to Public Search */}
+          <div className="flex items-center justify-between mb-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/")}
+              className="gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 hover:bg-blue-50 px-2.5 h-8 -ml-2"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Back to Public Search</span>
+            </Button>
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="text-xs text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1 font-medium"
+            >
+              <Search className="w-3 h-3" />
+              <span>Open Repository</span>
+            </button>
+          </div>
+
           {/* Branding */}
           <div className="flex items-center gap-3 mb-6">
             <img 
@@ -398,10 +420,23 @@ export function LoginScreen() {
                       </Button>
                     </form>
 
-                    {/* Notice */}
-                    <div className="mt-6 pt-4 border-t border-gray-100 text-center">
-                      <p className="text-xs text-gray-500">
-                        Default administrator: <span className="font-mono font-medium text-gray-700">admin / admin</span>
+                    {/* Public Access Action */}
+                    <div className="mt-6 pt-4 border-t border-gray-100 text-center space-y-3">
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-gray-500 font-medium">Looking for publications or citing researches?</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => navigate("/")}
+                          className="w-full gap-2 text-xs font-semibold border-slate-200 text-slate-700 hover:text-blue-700 hover:bg-blue-50/60 h-10 shadow-2xs"
+                        >
+                          <Search className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Explore Public Repository & Search</span>
+                        </Button>
+                      </div>
+
+                      <p className="text-[11px] text-gray-400">
+                        Default administrator: <span className="font-mono font-medium text-gray-600">admin / admin</span>
                       </p>
                     </div>
                   </CardContent>
@@ -696,6 +731,19 @@ export function LoginScreen() {
               <div className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-green-400" /> Admin Moderation
               </div>
+            </div>
+
+            <div className="pt-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate("/")}
+                className="gap-2 text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border-white/30 backdrop-blur-sm h-10 px-5 shadow-sm transition-all"
+              >
+                <Globe className="w-4 h-4 text-blue-200" />
+                <span>Visit Public Research Repository</span>
+                <ArrowRight className="w-3.5 h-3.5 text-blue-200" />
+              </Button>
             </div>
           </div>
         </div>
