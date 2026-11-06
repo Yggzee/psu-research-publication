@@ -53,6 +53,7 @@ export interface ScholarSearchResponse {
   count: number;
   page?: number;
   hasMore?: boolean;
+  totalAvailable?: number;
   usedToken?: boolean;
   requiresApify?: boolean;
   message?: string;

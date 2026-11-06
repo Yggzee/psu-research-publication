@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type FormEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type FormEvent } from "react";
 import {
   Search,
   User,
@@ -21,6 +21,10 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Building2,
+  Globe,
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
@@ -57,11 +61,13 @@ export function SearchEngine() {
 
   // 10-paper pagination and Scraper Token feedback state
   const [currentPage, setCurrentPage] = useState(0);
+  const [totalAvailable, setTotalAvailable] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [showMoreConfirmModal, setShowMoreConfirmModal] = useState(false);
   const [skipConfirmThisSession, setSkipConfirmThisSession] = useState(false);
   const [lastUsedToken, setLastUsedToken] = useState<boolean | null>(null);
+  const resultsTopRef = useRef<HTMLDivElement>(null);
 
   const currentUser = getCurrentUser() || { name: "Faculty", instructorId: "", role: "instructor" as const };
   const isInstructor = currentUser.role === "instructor";
@@ -198,6 +204,7 @@ export function SearchEngine() {
       setSearchSource(response.searchSource || "direct");
       setSourceLabel(response.sourceLabel || "");
       setHasMore(Boolean(response.hasMore ?? (response.results.length >= 5)));
+      setTotalAvailable(response.totalAvailable || response.results.length);
       setCurrentPage(0);
       setLastUsedToken(Boolean(response.usedToken));
 
@@ -217,76 +224,49 @@ export function SearchEngine() {
     }
   };
 
-  const handleShowMoreClick = () => {
-    if (skipConfirmThisSession) {
-      loadMorePapers();
+  const handleNextPageClick = () => {
+    if (skipConfirmThisSession || searchSource !== "apify") {
+      goToPage(currentPage + 1);
     } else {
       setShowMoreConfirmModal(true);
     }
   };
 
-  const loadMorePapers = async () => {
-    if (isLoadingMore || !hasMore) return;
+  const goToPage = async (targetPage: number) => {
+    if (targetPage < 0 || isLoadingMore || isSearching) return;
     setIsLoadingMore(true);
     setShowMoreConfirmModal(false);
 
-    const nextPage = currentPage + 1;
-    const finalQuery = searchQuery;
-
     try {
-      const response = await apiService.searchGoogleScholar(finalQuery, { page: nextPage });
+      const response = await apiService.searchGoogleScholar(searchQuery, { page: targetPage });
 
       if (response.requiresApify) {
         setRequiresApify(true);
         setCaptchaDetected(true);
-        toast.error("Direct search challenged by academic index. Connect an Apify token to bypass.");
+        toast.error("Academic index challenged direct requests. Connect an Apify token to bypass.");
         setShowTokenManager(true);
         return;
       }
 
-      if (response.results.length === 0) {
-        setHasMore(false);
-        toast.info("No additional papers found for this query.");
-        return;
-      }
-
-      // Filter out any duplicates already present
-      const existingIds = new Set(searchResults.map((r) => r.id));
-      const existingTitles = new Set(searchResults.map((r) => normalizeTitle(r.title)));
-      const uniqueNewResults = response.results.filter(
-        (r) => !existingIds.has(r.id) && !existingTitles.has(normalizeTitle(r.title))
-      );
-
-      if (uniqueNewResults.length === 0) {
-        setCurrentPage(nextPage);
-        setHasMore(false);
-        toast.info("All available papers for this search have now been loaded.");
-        return;
-      }
-
-      setSearchResults((prev) => [...prev, ...uniqueNewResults]);
-      setCurrentPage(nextPage);
+      setSearchResults(response.results || []);
+      setCurrentPage(targetPage);
       setHasMore(Boolean(response.hasMore));
-      setLastUsedToken(Boolean(response.usedToken));
+      if (response.totalAvailable) setTotalAvailable(response.totalAvailable);
       setSearchSource(response.searchSource || "direct");
       setSourceLabel(response.sourceLabel || "");
+      setLastUsedToken(Boolean(response.usedToken));
+
+      // Smooth scroll back to top of search results container
+      resultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
       if (response.usedToken) {
-        toast.info(
-          `Loaded ${uniqueNewResults.length} more papers via Apify Scraper Token (${response.sourceLabel}).`
-        );
-      } else {
-        toast.success(
-          `Loaded ${uniqueNewResults.length} more papers directly from academic index (0 scraper tokens used, $0.00).`
-        );
+        apiService.getActiveTokenUsage().then((res) => {
+          if (res?.tokenUsage) setTokenUsage(res.tokenUsage);
+        });
       }
-
-      apiService.getActiveTokenUsage().then((res) => {
-        if (res?.tokenUsage) setTokenUsage(res.tokenUsage);
-      });
     } catch (err: any) {
-      console.error("Load more error:", err);
-      toast.error(err.message || "Failed to load more papers. Check connection.");
+      console.error("Pagination error:", err);
+      toast.error(err.message || "Failed to load page. Check connection.");
     } finally {
       setIsLoadingMore(false);
     }
@@ -561,7 +541,7 @@ export function SearchEngine() {
       )}
 
       {searchResults.length > 0 && (
-        <div className="space-y-3">
+        <div ref={resultsTopRef} className="scroll-mt-6 space-y-3">
           {searchResults.map((result) => {
             const isPSU = result.geo_tier ? result.geo_tier === "psu" : isPSUPaper(result.authors);
             const existingRecord = getExistingPublicationRecord(result.title);
@@ -822,45 +802,69 @@ export function SearchEngine() {
             );
           })}
 
-          {/* Show More Papers Action Card */}
-          {hasMore && (
-            <div className="pt-2 pb-1 flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl border border-border/70 bg-card/70 shadow-2xs">
-              <div className="space-y-0.5 text-center sm:text-left">
-                <p className="text-xs font-semibold text-foreground flex items-center gap-1.5 justify-center sm:justify-start">
-                  <Zap className="w-3.5 h-3.5 text-warning" />
-                  Showing top {searchResults.length} papers
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  The academic index has more results for this query. Load 10 more papers with official ranking.
-                </p>
-              </div>
+          {/* Google Scholar Style Pagination Bar */}
+          <div className="pt-4 pb-2 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground font-mono">
+              Showing {currentPage * 10 + 1}–{currentPage * 10 + searchResults.length}
+              {totalAvailable > 0 ? ` of ${totalAvailable} publications` : ""} (Page {currentPage + 1})
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={currentPage === 0 || isLoadingMore || isSearching}
+                onClick={() => goToPage(currentPage - 1)}
+                className="h-8 px-3 text-xs gap-1"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Previous</span>
+              </Button>
+
+              {/* Numbered page buttons (Google Scholar Style) */}
+              {Array.from({ length: Math.min(6, Math.max(currentPage + 2, Math.ceil((totalAvailable || 30) / 10))) }).map((_, i) => {
+                const pageIdx = i;
+                const isCurrent = currentPage === pageIdx;
+                return (
+                  <Button
+                    key={pageIdx}
+                    type="button"
+                    variant={isCurrent ? "default" : "outline"}
+                    size="sm"
+                    disabled={isLoadingMore || isSearching}
+                    onClick={() => goToPage(pageIdx)}
+                    className={`h-8 w-8 p-0 text-xs font-mono font-medium ${
+                      isCurrent ? "bg-brand text-white border-brand hover:bg-brand/90" : "hover:bg-muted"
+                    }`}
+                  >
+                    {pageIdx + 1}
+                  </Button>
+                );
+              })}
 
               <Button
                 type="button"
-                onClick={handleShowMoreClick}
-                disabled={isLoadingMore}
-                className="h-9 px-5 text-xs font-semibold bg-brand hover:bg-brand/90 text-white shadow-2xs gap-1.5 shrink-0"
+                variant="outline"
+                size="sm"
+                disabled={!hasMore || isLoadingMore || isSearching}
+                onClick={handleNextPageClick}
+                className="h-8 px-3.5 text-xs gap-1 font-semibold text-brand hover:text-brand hover:bg-brand/10 border-brand/40"
               >
                 {isLoadingMore ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Loading Next 10 Papers...</span>
+                    <span>Loading...</span>
                   </>
                 ) : (
                   <>
-                    <ChevronDown className="w-3.5 h-3.5" />
-                    <span>Show More (+10 Papers)</span>
+                    <span>Next</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </Button>
             </div>
-          )}
-
-          {!hasMore && searchResults.length > 0 && (
-            <p className="text-center text-xs text-muted-foreground py-3">
-              All available results for this search have been loaded ({searchResults.length} papers total).
-            </p>
-          )}
+          </div>
         </div>
       )}
 
@@ -983,7 +987,10 @@ export function SearchEngine() {
               <Button
                 type="button"
                 size="sm"
-                onClick={loadMorePapers}
+                onClick={() => {
+                  setShowMoreConfirmModal(false);
+                  goToPage(currentPage + 1);
+                }}
                 disabled={isLoadingMore}
                 className="h-9 px-5 text-xs font-semibold bg-brand hover:bg-brand/90 text-white shadow-2xs gap-1.5"
               >
@@ -994,8 +1001,8 @@ export function SearchEngine() {
                   </>
                 ) : (
                   <>
-                    <ChevronDown className="w-3.5 h-3.5" />
-                    <span>Proceed & Load 10 More</span>
+                    <span>Proceed to Next Page</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </Button>

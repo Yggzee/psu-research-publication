@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type FormEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import {
   Search,
@@ -20,6 +20,9 @@ import {
   TrendingUp,
   Tag,
   Check,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
@@ -75,11 +78,34 @@ export function PublicRepositoryPortal() {
   const [isRepoLoading, setIsRepoLoading] = useState(true);
   const [hasRepoSearched, setHasRepoSearched] = useState(false);
 
+  // Repository Pagination State (Google Scholar Style)
+  const [repoPage, setRepoPage] = useState(0);
+  const REPO_PAGE_SIZE = 10;
+  const repoResultsTopRef = useRef<HTMLDivElement>(null);
+
+  const paginatedRepoResults = useMemo(() => {
+    return repoResults.slice(repoPage * REPO_PAGE_SIZE, (repoPage + 1) * REPO_PAGE_SIZE);
+  }, [repoResults, repoPage]);
+
+  const totalRepoPages = Math.ceil(repoResults.length / REPO_PAGE_SIZE);
+
+  const handleRepoGoToPage = (newPage: number) => {
+    if (newPage < 0 || newPage >= totalRepoPages) return;
+    setRepoPage(newPage);
+    repoResultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // Global Scraper State
   const [globalQuery, setGlobalQuery] = useState("");
   const [globalResults, setGlobalResults] = useState<ScholarSearchResult[]>([]);
   const [isGlobalLoading, setIsGlobalLoading] = useState(false);
+  const [isLoadingGlobalPage, setIsLoadingGlobalPage] = useState(false);
   const [hasGlobalSearched, setHasGlobalSearched] = useState(false);
+  const [globalPage, setGlobalPage] = useState(0);
+  const [hasGlobalMore, setHasGlobalMore] = useState(false);
+  const [totalGlobalAvailable, setTotalGlobalAvailable] = useState(0);
+  const globalResultsTopRef = useRef<HTMLDivElement>(null);
+
   const [scraperStatus, setScraperStatus] = useState<{
     publicScraperEnabled: boolean;
     quotaCircuitBreakerTripped: boolean;
@@ -96,8 +122,9 @@ export function PublicRepositoryPortal() {
 
   const loadRepositoryShowcase = async () => {
     setIsRepoLoading(true);
+    setRepoPage(0);
     try {
-      const data = await apiService.getRepositorySearch({ limit: 12, sort: "citations" });
+      const data = await apiService.getRepositorySearch({ limit: 50, sort: "citations" });
       if (data?.success) {
         setRepoResults(data.results || []);
         setTopCitedList(data.topCited || []);
@@ -114,6 +141,7 @@ export function PublicRepositoryPortal() {
   const handleRepositorySearch = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     setIsRepoLoading(true);
+    setRepoPage(0);
     setHasRepoSearched(Boolean(query.trim() || selectedSdg !== "all" || selectedDept !== "all" || selectedYear !== "all"));
 
     try {
@@ -123,7 +151,7 @@ export function PublicRepositoryPortal() {
         department: selectedDept !== "all" ? selectedDept : undefined,
         year: selectedYear !== "all" ? selectedYear : undefined,
         sort: sortBy,
-        limit: 24,
+        limit: 50,
       });
 
       if (data?.success) {
@@ -161,6 +189,9 @@ export function PublicRepositoryPortal() {
     setIsGlobalLoading(true);
     setHasGlobalSearched(true);
     setGlobalResults([]);
+    setGlobalPage(0);
+    setHasGlobalMore(false);
+    setTotalGlobalAvailable(0);
 
     try {
       const res = await apiService.searchGoogleScholar(globalQuery.trim(), { page: 0 });
@@ -169,6 +200,8 @@ export function PublicRepositoryPortal() {
         return;
       }
       setGlobalResults(res.results || []);
+      setHasGlobalMore(Boolean(res.hasMore));
+      setTotalGlobalAvailable(res.totalAvailable || 0);
       if (res.results.length === 0) {
         toast.info("No papers found for this query in the global index.");
       }
@@ -176,6 +209,30 @@ export function PublicRepositoryPortal() {
       toast.error(err.message || "Global academic search failed. Check network.");
     } finally {
       setIsGlobalLoading(false);
+    }
+  };
+
+  const handleGlobalGoToPage = async (targetPage: number) => {
+    if (targetPage < 0 || isLoadingGlobalPage || isGlobalLoading) return;
+    setIsLoadingGlobalPage(true);
+
+    try {
+      const res = await apiService.searchGoogleScholar(globalQuery.trim(), { page: targetPage });
+      if (res.publicScraperDisabled) {
+        toast.error(res.message || "Global academic live search is currently restricted.");
+        return;
+      }
+      setGlobalResults(res.results || []);
+      setGlobalPage(targetPage);
+      setHasGlobalMore(Boolean(res.hasMore));
+      if (res.totalAvailable) setTotalGlobalAvailable(res.totalAvailable);
+
+      // Smooth scroll back to top of global search results container
+      globalResultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load page. Check network.");
+    } finally {
+      setIsLoadingGlobalPage(false);
     }
   };
 
@@ -467,115 +524,170 @@ export function PublicRepositoryPortal() {
                 <p className="text-xs text-muted-foreground">Searching institutional repository...</p>
               </div>
             ) : repoResults.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {repoResults.map((pub) => {
-                  const authorsList = Array.isArray(pub.authors) ? pub.authors : [pub.authors];
-                  const sdgTags = Array.isArray(pub.sdg_tags) ? pub.sdg_tags : [];
+              <div ref={repoResultsTopRef} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {paginatedRepoResults.map((pub) => {
+                    const authorsList = Array.isArray(pub.authors) ? pub.authors : [pub.authors];
+                    const sdgTags = Array.isArray(pub.sdg_tags) ? pub.sdg_tags : [];
 
-                  return (
-                    <Card
-                      key={pub.id}
-                      className="border border-border/70 hover:border-brand/40 bg-card p-5 rounded-2xl shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between gap-4"
-                    >
-                      <div className="space-y-3">
-                        {/* Tags and Badges */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
-                            <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                            <span>Pangasinan State University</span>
-                          </Badge>
-
-                          {pub.citations > 0 && (
-                            <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-bold gap-1 font-mono">
-                              <Quote className="w-2.5 h-2.5" />
-                              {pub.citations} Citations
+                    return (
+                      <Card
+                        key={pub.id}
+                        className="border border-border/70 hover:border-brand/40 bg-card p-5 rounded-2xl shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between gap-4"
+                      >
+                        <div className="space-y-3">
+                          {/* Tags and Badges */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
+                              <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>Pangasinan State University</span>
                             </Badge>
-                          )}
 
-                          {pub.year && (
-                            <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
-                              <Calendar className="w-2.5 h-2.5 mr-1" />
-                              {pub.year}
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* Title */}
-                        <h4 className="text-sm sm:text-base font-bold text-foreground leading-snug">
-                          {pub.title}
-                        </h4>
-
-                        {/* Authors */}
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          <User className="w-3 h-3 inline mr-1 text-brand" />
-                          <strong className="text-foreground">Authors:</strong> {authorsList.join(", ")}
-                        </p>
-
-                        {/* Journal / Venue */}
-                        <p className="text-xs text-muted-foreground line-clamp-1 font-mono">
-                          <BookOpen className="w-3 h-3 inline mr-1 text-muted-foreground" />
-                          {pub.journal || "Academic Publication"}
-                          {pub.volume_issue ? ` • ${pub.volume_issue}` : ""}
-                        </p>
-
-                        {/* Abstract */}
-                        {pub.abstract && (
-                          <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed pt-1">
-                            {pub.abstract}
-                          </p>
-                        )}
-
-                        {/* SDG Focus Track Badges */}
-                        {sdgTags.length > 0 && (
-                          <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                            {sdgTags.map((tag: string) => (
-                              <Badge
-                                key={tag}
-                                variant="secondary"
-                                className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
-                              >
-                                <Tag className="w-2.5 h-2.5 text-brand" />
-                                <span>{tag}</span>
+                            {pub.citations > 0 && (
+                              <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-bold gap-1 font-mono">
+                                <Quote className="w-2.5 h-2.5" />
+                                {pub.citations} Citations
                               </Badge>
-                            ))}
+                            )}
+
+                            {pub.year && (
+                              <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+                                <Calendar className="w-2.5 h-2.5 mr-1" />
+                                {pub.year}
+                              </Badge>
+                            )}
                           </div>
-                        )}
-                      </div>
 
-                      {/* Footer Actions (Direct Links - NO Cite Formatter Button) */}
-                      <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-muted-foreground font-medium">
-                          {pub.owner_name ? `Recorded under ${pub.owner_name}` : "Verified PSU Output"}
-                        </span>
+                          {/* Title */}
+                          <h4 className="text-sm sm:text-base font-bold text-foreground leading-snug">
+                            {pub.title}
+                          </h4>
 
-                        <div className="flex items-center gap-2">
-                          {pub.doi && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(`https://doi.org/${pub.doi.replace(/^https?:\/\/doi\.org\//i, "")}`, "_blank")}
-                              className="text-[11px] h-7 px-2.5 gap-1"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              DOI
-                            </Button>
+                          {/* Authors */}
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            <User className="w-3 h-3 inline mr-1 text-brand" />
+                            <strong className="text-foreground">Authors:</strong> {authorsList.join(", ")}
+                          </p>
+
+                          {/* Journal / Venue */}
+                          <p className="text-xs text-muted-foreground line-clamp-1 font-mono">
+                            <BookOpen className="w-3 h-3 inline mr-1 text-muted-foreground" />
+                            {pub.journal || "Academic Publication"}
+                            {pub.volume_issue ? ` • ${pub.volume_issue}` : ""}
+                          </p>
+
+                          {/* Abstract */}
+                          {pub.abstract && (
+                            <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed pt-1">
+                              {pub.abstract}
+                            </p>
                           )}
-                          {pub.url && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(pub.url, "_blank")}
-                              className="text-[11px] h-7 px-2.5 gap-1"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              View Source
-                            </Button>
+
+                          {/* SDG Focus Track Badges */}
+                          {sdgTags.length > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                              {sdgTags.map((tag: string) => (
+                                <Badge
+                                  key={tag}
+                                  variant="secondary"
+                                  className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
+                                >
+                                  <Tag className="w-2.5 h-2.5 text-brand" />
+                                  <span>{tag}</span>
+                                </Badge>
+                              ))}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    </Card>
-                  );
-                })}
+
+                        {/* Footer Actions (Direct Links - NO Cite Formatter Button) */}
+                        <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-muted-foreground font-medium">
+                            {pub.owner_name ? `Recorded under ${pub.owner_name}` : "Verified PSU Output"}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            {pub.doi && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(`https://doi.org/${pub.doi.replace(/^https?:\/\/doi\.org\//i, "")}`, "_blank")}
+                                className="text-[11px] h-7 px-2.5 gap-1"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                DOI
+                              </Button>
+                            )}
+                            {pub.url && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(pub.url, "_blank")}
+                                className="text-[11px] h-7 px-2.5 gap-1"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                View Source
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                {/* Repository Pagination Bar (Google Scholar Style) */}
+                {totalRepoPages > 1 && (
+                  <div className="pt-4 pb-2 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="text-xs text-muted-foreground font-mono">
+                      Showing {repoPage * REPO_PAGE_SIZE + 1}–{Math.min((repoPage + 1) * REPO_PAGE_SIZE, repoResults.length)} of {repoResults.length} researches (Page {repoPage + 1} of {totalRepoPages})
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={repoPage === 0}
+                        onClick={() => handleRepoGoToPage(repoPage - 1)}
+                        className="h-8 px-3 text-xs gap-1"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Previous</span>
+                      </Button>
+
+                      {Array.from({ length: totalRepoPages }).map((_, i) => {
+                        const isCurrent = repoPage === i;
+                        return (
+                          <Button
+                            key={i}
+                            type="button"
+                            variant={isCurrent ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleRepoGoToPage(i)}
+                            className={`h-8 w-8 p-0 text-xs font-mono font-medium ${
+                              isCurrent ? "bg-brand text-white border-brand hover:bg-brand/90" : "hover:bg-muted"
+                            }`}
+                          >
+                            {i + 1}
+                          </Button>
+                        );
+                      })}
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={repoPage >= totalRepoPages - 1}
+                        onClick={() => handleRepoGoToPage(repoPage + 1)}
+                        className="h-8 px-3.5 text-xs gap-1 font-semibold text-brand hover:text-brand hover:bg-brand/10 border-brand/40"
+                      >
+                        <span>Next</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="py-16 text-center space-y-3 bg-muted/20 rounded-2xl border border-dashed border-border p-8">
@@ -668,117 +780,188 @@ export function PublicRepositoryPortal() {
                 <p className="text-xs text-muted-foreground">Querying global academic indices & classifying SDGs...</p>
               </div>
             ) : globalResults.length > 0 ? (
-              <div className="space-y-3">
-                {globalResults.map((result) => {
-                  return (
-                    <Card
-                      key={result.id}
-                      className="border border-border/70 hover:border-brand/40 bg-card p-4 sm:p-5 rounded-2xl shadow-2xs transition-all space-y-3"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div className="space-y-1.5 flex-1 min-w-0">
-                          {/* Badges */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {result.geo_tier === "psu" ? (
-                              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
-                                <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                                <span>Pangasinan State University</span>
-                              </Badge>
-                            ) : result.geo_tier === "philippines" ? (
-                              <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold gap-1">
-                                <span>Philippines Research</span>
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground border-border/80 font-normal gap-1">
-                                <Globe className="w-3 h-3" />
-                                <span>International Literature</span>
-                              </Badge>
+              <div ref={globalResultsTopRef} className="space-y-6">
+                <div className="space-y-3">
+                  {globalResults.map((result) => {
+                    return (
+                      <Card
+                        key={result.id}
+                        className="border border-border/70 hover:border-brand/40 bg-card p-4 sm:p-5 rounded-2xl shadow-2xs transition-all space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            {/* Badges */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {result.geo_tier === "psu" ? (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
+                                  <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                  <span>Pangasinan State University</span>
+                                </Badge>
+                              ) : result.geo_tier === "philippines" ? (
+                                <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold gap-1">
+                                  <span>Philippines Research</span>
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground border-border/80 font-normal gap-1">
+                                  <Globe className="w-3 h-3" />
+                                  <span>International Literature</span>
+                                </Badge>
+                              )}
+
+                              {result.citations > 0 && (
+                                <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-bold font-mono">
+                                  Cited by {result.citations}
+                                </Badge>
+                              )}
+
+                              {result.year && (
+                                <span className="text-[11px] font-mono text-muted-foreground">
+                                  {result.year}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Title */}
+                            <h4 className="text-sm sm:text-base font-bold text-foreground leading-snug">
+                              {result.url ? (
+                                <a
+                                  href={result.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="hover:text-brand hover:underline inline-flex items-center gap-1.5"
+                                >
+                                  <span>{result.title}</span>
+                                  <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
+                                </a>
+                              ) : (
+                                result.title
+                              )}
+                            </h4>
+
+                            {/* Authors */}
+                            <p className="text-xs text-muted-foreground">
+                              Authors: <span className="text-foreground">{result.authors.join(", ")}</span>
+                            </p>
+
+                            {/* Journal */}
+                            <p className="text-xs text-muted-foreground font-mono">
+                              Journal: {result.journal || "Academic Source"}
+                            </p>
+
+                            {/* Abstract */}
+                            {result.abstract && (
+                              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed pt-0.5">
+                                {result.abstract}
+                              </p>
                             )}
 
-                            {result.citations > 0 && (
-                              <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-bold font-mono">
-                                Cited by {result.citations}
-                              </Badge>
-                            )}
-
-                            {result.year && (
-                              <span className="text-[11px] font-mono text-muted-foreground">
-                                {result.year}
-                              </span>
+                            {/* Auto-tagged SDG Badges */}
+                            {Array.isArray(result.sdg_tags) && result.sdg_tags.length > 0 && (
+                              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                                <span className="text-[10px] font-semibold text-muted-foreground uppercase">
+                                  SDG Track:
+                                </span>
+                                {result.sdg_tags.map((tag) => (
+                                  <Badge
+                                    key={tag}
+                                    variant="secondary"
+                                    className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
+                                    title={result.sdg_rationale || undefined}
+                                  >
+                                    <Tag className="w-2.5 h-2.5 text-brand" />
+                                    <span>{tag}</span>
+                                  </Badge>
+                                ))}
+                              </div>
                             )}
                           </div>
 
-                          {/* Title */}
-                          <h4 className="text-sm sm:text-base font-bold text-foreground leading-snug">
-                            {result.url ? (
-                              <a
-                                href={result.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="hover:text-brand hover:underline inline-flex items-center gap-1.5"
-                              >
-                                <span>{result.title}</span>
-                                <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
-                              </a>
-                            ) : (
-                              result.title
-                            )}
-                          </h4>
-
-                          {/* Authors */}
-                          <p className="text-xs text-muted-foreground">
-                            Authors: <span className="text-foreground">{result.authors.join(", ")}</span>
-                          </p>
-
-                          {/* Journal */}
-                          <p className="text-xs text-muted-foreground font-mono">
-                            Journal: {result.journal || "Academic Source"}
-                          </p>
-
-                          {/* Abstract */}
-                          {result.abstract && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed pt-0.5">
-                              {result.abstract}
-                            </p>
-                          )}
-
-                          {/* Auto-tagged SDG Badges */}
-                          {Array.isArray(result.sdg_tags) && result.sdg_tags.length > 0 && (
-                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                              <span className="text-[10px] font-semibold text-muted-foreground uppercase">
-                                SDG Track:
-                              </span>
-                              {result.sdg_tags.map((tag) => (
-                                <Badge
-                                  key={tag}
-                                  variant="secondary"
-                                  className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
-                                  title={result.sdg_rationale || undefined}
-                                >
-                                  <Tag className="w-2.5 h-2.5 text-brand" />
-                                  <span>{tag}</span>
-                                </Badge>
-                              ))}
-                            </div>
+                          {/* Citation Link */}
+                          {result.citedByLink && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => window.open(result.citedByLink, "_blank")}
+                              className="text-[11px] h-7 px-2.5 gap-1 shrink-0 self-start"
+                            >
+                              <Quote className="w-3 h-3 text-brand" />
+                              <span>{result.citations} Citations</span>
+                            </Button>
                           )}
                         </div>
+                      </Card>
+                    );
+                  })}
+                </div>
 
-                        {/* Citation Link */}
-                        {result.citedByLink && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(result.citedByLink, "_blank")}
-                            className="text-[11px] h-7 px-2.5 gap-1 shrink-0 self-start"
-                          >
-                            <Quote className="w-3 h-3 text-brand" />
-                            <span>{result.citations} Citations</span>
-                          </Button>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
+                {/* Google Scholar Style Pagination Bar */}
+                <div className="pt-4 pb-2 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="text-xs text-muted-foreground font-mono">
+                    Showing {globalPage * 10 + 1}–{globalPage * 10 + globalResults.length}
+                    {totalGlobalAvailable > 0 ? ` of ${totalGlobalAvailable} papers` : ""} (Page {globalPage + 1})
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={globalPage === 0 || isLoadingGlobalPage || isGlobalLoading}
+                      onClick={() => handleGlobalGoToPage(globalPage - 1)}
+                      className="h-8 px-3 text-xs gap-1"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>Previous</span>
+                    </Button>
+
+                    {/* Numbered page buttons (Google Scholar Style) */}
+                    {Array.from({
+                      length: Math.min(
+                        6,
+                        Math.max(globalPage + 2, Math.ceil((totalGlobalAvailable || 30) / 10))
+                      ),
+                    }).map((_, i) => {
+                      const pageIdx = i;
+                      const isCurrent = globalPage === pageIdx;
+                      return (
+                        <Button
+                          key={pageIdx}
+                          type="button"
+                          variant={isCurrent ? "default" : "outline"}
+                          size="sm"
+                          disabled={isLoadingGlobalPage || isGlobalLoading}
+                          onClick={() => handleGlobalGoToPage(pageIdx)}
+                          className={`h-8 w-8 p-0 text-xs font-mono font-medium ${
+                            isCurrent ? "bg-brand text-white border-brand hover:bg-brand/90" : "hover:bg-muted"
+                          }`}
+                        >
+                          {pageIdx + 1}
+                        </Button>
+                      );
+                    })}
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!hasGlobalMore || isLoadingGlobalPage || isGlobalLoading}
+                      onClick={() => handleGlobalGoToPage(globalPage + 1)}
+                      className="h-8 px-3.5 text-xs gap-1 font-semibold text-brand hover:text-brand hover:bg-brand/10 border-brand/40"
+                    >
+                      {isLoadingGlobalPage ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Loading...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Next</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
             ) : hasGlobalSearched ? (
               <div className="py-16 text-center space-y-3 bg-muted/20 rounded-2xl border border-dashed border-border p-8">
@@ -812,7 +995,7 @@ export function PublicRepositoryPortal() {
           Asingan Campus • Commission on Higher Education (CHED) Accredited Repository Standards • United Nations SDGs Aligned
         </p>
         <p className="text-[10px] text-muted-foreground/80">
-          Faculty, researchers, and campus administrators may sign in using the top-left portal button to access research analytics and management tools.
+          Faculty, researchers, and campus administrators may sign in using the top-right portal button to access research analytics and management tools.
         </p>
       </footer>
     </div>
