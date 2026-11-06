@@ -187,16 +187,34 @@ export function PublicRepositoryPortal() {
       {/* TOP INSTITUTIONAL NAVIGATION HEADER                  */}
       {/* ---------------------------------------------------- */}
       <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           
-          {/* TOP-LEFT LOGIN BUTTON (Per User Instruction) */}
+          {/* TOP-LEFT REPOSITORY METRICS COUNTER */}
+          <div className="flex items-center gap-3 font-mono text-[11px] bg-muted/40 border border-border/60 px-3 py-1.5 rounded-lg">
+            <span className="flex items-center gap-1.5" title="Verified Publications">
+              <BookOpen className="w-3.5 h-3.5 text-brand" />
+              <strong className="text-foreground">{repoStats.totalPublications}</strong> Researches
+            </span>
+            <span className="text-border">•</span>
+            <span className="flex items-center gap-1.5" title="Total Global Citations">
+              <Quote className="w-3.5 h-3.5 text-amber-500" />
+              <strong className="text-foreground">{repoStats.totalCitations}</strong> Citations
+            </span>
+            <span className="text-border">•</span>
+            <span className="flex items-center gap-1.5" title="Faculty Authors">
+              <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
+              <strong className="text-foreground">{repoStats.totalResearchers}</strong> Faculty
+            </span>
+          </div>
+
+          {/* TOP-RIGHT SIGN IN / DASHBOARD BUTTON */}
           <div className="flex items-center gap-3">
             {loggedIn && currentUser ? (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate("/dashboard")}
-                className="gap-2 text-xs font-semibold border-brand/40 bg-brand/5 text-brand hover:bg-brand/10 shadow-2xs"
+                className="gap-2 text-xs font-semibold border-brand/40 bg-brand/5 text-brand hover:bg-brand/10 shadow-2xs h-8"
               >
                 <LayoutDashboard className="w-3.5 h-3.5" />
                 <span>Go to Dashboard ({currentUser.name.split(" ")[0]})</span>
@@ -206,69 +224,26 @@ export function PublicRepositoryPortal() {
                 variant="default"
                 size="sm"
                 onClick={() => navigate("/login")}
-                className="gap-2 text-xs font-bold bg-brand hover:bg-brand/90 text-white shadow-2xs px-3.5"
+                className="gap-2 text-xs font-bold bg-brand hover:bg-brand/90 text-white shadow-2xs px-3.5 h-8"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Sign In / Faculty Portal</span>
+                <span>Sign In</span>
               </Button>
             )}
-          </div>
-
-          {/* CENTER BRANDING (Pangasinan State University Institutional Repository) */}
-          <div className="flex items-center gap-2.5 text-center sm:text-left">
-            <div className="w-9 h-9 rounded-xl bg-brand/10 border border-brand/30 flex items-center justify-center text-brand font-black text-sm shrink-0 shadow-2xs">
-              PSU
-            </div>
-            <div className="hidden sm:block text-left">
-              <h1 className="text-xs sm:text-sm font-bold tracking-tight text-foreground flex items-center gap-1.5">
-                <span>Pangasinan State University</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand font-semibold">
-                  Open Access
-                </span>
-              </h1>
-              <p className="text-[10px] text-muted-foreground">
-                Institutional Research Repository • Asingan Campus
-              </p>
-            </div>
-          </div>
-
-          {/* TOP-RIGHT REPOSITORY METRICS COUNTER */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <div className="hidden md:flex items-center gap-3 font-mono text-[11px] bg-muted/40 border border-border/60 px-3 py-1.5 rounded-lg">
-              <span className="flex items-center gap-1.5" title="Verified PSU Publications">
-                <BookOpen className="w-3.5 h-3.5 text-brand" />
-                <strong className="text-foreground">{repoStats.totalPublications}</strong> Researches
-              </span>
-              <span className="text-border">•</span>
-              <span className="flex items-center gap-1.5" title="Total Global Citations">
-                <Quote className="w-3.5 h-3.5 text-amber-500" />
-                <strong className="text-foreground">{repoStats.totalCitations}</strong> Citations
-              </span>
-              <span className="text-border">•</span>
-              <span className="flex items-center gap-1.5" title="Faculty Authors">
-                <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-                <strong className="text-foreground">{repoStats.totalResearchers}</strong> Faculty
-              </span>
-            </div>
           </div>
         </div>
       </header>
 
       {/* ---------------------------------------------------- */}
-      {/* HERO SECTION WITH SEARCH ENGINE SELECTOR (SALIKSIK)  */}
+      {/* HERO SECTION WITH SEARCH ENGINE SELECTOR             */}
       {/* ---------------------------------------------------- */}
-      <section className="relative py-12 md:py-16 px-4 sm:px-6 bg-gradient-to-b from-brand/5 via-background to-background border-b border-border/60">
-        <div className="max-w-4xl mx-auto text-center space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 border border-brand/20 text-brand text-xs font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Saliksik PSU Open Access Repository & Discovery Portal</span>
-          </div>
-
-          <h2 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-foreground">
+      <section className="relative py-8 md:py-12 px-4 sm:px-6 bg-gradient-to-b from-brand/5 via-background to-background border-b border-border/60">
+        <div className="max-w-4xl mx-auto text-center space-y-4">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-foreground">
             Explore Institutional Research & Academic Literature
           </h2>
 
-          <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             Search verified scholarly publications, faculty studies, and SDG impact contributions from Pangasinan State University, with access to global academic literature.
           </p>
 
@@ -506,7 +481,8 @@ export function PublicRepositoryPortal() {
                         {/* Tags and Badges */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
-                            🏛️ Pangasinan State University
+                            <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>Pangasinan State University</span>
                           </Badge>
 
                           {pub.citations > 0 && (
@@ -556,9 +532,10 @@ export function PublicRepositoryPortal() {
                               <Badge
                                 key={tag}
                                 variant="secondary"
-                                className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium"
+                                className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
                               >
-                                🎯 {tag}
+                                <Tag className="w-2.5 h-2.5 text-brand" />
+                                <span>{tag}</span>
                               </Badge>
                             ))}
                           </div>
@@ -704,15 +681,17 @@ export function PublicRepositoryPortal() {
                           <div className="flex items-center gap-2 flex-wrap">
                             {result.geo_tier === "psu" ? (
                               <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
-                                🏛️ Pangasinan State University
+                                <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>Pangasinan State University</span>
                               </Badge>
                             ) : result.geo_tier === "philippines" ? (
                               <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold gap-1">
-                                🇵🇭 Philippines Research
+                                <span>Philippines Research</span>
                               </Badge>
                             ) : (
                               <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground border-border/80 font-normal gap-1">
-                                🌐 International Literature
+                                <Globe className="w-3 h-3" />
+                                <span>International Literature</span>
                               </Badge>
                             )}
 
@@ -773,10 +752,11 @@ export function PublicRepositoryPortal() {
                                 <Badge
                                   key={tag}
                                   variant="secondary"
-                                  className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium"
+                                  className="text-[10px] bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
                                   title={result.sdg_rationale || undefined}
                                 >
-                                  🎯 {tag}
+                                  <Tag className="w-2.5 h-2.5 text-brand" />
+                                  <span>{tag}</span>
                                 </Badge>
                               ))}
                             </div>
@@ -838,3 +818,4 @@ export function PublicRepositoryPortal() {
     </div>
   );
 }
+

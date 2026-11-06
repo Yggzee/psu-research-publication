@@ -361,7 +361,7 @@ export function CoAuthorshipGraph() {
                         <span>{candidate.researcherA.name}</span>
                         <span className="text-muted-foreground font-normal">({candidate.researcherA.department})</span>
                       </div>
-                      <div className="text-muted-foreground font-bold text-center text-[10px]">✕</div>
+                      <div className="text-muted-foreground font-semibold text-center text-[10px]">&amp;</div>
                       <div className="flex items-center gap-1.5 font-semibold text-foreground">
                         <span>{candidate.researcherB.name}</span>
                         <span className="text-muted-foreground font-normal">({candidate.researcherB.department})</span>

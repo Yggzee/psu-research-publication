@@ -19,6 +19,7 @@ import {
   HelpCircle,
   FileText,
   ChevronLeft,
+  X,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -295,9 +296,10 @@ ${session.messages
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
+                aria-label="Clear search query"
                 className="absolute right-2.5 top-2 text-xs text-muted-foreground hover:text-foreground"
               >
-                ✕
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
@@ -608,7 +610,7 @@ ${session.messages
                     className="p-2.5 rounded-xl border border-border/60 bg-card hover:bg-muted/40 hover:border-emerald-500/40 text-left text-xs transition-colors flex items-center justify-between group"
                   >
                     <span className="text-foreground group-hover:text-emerald-600">
-                      📊 How many research publications and faculty profiles are tracked?
+                      How many research publications and faculty profiles are tracked?
                     </span>
                     <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-emerald-600 shrink-0" />
                   </button>
@@ -618,7 +620,7 @@ ${session.messages
                     className="p-2.5 rounded-xl border border-border/60 bg-card hover:bg-muted/40 hover:border-emerald-500/40 text-left text-xs transition-colors flex items-center justify-between group"
                   >
                     <span className="text-foreground group-hover:text-emerald-600">
-                      🛡️ How does the system prevent duplicate research papers?
+                      How does the system prevent duplicate research papers?
                     </span>
                     <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-emerald-600 shrink-0" />
                   </button>
@@ -628,7 +630,7 @@ ${session.messages
                     className="p-2.5 rounded-xl border border-border/60 bg-card hover:bg-muted/40 hover:border-emerald-500/40 text-left text-xs transition-colors flex items-center justify-between group"
                   >
                     <span className="text-foreground group-hover:text-emerald-600">
-                      🎯 What are our campus research clusters and how do they address UN SDG 4?
+                      What are our campus research clusters and how do they address UN SDG 4?
                     </span>
                     <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-emerald-600 shrink-0" />
                   </button>

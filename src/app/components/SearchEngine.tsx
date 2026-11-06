@@ -273,13 +273,11 @@ export function SearchEngine() {
 
       if (response.usedToken) {
         toast.info(
-          `✓ Loaded ${uniqueNewResults.length} more papers via Apify Scraper Token (${response.sourceLabel}).`,
-          { icon: "🛡️" }
+          `Loaded ${uniqueNewResults.length} more papers via Apify Scraper Token (${response.sourceLabel}).`
         );
       } else {
         toast.success(
-          `✓ Loaded ${uniqueNewResults.length} more papers directly from academic index (0 scraper tokens used, $0.00).`,
-          { icon: "⚡" }
+          `Loaded ${uniqueNewResults.length} more papers directly from academic index (0 scraper tokens used, $0.00).`
         );
       }
 
@@ -346,7 +344,7 @@ export function SearchEngine() {
       if (res?.isDuplicate) {
         toast.info(res.message || `Publication already exists in repository.`);
       } else {
-        toast.success(`✓ "${result.title}" assigned to ${assignedRes.name} and saved to repository!`);
+        toast.success(`"${result.title}" assigned to ${assignedRes.name} and saved to repository!`);
       }
       await loadSavedPublications();
       window.dispatchEvent(new CustomEvent("research-records-updated"));
@@ -403,7 +401,7 @@ export function SearchEngine() {
         toast.info(res.message || `Publication already exists in repository.`);
       } else {
         toast.success(
-          `✓ Claim submitted! "${result.title}" assigned to ${currentUser.name} and awaiting approval from Sir Rodelio M. Garin.`
+          `Claim submitted! "${result.title}" assigned to ${currentUser.name} and awaiting approval from Sir Rodelio M. Garin.`
         );
       }
       setClaimedIds((ids) => [...ids, result.id]);
@@ -468,9 +466,10 @@ export function SearchEngine() {
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
+                  aria-label="Clear search query"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  ✕
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
@@ -623,15 +622,17 @@ export function SearchEngine() {
                         {/* 3-Tier Geo Badge */}
                         {result.geo_tier === "psu" || isPSU ? (
                           <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
-                            🏛️ Pangasinan State University
+                            <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>Pangasinan State University</span>
                           </Badge>
                         ) : result.geo_tier === "philippines" ? (
                           <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold gap-1">
-                            🇵🇭 Philippines Research
+                            <span>Philippines Research</span>
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground border-border/80 font-normal gap-1">
-                            🌐 International Literature
+                            <Globe className="w-3 h-3" />
+                            <span>International Literature</span>
                           </Badge>
                         )}
 
@@ -663,10 +664,11 @@ export function SearchEngine() {
                             <Badge
                               key={tag}
                               variant="secondary"
-                              className="text-[10px] h-5 px-2 bg-brand/10 text-brand border border-brand/20 font-medium"
+                              className="text-[10px] h-5 px-2 bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
                               title={result.sdg_rationale || undefined}
                             >
-                              🎯 {tag}
+                              <Tag className="w-2.5 h-2.5 text-brand" />
+                              <span>{tag}</span>
                             </Badge>
                           ))}
                         </div>
@@ -856,7 +858,7 @@ export function SearchEngine() {
 
           {!hasMore && searchResults.length > 0 && (
             <p className="text-center text-xs text-muted-foreground py-3">
-              ✓ All available results for this search have been loaded ({searchResults.length} papers total).
+              All available results for this search have been loaded ({searchResults.length} papers total).
             </p>
           )}
         </div>

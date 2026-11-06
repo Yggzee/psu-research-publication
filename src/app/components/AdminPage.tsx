@@ -173,8 +173,8 @@ export function AdminPage() {
       });
       toast.success(
         newVal
-          ? "✓ Public access to Live Academic Scraper is now ENABLED."
-          : "✓ Public access to Live Academic Scraper is now DISABLED (Institutional Repository only)."
+          ? "Public access to Live Academic Scraper is now ENABLED."
+          : "Public access to Live Academic Scraper is now DISABLED (Institutional Repository only)."
       );
       loadScraperSettings();
     } catch (err: any) {
@@ -190,7 +190,7 @@ export function AdminPage() {
     toast.loading("Running AI UN SDG classifier on campus publications...", { id: "sdg-batch" });
     try {
       const res = await apiService.batchClassifySDG();
-      toast.success(`✓ Successfully auto-tagged ${res.processed} campus publications into UN SDGs!`, { id: "sdg-batch" });
+      toast.success(`Successfully auto-tagged ${res.processed} campus publications into UN SDGs!`, { id: "sdg-batch" });
       await loadData();
     } catch (err: any) {
       toast.error(`Auto-classification error: ${err.message}`, { id: "sdg-batch" });

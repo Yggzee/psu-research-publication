@@ -82,7 +82,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <CommandEmpty>No results found.</CommandEmpty>
 
         {/* AI & Institutional Quick Actions */}
-        <CommandGroup heading="⚡ AI & Research Tools">
+        <CommandGroup heading="AI & Research Tools">
           <CommandItem
             onSelect={() =>
               handleSelect(() => {
@@ -122,7 +122,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <CommandSeparator />
 
         {/* Navigation */}
-        <CommandGroup heading="📍 Navigation">
+        <CommandGroup heading="Navigation">
           {isAdmin && (
             <CommandItem onSelect={() => handleSelect(() => navigate("/dashboard"))}>
               <LayoutDashboard className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -167,7 +167,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         {researchers.length > 0 && (
           <>
             <CommandSeparator />
-            <CommandGroup heading="👤 Faculty Profiles">
+            <CommandGroup heading="Faculty Profiles">
               {researchers.map((r) => (
                 <CommandItem
                   key={r.id}
@@ -185,7 +185,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <CommandSeparator />
 
         {/* Preferences */}
-        <CommandGroup heading="⚙️ Preferences & Account">
+        <CommandGroup heading="Preferences & Account">
           <CommandItem
             onSelect={() => handleSelect(() => setTheme(theme === "dark" ? "light" : "dark"))}
           >

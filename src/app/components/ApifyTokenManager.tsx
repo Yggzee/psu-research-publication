@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   RefreshCw,
   Zap,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -197,9 +198,10 @@ export function ApifyTokenManager({ onTokenChanged, compact = false }: ApifyToke
               <p className="leading-snug">{statusMessage.text}</p>
               <button
                 onClick={() => setStatusMessage(null)}
+                aria-label="Dismiss status message"
                 className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-xs font-semibold"
               >
-                ✕
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           )}

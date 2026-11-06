@@ -330,7 +330,7 @@ export function FloatingAskAIBubble() {
               className="text-muted-foreground hover:text-foreground text-[11px] p-1 rounded-full"
               title="Dismiss prompt"
             >
-              ✕
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
@@ -725,19 +725,19 @@ export function FloatingAskAIBubble() {
                     onClick={() => handleSendMessage("How many research publications and faculty profiles are currently tracked in our system?")}
                     className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
                   >
-                    📊 Status
+                    System Status
                   </button>
                   <button
                     onClick={() => handleSendMessage("How does the system prevent saving duplicate research papers from Google Scholar?")}
                     className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
                   >
-                    🛡️ Deduplication
+                    Deduplication
                   </button>
                   <button
                     onClick={() => handleSendMessage("What does the study on predicting college students' academic performance using machine learning talk about?")}
                     className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
                   >
-                    🤖 ML Paper
+                    ML Paper
                   </button>
                   <button
                     onClick={() => handleSendMessage("What are the key clinical findings and purpose of the paper on operative management of acetabular fractures?")}

@@ -22,6 +22,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -488,7 +489,7 @@ export function PublicationsPage() {
                 title="Clear instructor filter"
                 className="hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-[10px]"
               >
-                ✕
+                <X className="w-2.5 h-2.5" />
               </button>
             </span>
           )}

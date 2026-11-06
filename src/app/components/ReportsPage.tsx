@@ -613,8 +613,8 @@ export function ReportsPage() {
                             )}
                           </td>
                           <td className="py-3 px-4 font-semibold text-foreground">{r.name}</td>
-                          <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
-                            📁 {r.department || "Faculty"}/
+                          <td className="py-3 px-4 text-muted-foreground text-xs">
+                            {r.department || "Faculty"}
                           </td>
                           <td className="py-3 px-4 text-center font-mono font-medium">{pubs}</td>
                           <td className="py-3 px-4 text-center font-mono font-medium">{cites}</td>

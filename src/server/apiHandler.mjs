@@ -309,36 +309,49 @@ async function syncSinglePublicationCitations(pubId, maxLimit = 10000, force = f
     const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
     // Merge existing citing papers with newly fetched citing papers to ensure no citing papers are lost
-    const mergedList = [];
-    const seenTitles = new Set();
+    const mergedMap = new Map();
     const parentNorm = norm(p.title);
 
-    for (const fc of fetchedCiting) {
-      if (mergedList.length >= totalTarget) break;
-      const k = norm(fc.title);
-      if (!k || k.length < 8 || seenTitles.has(k)) continue;
-      if (parentNorm && (k === parentNorm || k.includes(parentNorm) || parentNorm.includes(k))) continue;
-      seenTitles.add(k);
-      mergedList.push(fc);
-    }
+    const mergeEntry = (entry) => {
+      const k = norm(entry.title);
+      if (!k || k.length < 8) return;
+      if (parentNorm && (k === parentNorm || k.includes(parentNorm) || parentNorm.includes(k))) return;
 
-    for (const er of existingRows) {
-      if (mergedList.length >= totalTarget) break;
-      const k = norm(er.title);
-      if (!k || k.length < 8 || seenTitles.has(k)) continue;
-      if (parentNorm && (k === parentNorm || k.includes(parentNorm) || parentNorm.includes(k))) continue;
-      seenTitles.add(k);
-      mergedList.push({
-        title: er.title,
-        authors: er.authors,
-        year: er.year,
-        link: er.link,
-        journal: er.journal,
-        volume_issue: er.volume_issue,
-        quarter: er.quarter,
-        doi_issn: er.doi_issn,
-      });
-    }
+      const existing = mergedMap.get(k);
+      if (!existing) {
+        mergedMap.set(k, {
+          title: entry.title,
+          authors: entry.authors,
+          year: entry.year || null,
+          link: entry.link || '',
+          journal: entry.journal || 'Academic Journal',
+          volume_issue: entry.volume_issue || '',
+          quarter: entry.quarter || 'First',
+          doi_issn: entry.doi_issn || '',
+        });
+      } else {
+        // Upgrade metadata if candidate has better information
+        const existingAuthors = Array.isArray(existing.authors) ? existing.authors.join(', ') : String(existing.authors || '');
+        const entryAuthors = Array.isArray(entry.authors) ? entry.authors.join(', ') : String(entry.authors || '');
+        if ((!existingAuthors || existingAuthors === 'Academic Authors' || existingAuthors.includes('…')) && entryAuthors && entryAuthors !== 'Academic Authors') {
+          existing.authors = entry.authors;
+        }
+        if (!existing.year && entry.year) existing.year = entry.year;
+        if (!existing.volume_issue && entry.volume_issue) existing.volume_issue = entry.volume_issue;
+        if ((!existing.journal || existing.journal === 'Academic Journal' || existing.journal.includes('(ACS)')) && entry.journal && entry.journal !== 'Academic Journal') {
+          existing.journal = entry.journal;
+        }
+        if ((!existing.doi_issn || /\.s\d+$/i.test(existing.doi_issn)) && entry.doi_issn && !/\.s\d+$/i.test(entry.doi_issn)) {
+          existing.doi_issn = entry.doi_issn;
+          existing.link = entry.link || existing.link;
+        }
+      }
+    };
+
+    for (const er of existingRows) mergeEntry(er);
+    for (const fc of fetchedCiting) mergeEntry(fc);
+
+    const mergedList = Array.from(mergedMap.values());
 
     if (mergedList.length > existingCount || (force && mergedList.length > 0)) {
       const toInsert = mergedList.slice(0, totalTarget);
@@ -1103,13 +1116,16 @@ export async function handleApiRequest(req, res) {
       let filtered = allApproved;
       if (q) {
         const qLower = q.toLowerCase();
+        const stemWord = (w) => (w.length > 4 ? w.replace(/(ing|ers?|ed|s)$/i, '') : w);
+        const qStem = stemWord(qLower);
         const qWords = qLower.split(/\s+/).filter((w) => w.length > 1);
+        const qWordStems = qWords.map(stemWord);
 
         filtered = allApproved
           .filter((p) => {
             const haystack = `${p.title || ''} ${p.authors || ''} ${p.owner_name || ''} ${p.journal || ''} ${p.abstract || ''} ${p.keywords || ''} ${p.sdg_tags || ''}`.toLowerCase();
-            if (haystack.includes(qLower)) return true;
-            return qWords.length > 0 && qWords.some((w) => haystack.includes(w));
+            if (haystack.includes(qLower) || haystack.includes(qStem)) return true;
+            return qWords.length > 0 && (qWords.some((w) => haystack.includes(w)) || qWordStems.some((s) => haystack.includes(s)));
           })
           .map((p) => {
             let score = 0;
@@ -1117,10 +1133,14 @@ export async function handleApiRequest(req, res) {
             const aLower = String(p.authors || '').toLowerCase();
             const absLower = String(p.abstract || '').toLowerCase();
             if (tLower.includes(qLower)) score += 100;
+            else if (tLower.includes(qStem)) score += 70;
             if (aLower.includes(qLower)) score += 80;
             if (absLower.includes(qLower)) score += 40;
-            for (const w of qWords) {
-              if (tLower.includes(w)) score += 15;
+            for (let i = 0; i < qWords.length; i++) {
+              const w = qWords[i];
+              const s = qWordStems[i];
+              if (tLower.includes(w)) score += 20;
+              else if (tLower.includes(s)) score += 15;
               if (aLower.includes(w)) score += 10;
               if (absLower.includes(w)) score += 5;
             }
@@ -1809,8 +1829,8 @@ export async function handleApiRequest(req, res) {
       // Admins see all; Instructors see public approved + their own drafts; Guests see public approved only
       const rows = filterPublicationsForCaller(allRows, caller);
 
-      // Batch-fetch all citing papers (ordered by latest year first, complete records first)
-      const allCiting = db.prepare("SELECT id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all();
+      // Batch-fetch all citing papers
+      const allCiting = db.prepare('SELECT id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers').all();
       const citingByPubId = {};
       for (const cp of allCiting) {
         if (!citingByPubId[cp.publication_id]) {
@@ -1919,7 +1939,7 @@ export async function handleApiRequest(req, res) {
       }
 
       const trends = db.prepare('SELECT year, citations, id FROM citation_trends WHERE publication_id = ? OR publication_id = ? ORDER BY year ASC').all(id, rawId);
-      let citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
+      let citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
 
       // Enrich parent publication metadata if missing keywords, ISSN/DOI, volume/issue, or full co-authors
       if (!isScraped && (!p.keywords || !p.issn_isbn || !p.volume_issue || String(p.authors || '').includes('…'))) {
@@ -1965,7 +1985,7 @@ export async function handleApiRequest(req, res) {
           if (isForceRefresh || citing.length === 0 || totalPaperCitations <= 600) {
             // Synchronously ensure complete citations for fast and accurate UI rendering
             await syncSinglePublicationCitations(id, totalPaperCitations, isForceRefresh);
-            citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
+            citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
           } else {
             // For papers with over 600 citations, enqueue background backfill
             enqueuePublicationCitationSync([id]);
@@ -1975,8 +1995,20 @@ export async function handleApiRequest(req, res) {
         }
       }
 
-      // If existing citing papers lack journal or full authors, enrich a batch with CrossRef and persist
-      const needsCitingEnrich = citing.filter((c) => !c.year || !c.journal || c.authors === 'Academic Authors' || String(c.authors || '').includes('Academic Authors') || String(c.authors || '').includes('…') || c.journal === 'American Chemical Society (ACS)').slice(0, 15);
+      // If existing citing papers lack journal, year, volume/issue, or full authors, enrich a batch with CrossRef + OpenAlex and persist
+      const needsCitingEnrich = citing.filter((c) =>
+        !c.year ||
+        c.year < 1990 ||
+        !c.volume_issue ||
+        !c.journal ||
+        c.journal === 'Academic Journal' ||
+        c.journal === 'Academic Publication' ||
+        c.journal.includes('(ACS)') ||
+        !c.authors ||
+        c.authors === 'Academic Authors' ||
+        String(c.authors || '').includes('…') ||
+        /\.s\d+$/i.test(c.doi_issn || '')
+      ).slice(0, 20);
       if (needsCitingEnrich.length > 0) {
         try {
           await enrichBatchWithCrossRef(needsCitingEnrich, 5);
@@ -1987,10 +2019,10 @@ export async function handleApiRequest(req, res) {
           `);
           for (const c of needsCitingEnrich) {
             if (!c.id) continue;
-            const cAuthors = Array.isArray(c.authors) ? c.authors.join(', ') : (c.authors || '');
+            const cAuthors = Array.isArray(c.authors) ? c.authors.join(', ') : (c.authors || 'Academic Authors');
             updCiteStmt.run(
               cAuthors,
-              c.journal || '',
+              c.journal || 'Academic Journal',
               c.volume_issue || '',
               c.year || null,
               c.quarter || 'First',
@@ -1999,7 +2031,7 @@ export async function handleApiRequest(req, res) {
               c.id
             );
           }
-          citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
+          citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
         } catch (cErr) {
           console.warn('[EnrichCitingPapers] Error enriching citing papers:', cErr.message);
         }
@@ -2016,7 +2048,7 @@ export async function handleApiRequest(req, res) {
         .sort((a, b) => a.year - b.year);
 
       // Refresh citing array after year inference updates
-      citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
+      citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
 
       const jc3 = p.jc3_points !== null && p.jc3_points !== undefined
         ? Number(p.jc3_points)
@@ -2941,12 +2973,23 @@ export async function handleApiRequest(req, res) {
         }
       };
 
-      // STEP 1: Live Fetch directly from Google Scholar /scholar?q= (Free, built-in, 0 token credits)
+      // STEP 1: Multi-Stream Targeted Search (PSU, Philippines, and General)
       let liveResults = [];
       let captchaBlocked = false;
       try {
-        liveResults = await scrapeGoogleScholarDirect(cleanQuery, page, limit);
-        captchaBlocked = Boolean(liveResults.captchaBlocked);
+        const queryPromises = [
+          scrapeGoogleScholarDirect(cleanQuery, page, limit).catch(() => []),
+        ];
+        // On page 0, actively probe for PSU-specific and Philippines-specific papers
+        if (page === 0) {
+          queryPromises.push(
+            scrapeGoogleScholarDirect(`${cleanQuery} "Pangasinan State University"`, 0, 5).catch(() => []),
+            scrapeGoogleScholarDirect(`${cleanQuery} Philippines`, 0, 8).catch(() => [])
+          );
+        }
+        const liveArrays = await Promise.all(queryPromises);
+        liveResults = liveArrays.flat();
+        captchaBlocked = Boolean(liveArrays[0]?.captchaBlocked);
       } catch (err) {
         console.warn('[ScholarSearch] Direct search error:', err.message);
       }
@@ -2974,24 +3017,9 @@ export async function handleApiRequest(req, res) {
         } catch (dbErr) {
           console.warn('[ScholarSearch] DB save error:', dbErr.message);
         }
-
-        // If direct search returned a full page of 10, return immediately with hasMore: true
-        if (liveResults.length >= limit) {
-          return sendJson(200, await attachTokenUsage({
-            results: liveResults.slice(0, limit),
-            fromCache: false,
-            searchSource: 'direct',
-            sourceLabel: 'Direct Google Scholar (Free)',
-            usedToken: false,
-            page,
-            hasMore: true,
-            count: Math.min(limit, liveResults.length),
-            message: `Retrieved ${Math.min(limit, liveResults.length)} papers directly from Google Scholar (0 scraper tokens used)`,
-          }));
-        }
       }
 
-      // Add any partial direct results into the pool
+      // Add all live results into the ranking pool
       for (const item of liveResults) {
         addCandidateToPool(item);
       }
@@ -3099,10 +3127,20 @@ export async function handleApiRequest(req, res) {
         console.warn('[ScholarSearch] Cache lookup warning:', cacheErr.message);
       }
 
-      // STEP 4: Supplement with OpenAlex & CrossRef so we have a rich multi-page pool even if Google Scholar /scholar?q= hit 429
+      // STEP 4: Supplement with OpenAlex & CrossRef across PSU, Philippines, and General academic literature
       let openAlexCrossRefCount = 0;
       try {
-        const hybridItems = await searchOpenAlexAndCrossRef(cleanQuery, page, limit);
+        const hybridQueries = [
+          searchOpenAlexAndCrossRef(cleanQuery, page, limit).catch(() => []),
+        ];
+        if (page === 0) {
+          hybridQueries.push(
+            searchOpenAlexAndCrossRef(`${cleanQuery} Pangasinan State University`, 0, 8).catch(() => []),
+            searchOpenAlexAndCrossRef(`${cleanQuery} Philippines`, 0, 15).catch(() => [])
+          );
+        }
+        const hybridArrays = await Promise.all(hybridQueries);
+        const hybridItems = hybridArrays.flat();
         openAlexCrossRefCount = hybridItems.length;
         if (hybridItems.length > 0) {
           const now = new Date().toISOString();
@@ -3278,10 +3316,10 @@ export async function handleApiRequest(req, res) {
         .filter((n) => n.length >= 4);
 
       const isPsuItem = (item) => {
-        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''}`.toLowerCase();
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.url || ''}`.toLowerCase();
         if (
           text.includes('pangasinan state university') ||
-          /\bpsu\b/i.test(text) ||
+          text.includes('pangasinan') ||
           text.includes('asingan') ||
           text.includes('lingayen') ||
           text.includes('urdaneta') ||
@@ -3291,7 +3329,15 @@ export async function handleApiRequest(req, res) {
           text.includes('infanta') ||
           text.includes('sta. maria') ||
           text.includes('santa maria') ||
-          text.includes('alaminos')
+          text.includes('alaminos') ||
+          text.includes('sta. barbara') ||
+          text.includes('santa barbara') ||
+          text.includes('sual') ||
+          text.includes('bolinao') ||
+          text.includes('tayug') ||
+          text.includes('dagupan') ||
+          text.includes('calasiao') ||
+          (/\bpsu\b/i.test(text) && (text.includes('university') || text.includes('philippine') || text.includes('campus') || text.includes('dr.') || text.includes('prof.')))
         ) {
           return true;
         }
@@ -3308,7 +3354,7 @@ export async function handleApiRequest(req, res) {
 
       const isPhItem = (item) => {
         if (isPsuItem(item)) return false;
-        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''}`.toLowerCase();
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.url || ''}`.toLowerCase();
         return (
           text.includes('philippine') ||
           text.includes('philippines') ||
@@ -3317,75 +3363,111 @@ export async function handleApiRequest(req, res) {
           text.includes('luzon') ||
           text.includes('visayas') ||
           text.includes('mindanao') ||
+          text.includes('batangas') ||
+          text.includes('nueva ecija') ||
+          text.includes('ilocos') ||
+          text.includes('cagayan') ||
+          text.includes('benguet') ||
+          text.includes('baguio') ||
+          text.includes('tarlac') ||
+          text.includes('pampanga') ||
+          text.includes('bulacan') ||
+          text.includes('laguna') ||
+          text.includes('cavite') ||
+          text.includes('quezon') ||
+          text.includes('bicol') ||
+          text.includes('cebu') ||
+          text.includes('bohol') ||
+          text.includes('iloilo') ||
+          text.includes('leyte') ||
+          text.includes('davao') ||
+          text.includes('zamboanga') ||
+          text.includes('bukidnon') ||
+          text.includes('tawi-tawi') ||
+          text.includes('surigao') ||
+          text.includes('catanduanes') ||
+          text.includes('palawan') ||
+          text.includes('bataan') ||
+          text.includes('zambales') ||
+          text.includes('la union') ||
+          text.includes('abra') ||
+          text.includes('isabela') ||
           text.includes('university of the philippines') ||
           text.includes('up diliman') ||
           text.includes('up los baños') ||
+          text.includes('uplb') ||
+          text.includes('up manila') ||
           text.includes('de la salle') ||
+          text.includes('dlsu') ||
           text.includes('ateneo') ||
+          text.includes('admu') ||
           text.includes('university of santo tomas') ||
           /\bust\b/i.test(text) ||
           /\bched\b/i.test(text) ||
           /\bdost\b/i.test(text) ||
           /\bdeped\b/i.test(text) ||
+          /\bclsu\b/i.test(text) ||
+          /\bmmsu\b/i.test(text) ||
+          /\bbsu\b/i.test(text) ||
+          /\bvsu\b/i.test(text) ||
+          /\bda-bar\b/i.test(text) ||
+          /\bphilrice\b/i.test(text) ||
+          /\bpcaarrd\b/i.test(text) ||
+          /\bseafdec\b/i.test(text) ||
+          text.includes('.edu.ph') ||
+          text.includes('.gov.ph') ||
+          text.includes('.ph/') ||
           text.includes('state university') ||
           text.includes('state college')
         );
       };
 
+      const stemWord = (w) => (w.length > 4 ? w.replace(/(ing|ers?|ed|s)$/i, '') : w);
+      const bareStem = stemWord(bareLower);
+
       const computeRelevance = (item) => {
         let score = 0;
         const tLower = String(item.title || '').toLowerCase();
         const aLower = (Array.isArray(item.authors) ? item.authors.join(' ') : String(item.authors || '')).toLowerCase();
+        const absLower = String(item.abstract || '').toLowerCase();
         const jLower = String(item.journal || '').toLowerCase();
 
-        // 3-TIER HIERARCHY:
-        // Tier 1: PSU Related Papers (+100,000)
-        // Tier 2: Philippines Related Papers (+10,000)
-        // Tier 3: Foreign Papers (+0)
-        if (isPsuItem(item)) {
-          score += 100000;
-        } else if (isPhItem(item)) {
-          score += 10000;
-        }
+        const isPsu = isPsuItem(item);
+        const isPh = isPhItem(item);
 
-        // Exact query match in title
-        if (tLower.includes(bareLower)) {
+        const titleMatches = tLower.includes(bareLower) || tLower.includes(bareStem);
+        const bodyMatches = absLower.includes(bareLower) || absLower.includes(bareStem) || jLower.includes(bareLower);
+        const authorMatches = aLower.includes(bareLower);
+
+        if (titleMatches) {
           score += 200;
           if (tLower === bareLower || tLower.startsWith(bareLower)) score += 100;
+        } else if (bodyMatches) {
+          score += 100;
         }
 
-        // Exact query match in authors
-        if (aLower.includes(bareLower)) {
-          score += 150;
-        }
-
-        // Exact query match in journal / institution
-        if (jLower.includes(bareLower)) {
-          score += 50;
-        }
+        if (authorMatches) score += 150;
 
         // Token hits in title
-        let titleWordHits = 0;
         for (const w of queryWords) {
-          if (tLower.includes(w)) titleWordHits++;
+          const sw = stemWord(w);
+          if (tLower.includes(w) || tLower.includes(sw)) score += 30;
+          if (absLower.includes(w) || absLower.includes(sw)) score += 10;
         }
-        score += titleWordHits * 25;
 
-        // Token hits in authors
-        let authorWordHits = 0;
-        for (const w of queryWords) {
-          if (aLower.includes(w)) authorWordHits++;
-        }
-        score += authorWordHits * 20;
-
-        // Token hits in journal
-        for (const w of queryWords) {
-          if (jLower.includes(w)) score += 10;
+        // 3-TIER HIERARCHY:
+        // Tier 1: PSU Related Papers (+100,000 if topic matches, +5,000 baseline)
+        // Tier 2: Philippines Related Papers (+10,000 if topic matches, +1,000 baseline)
+        // Tier 3: Foreign Papers (+0)
+        if (isPsu) {
+          score += (titleMatches || bodyMatches || authorMatches) ? 100000 : 5000;
+        } else if (isPh) {
+          score += (titleMatches || bodyMatches || authorMatches) ? 10000 : 1000;
         }
 
         // Citation impact logarithmic score
         const cits = Number(item.citations) || 0;
-        score += Math.min(60, Math.log10(cits + 1) * 15);
+        score += Math.min(50, Math.log10(cits + 1) * 15);
 
         // Recent papers slightly boosted
         const yr = Number(item.year) || 0;
