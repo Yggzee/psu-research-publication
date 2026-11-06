@@ -3084,55 +3084,224 @@ export async function handleApiRequest(req, res) {
         }
       };
 
-      // STEP 1: Multi-Stream Targeted Search (PSU, Philippines, and General)
+      // -----------------------------------------------------------------------
+      // STEP 1: GOOGLE SCHOLAR SEARCH ENGINE (Primary Source via Apify / Direct)
+      // -----------------------------------------------------------------------
       let liveResults = [];
       let captchaBlocked = false;
-      try {
-        const queryPromises = [
-          scrapeGoogleScholarDirect(cleanQuery, page, limit).catch(() => []),
-        ];
-        // On page 0, actively probe for PSU-specific and Philippines-specific papers
-        if (page === 0) {
-          queryPromises.push(
-            scrapeGoogleScholarDirect(`${cleanQuery} "Pangasinan State University"`, 0, 5).catch(() => []),
-            scrapeGoogleScholarDirect(`${cleanQuery} Philippines`, 0, 8).catch(() => [])
-          );
-        }
-        const liveArrays = await Promise.all(queryPromises);
-        liveResults = liveArrays.flat();
-        captchaBlocked = Boolean(liveArrays[0]?.captchaBlocked);
-      } catch (err) {
-        console.warn('[ScholarSearch] Direct search error:', err.message);
+      let usedApifyToken = false;
+      let usedTokenName = '';
+      let apifyRawCount = 0;
+
+      // Check for active Apify Google Scholar tokens first (reliable with proxies)
+      const tokenRows = db.prepare(`
+        SELECT * FROM apify_tokens WHERE is_active = 1 ORDER BY created_at DESC
+      `).all();
+
+      const candidateTokens = tokenRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        token: r.token,
+        actorId: (r.actor_id || 'johnvc~google-scholar-api').replace('/', '~'),
+      }));
+
+      if (candidateTokens.length === 0 && (process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN)) {
+        candidateTokens.push({
+          id: 'env',
+          name: 'Environment Token',
+          token: process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN,
+          actorId: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-api').replace('/', '~'),
+        });
       }
 
-      if (liveResults.length > 0) {
-        try {
-          const now = new Date().toISOString();
-          runInTransaction(() => {
-            for (const item of liveResults) {
-              insertScraped.run(
-                item.id,
-                item.title,
-                JSON.stringify(item.authors),
-                item.journal,
-                item.year,
-                item.citations,
-                item.abstract,
-                item.url,
-                item.citedByLink,
-                cleanQuery,
-                now
+      const parseApifyItem = (raw) => {
+        if (!raw || raw.error) return null;
+        const title = (raw.paper_title || raw.title || raw.name || '').trim();
+        if (!title) return null;
+
+        let authors = [];
+        if (Array.isArray(raw.publication_info?.authors)) {
+          authors = raw.publication_info.authors
+            .map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim()))
+            .filter(Boolean);
+        } else if (Array.isArray(raw.authors)) {
+          authors = raw.authors
+            .map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim()))
+            .filter(Boolean);
+        } else if (typeof raw.authors === 'string') {
+          authors = raw.authors.split(',').map((a) => a.trim()).filter(Boolean);
+        }
+        if (authors.length === 0 && raw.publication_info?.summary) {
+          const authorPart = raw.publication_info.summary.split('-')[0];
+          if (authorPart && authorPart.trim()) authors = [authorPart.trim()];
+        }
+        if (authors.length === 0) authors = [bareQuery];
+
+        let journal = (raw.source || raw.journal || '').trim();
+        if (!journal && raw.publication_info?.summary) {
+          journal = raw.publication_info.summary.trim();
+        }
+        if (!journal) journal = 'Academic Publication';
+
+        let year = parseInt(raw.year || raw.publicationYear, 10);
+        if (!year && raw.publication_info?.summary) {
+          const ym = raw.publication_info.summary.match(/\b(19\d{2}|20\d{2})\b/);
+          if (ym) year = parseInt(ym[1], 10);
+        }
+        if (!year) year = new Date().getFullYear();
+
+        const citations =
+          parseInt(raw.inline_links?.cited_by_total ?? raw.citations ?? raw.citationCount ?? 0, 10) || 0;
+        const abstract = raw.snippet || raw.abstract || raw.description || '';
+        const paperUrl = raw.link || raw.url || raw.resources?.[0]?.link || '';
+        const pdfUrl = Array.isArray(raw.resources)
+          ? raw.resources.find((r) => r.link && (r.file_format === 'PDF' || String(r.link).toLowerCase().endsWith('.pdf')))?.link || null
+          : null;
+        const id = raw.result_id || raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const citedByLink = raw.inline_links?.cited_by?.link || raw.inline_links?.cited_by_link || '';
+
+        return {
+          id,
+          title,
+          authors,
+          journal,
+          year,
+          citations,
+          abstract,
+          url: paperUrl,
+          pdfUrl,
+          citedByLink,
+          fromCache: false,
+        };
+      };
+
+      if (candidateTokens.length > 0) {
+        for (const cand of candidateTokens) {
+          try {
+            const targetActor = cand.actorId.includes('lite')
+              ? 'johnvc~google-scholar-lite-api'
+              : cand.actorId;
+            const actorUrlSegment = targetActor.replace('/', '~');
+            const isLite = targetActor.includes('lite');
+
+            const apifyFetch = async (q, max) => {
+              const bodyPayload = isLite
+                ? { searchTerms: [q], maxResults: max }
+                : { q, maxResults: max, max_pages: 1, start_page: page + 1 };
+              const r = await fetch(
+                `https://api.apify.com/v2/acts/${actorUrlSegment}/run-sync-get-dataset-items?token=${cand.token}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(bodyPayload),
+                }
               );
+              if (!r.ok) return [];
+              const j = await r.json();
+              return Array.isArray(j) ? j : [];
+            };
+
+            let rawBatches = [];
+            if (page === 0) {
+              // Concurrently search Google Scholar for PSU campus papers AND general nationwide/global papers
+              rawBatches = await Promise.all([
+                apifyFetch(`${cleanQuery} "Pangasinan State University"`, 8),
+                apifyFetch(cleanQuery, 10),
+              ]);
+            } else {
+              rawBatches = [await apifyFetch(cleanQuery, limit)];
             }
-          });
-        } catch (dbErr) {
-          console.warn('[ScholarSearch] DB save error:', dbErr.message);
+
+            const rawItems = rawBatches.flat();
+            if (rawItems.length > 0) {
+              usedApifyToken = true;
+              usedTokenName = cand.name;
+              apifyRawCount = rawItems.length;
+
+              if (cand.id && cand.id !== 'env') {
+                try {
+                  db.prepare('UPDATE apify_tokens SET search_count = COALESCE(search_count, 0) + 1 WHERE id = ?').run(cand.id);
+                } catch {}
+              }
+
+              const now = new Date().toISOString();
+              runInTransaction(() => {
+                for (const raw of rawItems) {
+                  const item = parseApifyItem(raw);
+                  if (!item) continue;
+
+                  insertScraped.run(
+                    item.id,
+                    item.title,
+                    JSON.stringify(item.authors),
+                    item.journal,
+                    item.year,
+                    item.citations,
+                    item.abstract,
+                    item.url,
+                    item.citedByLink,
+                    cleanQuery,
+                    now
+                  );
+
+                  addCandidateToPool(item);
+                }
+              });
+              break;
+            }
+          } catch (apifyErr) {
+            console.warn('[ScholarSearch] Apify Google Scholar query error:', apifyErr.message);
+          }
         }
       }
 
-      // Add all live results into the ranking pool
-      for (const item of liveResults) {
-        addCandidateToPool(item);
+      // If Apify is not available or returned no items, attempt Direct Google Scholar scraping
+      if (!usedApifyToken) {
+        try {
+          const queryPromises = [
+            scrapeGoogleScholarDirect(cleanQuery, page, limit).catch(() => []),
+          ];
+          if (page === 0) {
+            queryPromises.push(
+              scrapeGoogleScholarDirect(`${cleanQuery} "Pangasinan State University"`, 0, 5).catch(() => []),
+              scrapeGoogleScholarDirect(`${cleanQuery} Philippines`, 0, 8).catch(() => [])
+            );
+          }
+          const liveArrays = await Promise.all(queryPromises);
+          liveResults = liveArrays.flat();
+          captchaBlocked = Boolean(liveArrays[0]?.captchaBlocked);
+        } catch (err) {
+          console.warn('[ScholarSearch] Direct search error:', err.message);
+        }
+
+        if (liveResults.length > 0) {
+          try {
+            const now = new Date().toISOString();
+            runInTransaction(() => {
+              for (const item of liveResults) {
+                insertScraped.run(
+                  item.id,
+                  item.title,
+                  JSON.stringify(item.authors),
+                  item.journal,
+                  item.year,
+                  item.citations,
+                  item.abstract,
+                  item.url,
+                  item.citedByLink,
+                  cleanQuery,
+                  now
+                );
+              }
+            });
+          } catch (dbErr) {
+            console.warn('[ScholarSearch] DB save error:', dbErr.message);
+          }
+
+          for (const item of liveResults) {
+            addCandidateToPool(item);
+          }
+        }
       }
 
       // STEP 2: Check if query matches a registered researcher with a Google Scholar Profile ID
@@ -3276,146 +3445,6 @@ export async function handleApiRequest(req, res) {
         }
       } catch (hybErr) {
         console.warn('[ScholarSearch] OpenAlex/CrossRef supplement error:', hybErr.message);
-      }
-
-      // STEP 5: If we still need more items for the requested page and Google Scholar was CAPTCHA-blocked,
-      // also query Apify token if configured
-      let usedApifyToken = false;
-      let usedTokenName = '';
-      let apifyRawCount = 0;
-
-      if (captchaBlocked && poolMap.size < (page + 1) * limit) {
-        const tokenRows = db.prepare(`
-          SELECT * FROM apify_tokens ORDER BY is_active DESC, created_at DESC
-        `).all();
-
-        const candidateTokens = tokenRows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          token: r.token,
-          actorId: (r.actor_id || 'johnvc~google-scholar-lite-api').replace('/', '~'),
-        }));
-
-        if (candidateTokens.length === 0 && (process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN)) {
-          candidateTokens.push({
-            id: 'env',
-            name: 'Environment Token',
-            token: process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN,
-            actorId: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-lite-api').replace('/', '~'),
-          });
-        }
-
-        for (const cand of candidateTokens) {
-          try {
-            const targetActor = cand.actorId.includes('lite')
-              ? 'johnvc~google-scholar-lite-api'
-              : cand.actorId;
-            const actorUrlSegment = targetActor.replace('/', '~');
-            const isLite = targetActor.includes('lite');
-            const bodyPayload = isLite
-              ? { searchTerms: [cleanQuery], maxResults: limit * (page + 1) }
-              : { q: cleanQuery, query: cleanQuery, queries: [cleanQuery], max_pages: 2, start_page: page + 1, maxResults: limit };
-
-            const apifyRes = await fetch(
-              `https://api.apify.com/v2/acts/${actorUrlSegment}/run-sync-get-dataset-items?token=${cand.token}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(bodyPayload),
-              }
-            );
-
-            if (!apifyRes.ok) continue;
-
-            const rawItems = await apifyRes.json();
-            if (Array.isArray(rawItems) && rawItems.length > 0) {
-              usedApifyToken = true;
-              usedTokenName = cand.name;
-              apifyRawCount = rawItems.length;
-
-              if (cand.id && cand.id !== 'env') {
-                try {
-                  db.prepare('UPDATE apify_tokens SET search_count = COALESCE(search_count, 0) + 1 WHERE id = ?').run(cand.id);
-                } catch {}
-              }
-
-              const now = new Date().toISOString();
-              runInTransaction(() => {
-                for (const raw of rawItems) {
-                  if (!raw || raw.error) continue;
-                  const title = (raw.paper_title || raw.title || raw.name || '').trim();
-                  if (!title) continue;
-
-                  let authors = [];
-                  if (Array.isArray(raw.publication_info?.authors)) {
-                    authors = raw.publication_info.authors
-                      .map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim()))
-                      .filter(Boolean);
-                  } else if (Array.isArray(raw.authors)) {
-                    authors = raw.authors
-                      .map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim()))
-                      .filter(Boolean);
-                  } else if (typeof raw.authors === 'string') {
-                    authors = raw.authors.split(',').map((a) => a.trim()).filter(Boolean);
-                  }
-                  if (authors.length === 0 && raw.publication_info?.summary) {
-                    const authorPart = raw.publication_info.summary.split('-')[0];
-                    if (authorPart && authorPart.trim()) authors = [authorPart.trim()];
-                  }
-                  if (authors.length === 0) authors = [bareQuery];
-
-                  let journal = (raw.source || raw.journal || '').trim();
-                  if (!journal && raw.publication_info?.summary) {
-                    journal = raw.publication_info.summary.trim();
-                  }
-                  if (!journal) journal = 'Academic Publication';
-
-                  let year = parseInt(raw.year || raw.publicationYear, 10);
-                  if (!year && raw.publication_info?.summary) {
-                    const ym = raw.publication_info.summary.match(/\b(19\d{2}|20\d{2})\b/);
-                    if (ym) year = parseInt(ym[1], 10);
-                  }
-                  if (!year) year = new Date().getFullYear();
-
-                  const citations =
-                    parseInt(raw.inline_links?.cited_by_total ?? raw.citations ?? raw.citationCount ?? 0, 10) || 0;
-                  const abstract = raw.snippet || raw.abstract || raw.description || '';
-                  const paperUrl = raw.link || raw.url || raw.resources?.[0]?.link || '';
-                  const id = raw.result_id || raw.id || `gs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                  const citedByLink = raw.inline_links?.cited_by?.link || raw.inline_links?.cited_by_link || '';
-
-                  insertScraped.run(
-                    id,
-                    title,
-                    JSON.stringify(authors),
-                    journal,
-                    year,
-                    citations,
-                    abstract,
-                    paperUrl,
-                    citedByLink,
-                    cleanQuery,
-                    now
-                  );
-
-                  addCandidateToPool({
-                    id,
-                    title,
-                    authors,
-                    journal,
-                    year,
-                    citations,
-                    abstract,
-                    url: paperUrl,
-                    citedByLink,
-                    fromCache: false,
-                  });
-                }
-              });
-              break;
-            }
-          } catch {}
-        }
       }
 
       // -----------------------------------------------------------------------
@@ -3638,15 +3667,15 @@ export async function handleApiRequest(req, res) {
         }));
       }
 
-      const sourceType = matchedScholarProfile || liveResults.length > 0
-        ? 'direct'
-        : usedApifyToken
+      const sourceType = usedApifyToken
         ? 'apify'
+        : matchedScholarProfile || liveResults.length > 0
+        ? 'direct'
         : 'direct';
-      const sourceLabel = matchedScholarProfile
+      const sourceLabel = usedApifyToken
+        ? `Google Scholar (Apify: ${usedTokenName})`
+        : matchedScholarProfile
         ? 'Official Google Scholar Profile (0 tokens)'
-        : usedApifyToken
-        ? `Apify Token (${usedTokenName})`
         : 'Live Google Scholar + Academic Index (0 tokens)';
 
       return sendJson(200, await attachTokenUsage({
