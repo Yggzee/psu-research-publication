@@ -106,7 +106,7 @@ export function ResearchersPage() {
       {/* 1. Page Header */}
       <PageHeader
         title="Faculty Researchers"
-        description="Scholarly directory of registered faculty researchers across Pangasinan State University - Asingan"
+        description="Registered faculty researchers across Pangasinan State University - Asingan"
         actions={
           <Button
             variant="outline"
@@ -178,22 +178,20 @@ export function ResearchersPage() {
                 <button
                   type="button"
                   onClick={() => setViewMode("grid")}
-                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
-                    viewMode === "grid"
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${viewMode === "grid"
                       ? "bg-card text-foreground font-semibold shadow-2xs"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   Grid
                 </button>
                 <button
                   type="button"
                   onClick={() => setViewMode("by-department")}
-                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${
-                    viewMode === "by-department"
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all cursor-pointer ${viewMode === "by-department"
                       ? "bg-card text-foreground font-semibold shadow-2xs"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   By Dept
                 </button>

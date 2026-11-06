@@ -146,10 +146,10 @@ export function PublicationInspectorDrawer({
     setTimeout(() => setCopiedFormat(null), 2000);
   };
 
-  // Re-classify publication using Gemini Flash
+  // Re-classify publication using AI
   const handleReclassify = async () => {
     setIsClassifying(true);
-    toast.loading("Analyzing paper with Gemini Flash...", { id: "reclassify" });
+    toast.loading("Analyzing paper with AI SDG Classifier...", { id: "reclassify" });
     try {
       const res = await apiService.classifyPublicationSDG({
         publicationId: publication.id,
@@ -159,7 +159,7 @@ export function PublicationInspectorDrawer({
       });
 
       if (res?.success) {
-        toast.success("Successfully analyzed with Gemini Flash!", { id: "reclassify" });
+        toast.success("Successfully analyzed SDG Alignment!", { id: "reclassify" });
         const updated = {
           ...publication,
           sdg_tags: [res.sdg.primarySDG, res.sdg.secondarySDG],

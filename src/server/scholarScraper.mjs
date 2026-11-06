@@ -478,6 +478,275 @@ export async function scrapeGoogleScholarCitations(citesIdOrUrl, maxPages = 50) 
 }
 
 /**
+ * Fetches citing papers from OpenAlex + Semantic Scholar + CrossRef (free, no rate-limit/CAPTCHA)
+ * using either the paper's DOI or title, returning complete co-authors, journal, vol/issue, year, quarter, and link
+ * up to `maxResults`.
+ */
+export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
+  if (!paper || (!paper.title && !paper.doi && !paper.issn_isbn)) return [];
+
+  const normalizeCompareTitle = (str) =>
+    String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const results = [];
+  const seenKeys = new Set();
+  const cleanSearchTitle = String(paper.title || '')
+    .replace(/\.\s*Technologies.*$/i, '')
+    .replace(/,\s*Technologies.*$/i, '')
+    .trim();
+  const normParent = normalizeCompareTitle(cleanSearchTitle);
+
+  const addUniqueCiting = (entry) => {
+    if (results.length >= maxResults) return;
+    const normT = normalizeCompareTitle(entry.title || '');
+    if (!normT || normT.length < 8) return;
+    if (normParent && (normT === normParent || normT.includes(normParent) || normParent.includes(normT))) {
+      return; // Skip self-matches
+    }
+    if (seenKeys.has(normT)) return;
+    seenKeys.add(normT);
+    results.push(entry);
+  };
+
+  try {
+    let openAlexWorkId = null;
+    const rawDoiStr = `${paper.doi || ''} ${paper.issn_isbn || ''} ${paper.url || ''}`;
+    const doiMatch = rawDoiStr.match(/\b(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)\b/);
+    const cleanDoi = doiMatch ? doiMatch[1].replace(/[.,;]+$/, '') : '';
+
+    // 1. Try resolving via DOI on OpenAlex
+    if (cleanDoi) {
+      try {
+        const doiRes = await fetch(`https://api.openalex.org/works/https://doi.org/${encodeURIComponent(cleanDoi)}`, {
+          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+        });
+        if (doiRes.ok) {
+          const doiData = await doiRes.json();
+          if (doiData?.id) {
+            openAlexWorkId = doiData.id.split('/').pop();
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Fallback to title search on OpenAlex if no DOI match
+    if (!openAlexWorkId && cleanSearchTitle) {
+      try {
+        const searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(cleanSearchTitle)}&per-page=3`;
+        const searchRes = await fetch(searchUrl, {
+          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          const items = searchData?.results || [];
+          for (const candidate of items) {
+            const candTitle = candidate?.title || candidate?.display_name || '';
+            const normCand = normalizeCompareTitle(candTitle);
+            if (normCand && (normCand === normParent || normCand.includes(normParent) || normParent.includes(normCand))) {
+              openAlexWorkId = candidate.id.split('/').pop();
+              break;
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // 3. Fetch citing works from OpenAlex using Cursor Pagination (supports 1,000 to 10,000+ citations without page limits)
+    if (openAlexWorkId) {
+      let cursor = '*';
+      let safetyPages = 0;
+      const maxCursorPages = Math.ceil(maxResults / 200) + 5;
+      while (cursor && results.length < maxResults && safetyPages < maxCursorPages) {
+        safetyPages++;
+        const citesUrl = `https://api.openalex.org/works?filter=cites:${openAlexWorkId}&per-page=200&cursor=${encodeURIComponent(cursor)}`;
+        const citesRes = await fetch(citesUrl, {
+          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+        });
+        if (!citesRes.ok) break;
+        const citesData = await citesRes.json();
+        const works = citesData?.results || [];
+        if (works.length === 0) break;
+
+        for (const w of works) {
+          if (results.length >= maxResults) break;
+          const wTitle = cleanText(w.title || w.display_name || '');
+          if (!wTitle) continue;
+
+          const wAuthors = Array.isArray(w.authorships)
+            ? w.authorships.map((a) => a?.author?.display_name).filter(Boolean).join(', ')
+            : '';
+
+          const wJournal =
+            w.primary_location?.source?.display_name ||
+            w.host_venue?.display_name ||
+            'Academic Journal';
+
+          const bib = w.biblio || {};
+          const volParts = [];
+          if (bib.volume) volParts.push(`Vol. ${bib.volume}`);
+          if (bib.issue) volParts.push(`No. ${bib.issue}`);
+          if (bib.first_page) {
+            volParts.push(
+              bib.last_page && bib.last_page !== bib.first_page
+                ? `pp. ${bib.first_page}-${bib.last_page}`
+                : `pp. ${bib.first_page}`
+            );
+          }
+
+          let quarter = 'First';
+          if (w.publication_date) {
+            const m = parseInt(String(w.publication_date).split('-')[1], 10);
+            if (m >= 1 && m <= 3) quarter = 'First';
+            else if (m >= 4 && m <= 6) quarter = 'Second';
+            else if (m >= 7 && m <= 9) quarter = 'Third';
+            else if (m >= 10 && m <= 12) quarter = 'Fourth';
+          }
+
+          const cleanWdoi = w.doi ? String(w.doi).replace(/^https?:\/\/doi\.org\//i, '') : '';
+          const issnL = w.primary_location?.source?.issn_l || '';
+          const doiIssn = cleanWdoi ? `DOI: ${cleanWdoi}` : issnL ? `ISSN ${issnL}` : '';
+          const link = w.doi || w.primary_location?.landing_page_url || w.id || '';
+
+          addUniqueCiting({
+            title: wTitle,
+            authors: wAuthors || 'Academic Authors',
+            journal: wJournal,
+            volume_issue: volParts.join(', '),
+            year: w.publication_year || null,
+            quarter,
+            doi_issn: doiIssn,
+            link,
+          });
+        }
+
+        cursor = citesData?.meta?.next_cursor || null;
+        if (works.length < 200 || results.length >= maxResults) break;
+      }
+    }
+
+    // 4. Supplement with Semantic Scholar Graph API (paginated in batches of 1,000 up to 10,000) if we still need more citing papers
+    if (results.length < maxResults) {
+      try {
+        let s2PaperId = cleanDoi ? `DOI:${cleanDoi}` : null;
+        if (!s2PaperId && cleanSearchTitle) {
+          const s2Search = await fetch(
+            `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(cleanSearchTitle)}&limit=3&fields=title`
+          );
+          if (s2Search.ok) {
+            const s2SearchData = await s2Search.json();
+            const match = (s2SearchData?.data || []).find((cand) => {
+              const nc = normalizeCompareTitle(cand?.title || '');
+              return nc && (nc === normParent || nc.includes(normParent) || normParent.includes(nc));
+            });
+            if (match?.paperId) s2PaperId = match.paperId;
+          }
+        }
+
+        if (s2PaperId) {
+          const s2Limit = 1000;
+          for (let offset = 0; offset < Math.min(maxResults, 9000) && results.length < maxResults; offset += s2Limit) {
+            const s2Res = await fetch(
+              `https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(s2PaperId)}/citations?fields=title,authors,year,venue,publicationDate,externalIds,url&offset=${offset}&limit=${s2Limit}`
+            );
+            if (!s2Res.ok) break;
+            const s2Data = await s2Res.json();
+            const rows = s2Data?.data || [];
+            if (rows.length === 0) break;
+
+            for (const row of rows) {
+              if (results.length >= maxResults) break;
+              const cp = row?.citingPaper;
+              if (!cp?.title) continue;
+              const cpAuthors = Array.isArray(cp.authors)
+                ? cp.authors.map((a) => a?.name).filter(Boolean).join(', ')
+                : 'Academic Authors';
+              let quarter = 'First';
+              if (cp.publicationDate) {
+                const m = parseInt(String(cp.publicationDate).split('-')[1], 10);
+                if (m >= 1 && m <= 3) quarter = 'First';
+                else if (m >= 4 && m <= 6) quarter = 'Second';
+                else if (m >= 7 && m <= 9) quarter = 'Third';
+                else if (m >= 10 && m <= 12) quarter = 'Fourth';
+              }
+              const s2Doi = cp.externalIds?.DOI || '';
+              addUniqueCiting({
+                title: cleanText(cp.title),
+                authors: cpAuthors || 'Academic Authors',
+                journal: cp.venue || 'Academic Journal',
+                volume_issue: '',
+                year: cp.year || null,
+                quarter,
+                doi_issn: s2Doi ? `DOI: ${s2Doi}` : '',
+                link: s2Doi ? `https://doi.org/${s2Doi}` : cp.url || '',
+              });
+            }
+
+            if (rows.length < s2Limit) break;
+          }
+        }
+      } catch {}
+    }
+
+    // 5. Supplement with CrossRef Bibliographic Query if we still need more citing papers to reach maxResults
+    if (results.length < maxResults && cleanSearchTitle) {
+      try {
+        const crUrl = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(cleanSearchTitle)}&rows=100`;
+        const crRes = await fetch(crUrl, {
+          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+        });
+        if (crRes.ok) {
+          const crData = await crRes.json();
+          for (const item of crData?.message?.items || []) {
+            if (results.length >= maxResults) break;
+            const cTitle = Array.isArray(item.title) ? item.title[0] : '';
+            if (!cTitle) continue;
+            const cAuthors = Array.isArray(item.author)
+              ? item.author
+                  .map((a) => [a.given, a.family].filter(Boolean).join(' ') || a.name || '')
+                  .filter(Boolean)
+                  .join(', ')
+              : 'Academic Authors';
+            const cJournal =
+              (Array.isArray(item['container-title']) && item['container-title'][0]) ||
+              item.publisher ||
+              'Academic Journal';
+            const volParts = [];
+            if (item.volume) volParts.push(`Vol. ${item.volume}`);
+            if (item.issue) volParts.push(`No. ${item.issue}`);
+            if (item.page) volParts.push(`pp. ${item.page}`);
+            const dateParts =
+              item.published?.['date-parts']?.[0] ||
+              item['published-print']?.['date-parts']?.[0] ||
+              item['published-online']?.['date-parts']?.[0] ||
+              [];
+            const cYear = dateParts[0] || null;
+            const cMonth = dateParts[1] || 1;
+            const quarter =
+              cMonth <= 3 ? 'First' : cMonth <= 6 ? 'Second' : cMonth <= 9 ? 'Third' : 'Fourth';
+
+            addUniqueCiting({
+              title: cleanText(cTitle),
+              authors: cAuthors || 'Academic Authors',
+              journal: cleanText(cJournal),
+              volume_issue: volParts.join(', '),
+              year: cYear,
+              quarter,
+              doi_issn: item.DOI ? `DOI: ${item.DOI}` : '',
+              link: item.DOI ? `https://doi.org/${item.DOI}` : item.URL || '',
+            });
+          }
+        }
+      } catch {}
+    }
+
+    return results.slice(0, maxResults);
+  } catch (err) {
+    console.warn('[OpenAlexCitations] Error fetching citing works:', err.message);
+    return results.slice(0, maxResults);
+  }
+}
+
+/**
  * Directly scrapes a Google Scholar researcher profile and all their indexed publications
  */
 export async function scrapeGoogleScholarProfile(profileUrlOrId) {
@@ -545,58 +814,81 @@ export async function scrapeGoogleScholarProfile(profileUrlOrId) {
 
   const isPsuAffiliated = /pangasinan|psu\.edu\.ph|\bpsu\b/i.test(affiliation + ' ' + verifiedEmail);
 
-  // Publications
+  // Publications (support researchers with 100+ papers via cstart pagination)
   const publications = [];
-  const rows = [...html.matchAll(/<tr class="gsc_a_tr">([\s\S]*?)<\/tr>/g)];
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i][1];
-    const titleMatch = row.match(/<a[^>]*class="gsc_a_at"[^>]*>([\s\S]*?)<\/a>/);
-    if (!titleMatch) continue;
-
-    const title = cleanText(titleMatch[1]);
-    if (!title) continue;
-
-    const hrefMatch =
-      row.match(/<a[^>]*href="([^"]+)"[^>]*class="gsc_a_at"/i) ||
-      row.match(/<a[^>]*class="gsc_a_at"[^>]*href="([^"]+)"/i);
-    let paperHref = hrefMatch ? hrefMatch[1].replace(/&amp;/g, '&') : '';
-    if (paperHref && paperHref.startsWith('/')) {
-      paperHref = `https://scholar.google.com${paperHref}`;
+  let currentHtml = html;
+  for (let cstart = 0; cstart <= 500; cstart += 100) {
+    if (cstart > 0) {
+      try {
+        const nextUrl = `https://scholar.google.com/citations?user=${encodeURIComponent(userId)}&hl=en&cstart=${cstart}&pagesize=100`;
+        const nextRes = await fetch(nextUrl, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        });
+        if (!nextRes.ok) break;
+        currentHtml = await nextRes.text();
+      } catch {
+        break;
+      }
     }
 
-    const grays = [...row.matchAll(/<div class="gs_gray">([\s\S]*?)<\/div>/g)];
-    const authorRaw = grays[0] ? cleanText(grays[0][1]) : '';
-    const authors = authorRaw
-      ? authorRaw.split(',').map((a) => a.trim()).filter(Boolean)
-      : [name || 'Author'];
+    const rows = [...currentHtml.matchAll(/<tr class="gsc_a_tr">([\s\S]*?)<\/tr>/g)];
+    if (rows.length === 0) break;
 
-    const journalRaw = grays[1] ? cleanText(grays[1][1]) : '';
-    const citeMatch = row.match(/<a[^>]*class="gsc_a_ac[^"]*"[^>]*>(\d+)<\/a>/);
-    const citations = citeMatch ? parseInt(citeMatch[1], 10) : 0;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i][1];
+      const titleMatch = row.match(/<a[^>]*class="gsc_a_at"[^>]*>([\s\S]*?)<\/a>/);
+      if (!titleMatch) continue;
 
-    const citeHrefMatch =
-      row.match(/<a[^>]*href="([^"]+)"[^>]*class="gsc_a_ac/i) ||
-      row.match(/<a[^>]*class="gsc_a_ac[^"]*"[^>]*href="([^"]+)"/i);
-    const citedByLink =
-      citeHrefMatch && citeHrefMatch[1] && citeHrefMatch[1].startsWith('http')
-        ? citeHrefMatch[1].replace(/&amp;/g, '&')
-        : '';
+      const title = cleanText(titleMatch[1]);
+      if (!title) continue;
 
-    const yearMatch = row.match(/<span[^>]*class="gsc_a_h[^"]*"[^>]*>(\d{4})<\/span>/);
-    const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+      const hrefMatch =
+        row.match(/<a[^>]*href="([^"]+)"[^>]*class="gsc_a_at"/i) ||
+        row.match(/<a[^>]*class="gsc_a_at"[^>]*href="([^"]+)"/i);
+      let paperHref = hrefMatch ? hrefMatch[1].replace(/&amp;/g, '&') : '';
+      if (paperHref && paperHref.startsWith('/')) {
+        paperHref = `https://scholar.google.com${paperHref}`;
+      }
 
-    publications.push({
-      id: `gsp-${userId}-${i + 1}`,
-      title,
-      authors,
-      journal: journalRaw || 'Academic Publication',
-      year,
-      citations,
-      url: paperHref,
-      citedByLink,
-      abstract: '',
-    });
+      const grays = [...row.matchAll(/<div class="gs_gray">([\s\S]*?)<\/div>/g)];
+      const authorRaw = grays[0] ? cleanText(grays[0][1]) : '';
+      const authors = authorRaw
+        ? authorRaw.split(',').map((a) => a.trim()).filter(Boolean)
+        : [name || 'Author'];
+
+      const journalRaw = grays[1] ? cleanText(grays[1][1]) : '';
+      const citeMatch = row.match(/<a[^>]*class="gsc_a_ac[^"]*"[^>]*>(\d+)<\/a>/);
+      const citations = citeMatch ? parseInt(citeMatch[1], 10) : 0;
+
+      const citeHrefMatch =
+        row.match(/<a[^>]*href="([^"]+)"[^>]*class="gsc_a_ac/i) ||
+        row.match(/<a[^>]*class="gsc_a_ac[^"]*"[^>]*href="([^"]+)"/i);
+      const citedByLink =
+        citeHrefMatch && citeHrefMatch[1] && citeHrefMatch[1].startsWith('http')
+          ? citeHrefMatch[1].replace(/&amp;/g, '&')
+          : '';
+
+      const yearMatch = row.match(/<span[^>]*class="gsc_a_h[^"]*"[^>]*>(\d{4})<\/span>/);
+      const year = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+
+      publications.push({
+        id: `gsp-${userId}-${publications.length + 1}`,
+        title,
+        authors,
+        journal: journalRaw || 'Academic Publication',
+        year,
+        citations,
+        url: paperHref,
+        citedByLink,
+        abstract: '',
+      });
+    }
+
+    if (rows.length < 100) break;
   }
 
   await enrichBatchWithCrossRef(publications, 5);
@@ -616,5 +908,133 @@ export async function scrapeGoogleScholarProfile(profileUrlOrId) {
     },
     publications,
   };
+}
+
+/**
+ * Multi-source academic search fallback & supplement (CrossRef API + OpenAlex API)
+ * Universal academic search across titles, author names, institutions (e.g. Pangasinan State University), and topics.
+ */
+export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) {
+  const cleanQ = String(rawQuery || '')
+    .replace(/^author:\s*"?/i, '')
+    .replace(/"$/g, '')
+    .trim();
+  if (!cleanQ) return [];
+
+  const words = cleanQ.split(/\s+/).filter(Boolean);
+  const isPersonNameQuery = words.length >= 2 && words.length <= 3 && !/university|college|school|campus|department|journal|republic|philippines|state|system/i.test(cleanQ);
+
+  const results = [];
+  const seenNorm = new Set();
+  const addResult = (item) => {
+    const norm = normalizeForMatch(item.title || '');
+    if (!norm || norm.length < 5 || seenNorm.has(norm)) return;
+    seenNorm.add(norm);
+    results.push(item);
+  };
+
+  // 1. CrossRef Search: Comprehensive, un-rate-limited global academic index
+  try {
+    const crUrl = `https://api.crossref.org/works?query=${encodeURIComponent(cleanQ)}&rows=25&offset=${page * 15}`;
+    const crRes = await fetch(crUrl, {
+      headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+    });
+    if (crRes.ok) {
+      const crData = await crRes.json();
+      for (const item of crData?.message?.items || []) {
+        const cTitle = Array.isArray(item.title) ? cleanText(item.title[0]) : '';
+        if (!cTitle) continue;
+        const cAuthors = Array.isArray(item.author)
+          ? item.author
+              .map((a) => [a.given, a.family].filter(Boolean).join(' ') || a.name || '')
+              .filter(Boolean)
+          : [];
+
+        const cJournal =
+          (Array.isArray(item['container-title']) && item['container-title'][0]) ||
+          item.publisher ||
+          'Academic Publication';
+        const dateParts =
+          item.published?.['date-parts']?.[0] ||
+          item['published-print']?.['date-parts']?.[0] ||
+          item['published-online']?.['date-parts']?.[0] ||
+          [];
+        const cYear = dateParts[0] || new Date().getFullYear();
+
+        addResult({
+          id: `cr-${hashString(item.DOI || cTitle)}`,
+          title: cTitle,
+          authors: cAuthors.length > 0 ? cAuthors : [cleanQ],
+          journal: cleanText(cJournal),
+          year: Number(cYear),
+          citations: Number(item['is-referenced-by-count']) || 0,
+          abstract: item.abstract ? cleanText(item.abstract) : '',
+          url: item.DOI ? `https://doi.org/${item.DOI}` : item.URL || '',
+          pdfUrl: Array.isArray(item.link) ? item.link.find((l) => l['content-type']?.includes('pdf'))?.URL || null : null,
+          citedByLink: '',
+          fromCache: false,
+        });
+      }
+    }
+  } catch (crErr) {
+    console.warn('[HybridSearch] CrossRef search error:', crErr.message);
+  }
+
+  // 2. OpenAlex Search: if author query, attempt author resolution; otherwise search works
+  try {
+    if (isPersonNameQuery) {
+      try {
+        const authUrl = `https://api.openalex.org/authors?filter=display_name.search:${encodeURIComponent(cleanQ)}&per-page=3&mailto=research@psu.edu.ph`;
+        const authRes = await fetch(authUrl, {
+          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+        });
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          const authorIds = (authData?.results || [])
+            .map((a) => a?.id?.split('/').pop())
+            .filter(Boolean);
+
+          if (authorIds.length > 0) {
+            const worksUrl = `https://api.openalex.org/works?filter=authorships.author.id:${authorIds.join('|')}&per-page=20&page=${page + 1}&sort=cited_by_count:desc&mailto=research@psu.edu.ph`;
+            const worksRes = await fetch(worksUrl, {
+              headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+            });
+            if (worksRes.ok) {
+              const worksData = await worksRes.json();
+              for (const w of worksData?.results || []) {
+                const wTitle = cleanText(w.title || w.display_name || '');
+                if (!wTitle) continue;
+                const wAuthors = Array.isArray(w.authorships)
+                  ? w.authorships.map((a) => a?.author?.display_name).filter(Boolean)
+                  : [cleanQ];
+                const wJournal =
+                  w.primary_location?.source?.display_name ||
+                  w.host_venue?.display_name ||
+                  'Academic Publication';
+                const wUrl = w.doi || w.primary_location?.landing_page_url || w.id || '';
+                addResult({
+                  id: `oa-${w.id?.split('/').pop() || hashString(wTitle)}`,
+                  title: wTitle,
+                  authors: wAuthors.length > 0 ? wAuthors : [cleanQ],
+                  journal: wJournal,
+                  year: w.publication_year || new Date().getFullYear(),
+                  citations: Number(w.cited_by_count) || 0,
+                  abstract: '',
+                  url: wUrl,
+                  pdfUrl: w.open_access?.oa_url || null,
+                  citedByLink: '',
+                  fromCache: false,
+                });
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+  } catch (oaErr) {
+    console.warn('[HybridSearch] OpenAlex search error:', oaErr.message);
+  }
+
+  return results;
 }
 

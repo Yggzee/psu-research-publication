@@ -40,6 +40,8 @@ import {
   Globe,
   Hash,
   Layers,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   LineChart,
@@ -86,6 +88,8 @@ export function PublicationDetail() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
   const [citingSearch, setCitingSearch] = useState("");
+  const [citingPage, setCitingPage] = useState(1);
+  const CITATIONS_PER_PAGE = 10;
 
   // Inline Edit Mode for Excel Metadata fields
   const [isEditingExcel, setIsEditingExcel] = useState(false);
@@ -148,6 +152,7 @@ export function PublicationDetail() {
   };
 
   useEffect(() => {
+    setCitingPage(1);
     loadData(false);
   }, [id]);
 
@@ -172,7 +177,7 @@ export function PublicationDetail() {
   const handleReclassifySDG = async () => {
     if (!publication) return;
     setIsClassifying(true);
-    toast.loading("Analyzing paper with Gemini Flash...", { id: "reclassify-detail" });
+    toast.loading("Analyzing paper with AI SDG Classifier...", { id: "reclassify-detail" });
     try {
       const res = await apiService.classifyPublicationSDG({
         publicationId: publication.id,
@@ -182,7 +187,7 @@ export function PublicationDetail() {
       });
 
       if (res?.success) {
-        toast.success("SDG Check updated with Gemini Flash!", { id: "reclassify-detail" });
+        toast.success("SDG Check updated via AI Evaluation!", { id: "reclassify-detail" });
         setPublication((prev: any) => ({
           ...prev,
           sdg_tags: [res.sdg.primarySDG, res.sdg.secondarySDG].filter(Boolean),
@@ -344,6 +349,18 @@ export function PublicationDetail() {
     const cJournal = String(cp.journal || "").toLowerCase();
     return cTitle.includes(q) || cAuthors.includes(q) || cJournal.includes(q);
   });
+
+  const totalFilteredCitations = filteredCitingPapers.length;
+  const totalCitingPages = Math.max(
+    1,
+    Math.ceil(totalFilteredCitations / CITATIONS_PER_PAGE)
+  );
+  const safeCitingPage = Math.min(citingPage, totalCitingPages);
+  const startCiteIndex = (safeCitingPage - 1) * CITATIONS_PER_PAGE;
+  const paginatedCitingPapers = filteredCitingPapers.slice(
+    startCiteIndex,
+    startCiteIndex + CITATIONS_PER_PAGE
+  );
 
   return (
     <div className="space-y-6 pb-12">
@@ -799,29 +816,32 @@ export function PublicationDetail() {
 
       {/* SECTION 2: COMPLETE CITATION SHEET TABLE (ALL CITING PAPERS & CO-AUTHORS) */}
       <Card className="border-border/70 shadow-xs overflow-hidden">
-        <CardHeader className="bg-teal-950/5 dark:bg-teal-950/20 border-b border-border/60">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <CardHeader className="bg-teal-950/5 dark:bg-teal-950/20 border-b border-border/60 py-3 px-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
                 <Quote className="w-4 h-4 text-teal-600" />
-                <CardTitle className="text-base font-bold">
+                <CardTitle className="text-sm font-bold">
                   Official Citation Sheet — Papers Citing This Research ({citingPapers.length} Recorded / {publication.citations || 0} Total)
                 </CardTitle>
               </div>
-              <CardDescription className="text-xs mt-0.5">
+              <CardDescription className="text-[11px] mt-0.5">
                 Lists every citing article along with all citing authors (lead researcher and co-researchers), journal title, volume/issue/page, year published, quarter, and evidence link
               </CardDescription>
             </div>
 
             <div className="flex items-center gap-2">
               {citingPapers.length > 0 && (
-                <div className="relative w-full sm:w-64">
-                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                <div className="relative w-full sm:w-60">
+                  <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
                   <Input
                     value={citingSearch}
-                    onChange={(e) => setCitingSearch(e.target.value)}
+                    onChange={(e) => {
+                      setCitingSearch(e.target.value);
+                      setCitingPage(1);
+                    }}
                     placeholder="Filter citing authors or titles..."
-                    className="pl-8 h-8 text-xs"
+                    className="pl-8 h-7 text-xs"
                   />
                 </div>
               )}
@@ -829,10 +849,10 @@ export function PublicationDetail() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs h-8 gap-1.5 shrink-0"
+                  className="text-[11px] h-7 px-2.5 gap-1.5 shrink-0"
                   onClick={() => window.open(citedByUrl, "_blank")}
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-3 h-3" />
                   Scholar Cited-By
                 </Button>
               )}
@@ -842,121 +862,259 @@ export function PublicationDetail() {
 
         <CardContent className="p-0">
           {filteredCitingPapers.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-teal-900/90 text-white uppercase tracking-wider text-[10px] font-bold">
-                  <tr>
-                    <th className="p-3 w-12 text-center border-r border-teal-800">#</th>
-                    <th className="p-3 min-w-[230px] border-r border-teal-800">
-                      Author(s) Who Cited the Research Output
-                      <span className="block text-[9px] font-normal text-teal-200 normal-case">
-                        Lead Researcher & All Co-Researchers
-                      </span>
-                    </th>
-                    <th className="p-3 min-w-[260px] border-r border-teal-800">
-                      Title of Article Where the Research Output Was Cited
-                    </th>
-                    <th className="p-3 min-w-[180px] border-r border-teal-800">
-                      Title of Journal
-                    </th>
-                    <th className="p-3 min-w-[120px] text-center border-r border-teal-800">
-                      Vol. / Issue / Page No.
-                    </th>
-                    <th className="p-3 w-28 text-center border-r border-teal-800">
-                      City / Year Published
-                    </th>
-                    <th className="p-3 w-24 text-center border-r border-teal-800">
-                      Quarter
-                    </th>
-                    <th className="p-3 w-28 text-center">Link</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/70">
-                  {filteredCitingPapers.map((citingPaper: any, idx: number) => {
-                    const citingAuthors = parseAuthorsList(citingPaper.authors);
-                    const citingJournal =
-                      citingPaper.journal || "Academic Publication / Google Scholar";
-                    const citingVolIssue = citingPaper.volume_issue || "—";
-                    const citingYear = citingPaper.year
-                      ? String(citingPaper.year)
-                      : "—";
-                    const citingQuarter = citingPaper.quarter || "First";
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead className="bg-teal-900/90 text-white uppercase tracking-wider text-[9px] font-bold">
+                    <tr>
+                      <th className="py-2 px-2 w-10 text-center border-r border-teal-800">#</th>
+                      <th className="py-2 px-2.5 min-w-[210px] max-w-[280px] border-r border-teal-800">
+                        Author(s) Who Cited the Research Output
+                        <span className="block text-[8px] font-normal text-teal-200 normal-case">
+                          Lead Researcher & All Co-Researchers
+                        </span>
+                      </th>
+                      <th className="py-2 px-2.5 min-w-[240px] border-r border-teal-800">
+                        Title of Article Where the Research Output Was Cited
+                      </th>
+                      <th className="py-2 px-2.5 min-w-[150px] border-r border-teal-800">
+                        Title of Journal
+                      </th>
+                      <th className="py-2 px-2 min-w-[100px] text-center border-r border-teal-800">
+                        Vol. / Issue / Page
+                      </th>
+                      <th className="py-2 px-2 w-20 text-center border-r border-teal-800">
+                        Year
+                      </th>
+                      <th className="py-2 px-2 w-20 text-center border-r border-teal-800">
+                        Quarter
+                      </th>
+                      <th className="py-2 px-2 w-24 text-center">Link</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {paginatedCitingPapers.map((citingPaper: any, idx: number) => {
+                      const globalIndex = startCiteIndex + idx + 1;
+                      const citingAuthors = parseAuthorsList(citingPaper.authors);
+                      const citingJournal =
+                        citingPaper.journal || "Academic Publication / Google Scholar";
+                      const citingVolIssue = citingPaper.volume_issue || "—";
+                      const citingYear = citingPaper.year
+                        ? String(citingPaper.year)
+                        : "—";
+                      const citingQuarter = citingPaper.quarter || "First";
 
-                    return (
-                      <tr
-                        key={citingPaper.id || idx}
-                        className="hover:bg-muted/30 transition-colors align-top"
-                      >
-                        <td className="p-3 text-center font-mono font-bold text-muted-foreground border-r border-border/50">
-                          {idx + 1}
-                        </td>
-                        <td className="p-3 border-r border-border/50">
-                          {citingAuthors.length > 0 ? (
-                            <div className="space-y-1.5">
-                              <p className="font-semibold text-foreground leading-snug">
-                                {citingAuthors.join(", ")}
-                              </p>
-                              <div className="flex flex-wrap gap-1">
-                                {citingAuthors.map((ca, cIdx) => (
-                                  <span
-                                    key={cIdx}
-                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                      cIdx === 0
-                                        ? "bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20"
-                                        : "bg-muted text-muted-foreground"
-                                    }`}
-                                  >
-                                    {cIdx === 0 ? `Lead: ${ca}` : ca}
+                      return (
+                        <tr
+                          key={citingPaper.id || globalIndex}
+                          className="hover:bg-muted/30 transition-colors align-middle"
+                        >
+                          <td className="py-1.5 px-2 text-center font-mono text-[11px] font-bold text-muted-foreground border-r border-border/50">
+                            {globalIndex}
+                          </td>
+                          <td
+                            className="py-1.5 px-2.5 border-r border-border/50 max-w-[280px]"
+                            title={citingAuthors.join(", ")}
+                          >
+                            {citingAuthors.length > 0 ? (
+                              <div className="leading-snug text-[11px]">
+                                <span className="inline-flex items-center px-1 py-0.2 mr-1 rounded text-[9px] font-semibold bg-teal-500/10 text-teal-700 dark:text-teal-300 border border-teal-500/20">
+                                  Lead: {citingAuthors[0]}
+                                </span>
+                                {citingAuthors.length > 1 && (
+                                  <span className="text-foreground/90 font-medium">
+                                    , {citingAuthors.slice(1).join(", ")}
                                   </span>
-                                ))}
+                                )}
                               </div>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground italic">
-                              Author metadata pending
+                            ) : (
+                              <span className="text-muted-foreground italic text-[10px]">
+                                Author metadata pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2.5 font-semibold text-foreground leading-snug border-r border-border/50">
+                            <span className="line-clamp-2" title={citingPaper.title}>
+                              {citingPaper.title}
                             </span>
-                          )}
-                        </td>
-                        <td className="p-3 font-semibold text-foreground leading-snug border-r border-border/50">
-                          {citingPaper.title}
-                          {citingPaper.doi_issn && (
-                            <span className="block text-[10px] font-mono font-normal text-muted-foreground mt-1">
-                              DOI/ISSN: {citingPaper.doi_issn}
+                            {citingPaper.doi_issn && (
+                              <span className="block text-[9px] font-mono font-normal text-muted-foreground mt-0.5 truncate">
+                                {citingPaper.doi_issn}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2.5 text-foreground/90 font-medium border-r border-border/50">
+                            <span className="line-clamp-2" title={citingJournal}>
+                              {citingJournal}
                             </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-foreground/90 font-medium border-r border-border/50">
-                          {citingJournal}
-                        </td>
-                        <td className="p-3 text-center font-mono text-muted-foreground border-r border-border/50">
-                          {citingVolIssue}
-                        </td>
-                        <td className="p-3 text-center font-mono font-semibold text-foreground border-r border-border/50">
-                          {citingYear}
-                        </td>
-                        <td className="p-3 text-center font-medium text-muted-foreground border-r border-border/50">
-                          {citingQuarter}
-                        </td>
-                        <td className="p-3 text-center">
-                          {citingPaper.link ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-[11px] px-2.5 gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
-                              onClick={() => window.open(citingPaper.link, "_blank")}
-                            >
-                              <span>View Paper</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </Button>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-mono text-[10px] text-muted-foreground border-r border-border/50">
+                            {citingVolIssue}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-mono font-semibold text-foreground border-r border-border/50">
+                            {citingYear}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-medium text-muted-foreground border-r border-border/50">
+                            {citingQuarter}
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            {citingPaper.link ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 gap-1 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                onClick={() => window.open(citingPaper.link, "_blank")}
+                              >
+                                <span>View</span>
+                                <ExternalLink className="w-2.5 h-2.5" />
+                              </Button>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls (10 per page) */}
+              {totalFilteredCitations > CITATIONS_PER_PAGE && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 bg-muted/20 border-t border-border/60 text-xs">
+                  <div className="text-[11px] text-muted-foreground">
+                    Showing{" "}
+                    <span className="font-semibold text-foreground">
+                      {startCiteIndex + 1}
+                    </span>
+                    –
+                    <span className="font-semibold text-foreground">
+                      {Math.min(
+                        startCiteIndex + CITATIONS_PER_PAGE,
+                        totalFilteredCitations
+                      )}
+                    </span>{" "}
+                    of{" "}
+                    <span className="font-semibold text-foreground">
+                      {totalFilteredCitations}
+                    </span>{" "}
+                    citations (Page {safeCitingPage} of {totalCitingPages})
+                  </div>
+
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      disabled={safeCitingPage <= 1}
+                      onClick={() =>
+                        setCitingPage((p) => Math.max(1, p - 1))
+                      }
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      Prev
+                    </Button>
+
+                    {(() => {
+                      const pages: (number | string)[] = [];
+                      if (totalCitingPages <= 7) {
+                        for (let i = 1; i <= totalCitingPages; i++) pages.push(i);
+                      } else {
+                        pages.push(1);
+                        if (safeCitingPage > 3) pages.push("...");
+                        const start = Math.max(2, safeCitingPage - 1);
+                        const end = Math.min(
+                          totalCitingPages - 1,
+                          safeCitingPage + 1
+                        );
+                        for (let i = start; i <= end; i++) pages.push(i);
+                        if (safeCitingPage < totalCitingPages - 2)
+                          pages.push("...");
+                        pages.push(totalCitingPages);
+                      }
+
+                      return pages.map((pageItem, pIdx) =>
+                        pageItem === "..." ? (
+                          <span
+                            key={`ellipsis-${pIdx}`}
+                            className="px-1.5 text-[11px] text-muted-foreground"
+                          >
+                            …
+                          </span>
+                        ) : (
+                          <Button
+                            key={pageItem}
+                            variant={
+                              safeCitingPage === pageItem ? "default" : "outline"
+                            }
+                            size="sm"
+                            className={`h-7 min-w-[28px] px-2 text-[11px] font-mono ${
+                              safeCitingPage === pageItem
+                                ? "bg-teal-700 hover:bg-teal-800 text-white"
+                                : ""
+                            }`}
+                            onClick={() => setCitingPage(Number(pageItem))}
+                          >
+                            {pageItem}
+                          </Button>
+                        )
+                      );
+                    })()}
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-[11px] gap-1"
+                      disabled={safeCitingPage >= totalCitingPages}
+                      onClick={() =>
+                        setCitingPage((p) =>
+                          Math.min(totalCitingPages, p + 1)
+                        )
+                      }
+                    >
+                      Next
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+
+                    {totalCitingPages > 7 && (
+                      <div className="flex items-center gap-1 ml-2 pl-2 border-l border-border/60">
+                        <span className="text-[10px] text-muted-foreground">
+                          Go to:
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={totalCitingPages}
+                          defaultValue={safeCitingPage}
+                          key={safeCitingPage}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const val = parseInt(
+                                (e.target as HTMLInputElement).value,
+                                10
+                              );
+                              if (!Number.isNaN(val)) {
+                                setCitingPage(
+                                  Math.max(1, Math.min(totalCitingPages, val))
+                                );
+                              }
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!Number.isNaN(val)) {
+                              setCitingPage(
+                                Math.max(1, Math.min(totalCitingPages, val))
+                              );
+                            }
+                          }}
+                          className="h-7 w-14 rounded border border-input bg-background px-1.5 text-center font-mono text-[11px]"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-10 text-center space-y-3">

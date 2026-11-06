@@ -55,7 +55,7 @@ const adminNavigationCategories: NavCategory[] = [
   {
     category: "DISCOVER",
     items: [
-      { name: "Scholar Search", path: "/dashboard/search-engine", icon: Search },
+      { name: "Search", path: "/dashboard/search-engine", icon: Search },
       { name: "Researchers", path: "/dashboard/researchers", icon: Users },
       { name: "Publications", path: "/dashboard/publications", icon: FileText },
     ],
@@ -82,7 +82,7 @@ const instructorNavigationCategories: NavCategory[] = [
     category: "MY WORK",
     items: [
       { name: "My Publications", path: "/dashboard/publications", icon: FileText },
-      { name: "Scholar Search", path: "/dashboard/search-engine", icon: Search },
+      { name: "Search", path: "/dashboard/search-engine", icon: Search },
     ],
   },
   {
@@ -162,7 +162,7 @@ export function DashboardLayout() {
   // Compute clean breadcrumb title
   const getPageTitle = (pathname: string): string => {
     if (pathname === "/dashboard") return "Dashboard";
-    if (pathname.startsWith("/dashboard/search-engine")) return "Scholar Search";
+    if (pathname.startsWith("/dashboard/search-engine")) return "Search";
     if (pathname.startsWith("/dashboard/researchers")) return "Researchers";
     if (pathname.startsWith("/dashboard/publications")) return "Publications";
     if (pathname.startsWith("/dashboard/impact")) return "Impact Analysis";

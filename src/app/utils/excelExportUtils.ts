@@ -644,21 +644,22 @@ export interface MultiResearcherExportOptions {
   selectedResearchers: any[];
   publications: any[];
   exportYear: string;
-  mode?: "zip" | "direct-folder";
 }
 
 /**
- * Generates 1 Excel file per selected researcher (each containing Publication Sheet & Citation Sheet)
- * and organizes them into Department folders (<Department>/<Researcher_Name>.xlsx).
+ * Generates individual Excel reports per selected researcher:
+ * - If 1 researcher: downloads the single .xlsx file directly (NO zip).
+ * - If multiple researchers: packages them into a clean .zip archive organized by department.
  */
 export async function exportPerResearcherReportsByDepartment(
   options: MultiResearcherExportOptions
-): Promise<{ exportedFiles: number; departments: string[] }> {
-  const { selectedResearchers, publications, exportYear, mode = "zip" } = options;
+): Promise<{ exportedFiles: number; departments: string[]; isZip: boolean }> {
+  const { selectedResearchers, publications, exportYear } = options;
 
   const generatedFiles: {
     department: string;
     fileName: string;
+    prefixedFileName: string;
     relativePath: string;
     bytes: Uint8Array;
   }[] = [];
@@ -666,7 +667,7 @@ export async function exportPerResearcherReportsByDepartment(
   const deptSet = new Set<string>();
 
   for (const researcher of selectedResearchers) {
-    const dept = sanitizeFileSegment(researcher.department || "Unassigned");
+    const dept = sanitizeFileSegment(researcher.department || "General");
     deptSet.add(dept);
 
     // Filter publications belonging to this researcher and matching the year filter
@@ -683,51 +684,45 @@ export async function exportPerResearcherReportsByDepartment(
     const cleanName = sanitizeFileSegment(researcher.name || researcher.instructorId || "Researcher");
     const yearSuffix = exportYear === "all" ? "All_Years" : exportYear;
     const fileName = `${cleanName}_${yearSuffix}.xlsx`;
+    const prefixedFileName = `[${dept}]_${cleanName}_${yearSuffix}.xlsx`;
 
     generatedFiles.push({
       department: dept,
       fileName,
+      prefixedFileName,
       relativePath: `${dept}/${fileName}`,
       bytes,
     });
   }
 
-  // Option 1: Direct PC Folder creation via File System Access API (if requested & supported)
-  if (mode === "direct-folder" && typeof (window as any).showDirectoryPicker === "function") {
-    const rootDirHandle = await (window as any).showDirectoryPicker({
-      mode: "readwrite",
-    });
-    for (const item of generatedFiles) {
-      const deptDirHandle = await rootDirHandle.getDirectoryHandle(item.department, {
-        create: true,
-      });
-      const fileHandle = await deptDirHandle.getFileHandle(item.fileName, {
-        create: true,
-      });
-      const writable = await fileHandle.createWritable();
-      await writable.write(item.bytes);
-      await writable.close();
-    }
+  // Case 1: Single researcher — download the single .xlsx file directly (no ZIP)
+  if (generatedFiles.length === 1) {
+    const singleFile = generatedFiles[0];
+    triggerBlobDownload(
+      singleFile.bytes,
+      singleFile.fileName,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
     return {
-      exportedFiles: generatedFiles.length,
+      exportedFiles: 1,
       departments: Array.from(deptSet),
+      isZip: false,
     };
   }
 
-  // Option 2: Default 1-Click Download organized into Department folders inside a ZIP archive
-  const zipEntries: ZipEntryFile[] = generatedFiles.map((f) => ({
-    path: f.relativePath,
-    data: f.bytes,
+  // Case 2: Multiple researchers — package into a single clean ZIP archive
+  const zipEntries: ZipEntryFile[] = generatedFiles.map((item) => ({
+    path: `${item.department}/${item.fileName}`,
+    data: item.bytes,
   }));
-
   const zipBytes = buildZipArchive(zipEntries);
-  const dateStamp = new Date().toISOString().slice(0, 10);
-  const zipFilename = `PSU_Asingan_Research_Reports_${dateStamp}.zip`;
-  triggerBlobDownload(zipBytes, zipFilename, "application/zip");
+  const zipName = `PSU_Faculty_Research_Reports_${exportYear === "all" ? "All_Years" : exportYear}.zip`;
+  triggerBlobDownload(zipBytes, zipName, "application/zip");
 
   return {
     exportedFiles: generatedFiles.length,
     departments: Array.from(deptSet),
+    isZip: true,
   };
 }
 
@@ -780,6 +775,6 @@ export function exportResearchMatrixToExcel(options: ExcelExportOptions): void {
         : [{ name: "PSU_Asingan_Campus", department: exportDepartment === "all" ? "Campus" : exportDepartment }],
     publications,
     exportYear,
-    mode: "zip",
+    mode: "individual",
   });
 }

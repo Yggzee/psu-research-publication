@@ -139,7 +139,7 @@ export function AdminPage() {
 
   const handleRunSDGClassification = async () => {
     setIsClassifyingSDG(true);
-    toast.loading("Running Gemini Flash UN SDG classifier on campus publications...", { id: "sdg-batch" });
+    toast.loading("Running AI UN SDG classifier on campus publications...", { id: "sdg-batch" });
     try {
       const res = await apiService.batchClassifySDG();
       toast.success(`✓ Successfully auto-tagged ${res.processed} campus publications into UN SDGs!`, { id: "sdg-batch" });
@@ -688,7 +688,7 @@ export function AdminPage() {
                 onClick={handleRunSDGClassification}
                 disabled={isClassifyingSDG}
                 className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
-                title="Batch auto-tag all campus research with UN SDGs via Gemini Flash"
+                title="Batch auto-tag all campus research with UN SDGs via AI"
               >
                 <Sparkles className={`w-3.5 h-3.5 ${isClassifyingSDG ? "animate-spin" : ""}`} />
                 <span>Auto-Tag UN SDGs</span>
@@ -1255,15 +1255,15 @@ export function AdminPage() {
                 </div>
                 <div>
                   <span className="block text-[11px] font-semibold text-foreground">SDG Alignment Model</span>
-                  <span>Gemini Flash AI Multilabel Classifier (17 UN SDGs)</span>
+                  <span>AI Multilabel Classifier (17 UN SDGs)</span>
                 </div>
               </div>
             </div>
           </SectionCard>
 
           <SectionCard
-            title="Google Scholar Scraping Tokens"
-            description="Manage Apify API token rotation and monthly usage limits for resilient Google Scholar imports"
+            title="Academic Index Scraping Tokens"
+            description="Manage API token rotation and monthly usage limits for resilient academic literature imports"
           >
             <ApifyTokenManager />
           </SectionCard>

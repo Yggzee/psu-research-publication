@@ -152,7 +152,7 @@ export function Dashboard() {
         <StatCard
           label="Total Researchers"
           value={dashboardData.totalResearchers}
-          subtitle="Registered faculty roster"
+          subtitle="Registered faculty"
           icon={Users}
         />
         <StatCard
@@ -164,15 +164,30 @@ export function Dashboard() {
         <StatCard
           label="Total Citations"
           value={dashboardData.totalCitations.toLocaleString()}
-          subtitle="Academic citations accrued"
+          subtitle="Total Academic Citations"
           icon={Quote}
         />
-        <StatCard
-          label="Avg. Impact Score"
-          value={dashboardData.averageImpactScore.toFixed(1)}
-          subtitle="Citation / publication ratio"
-          icon={TrendingUp}
-        />
+        {(() => {
+          const score = dashboardData.averageImpactScore;
+          const rating =
+            score >= 15.0
+              ? { text: "Outstanding", isPositive: true, desc: "Outstanding (15+ citations/paper)" }
+              : score >= 5.0
+              ? { text: "High Impact", isPositive: true, desc: "High Impact (5+ citations/paper)" }
+              : score >= 1.0
+              ? { text: "Moderate", isPositive: true, desc: "Moderate (1-4 citations/paper)" }
+              : { text: "Developing", isPositive: false, desc: "Developing research base" };
+
+          return (
+            <StatCard
+              label="Avg. Impact Score"
+              value={score.toFixed(1)}
+              trend={{ value: rating.text, isPositive: rating.isPositive }}
+              subtitle={rating.desc}
+              icon={TrendingUp}
+            />
+          );
+        })()}
       </div>
 
       {/* 3. Unified Research Output Chart (One Card with Metric Toggle & Year Navigator) */}
@@ -186,11 +201,10 @@ export function Dashboard() {
               <button
                 type="button"
                 onClick={() => setOutputMetric("citations")}
-                className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
-                  outputMetric === "citations"
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${outputMetric === "citations"
+                  ? "bg-card text-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 <LineChartIcon className="w-3.5 h-3.5" />
                 <span>Citations</span>
@@ -198,11 +212,10 @@ export function Dashboard() {
               <button
                 type="button"
                 onClick={() => setOutputMetric("publications")}
-                className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${
-                  outputMetric === "publications"
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-2 sm:px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 ${outputMetric === "publications"
+                  ? "bg-card text-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 <BarChart3 className="w-3.5 h-3.5" />
                 <span>Publications</span>
@@ -217,11 +230,10 @@ export function Dashboard() {
                   const yrs = getLastNYears(5);
                   setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
                 }}
-                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  yearRange.end - yearRange.start === 4
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${yearRange.end - yearRange.start === 4
+                  ? "bg-card text-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 5Y
               </button>
@@ -231,11 +243,10 @@ export function Dashboard() {
                   const yrs = getLastNYears(10);
                   setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
                 }}
-                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  yearRange.end - yearRange.start === 9
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${yearRange.end - yearRange.start === 9
+                  ? "bg-card text-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 10Y
               </button>
@@ -245,11 +256,10 @@ export function Dashboard() {
                   const currentYr = new Date().getFullYear();
                   setYearRange({ start: 2015, end: currentYr });
                 }}
-                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  yearRange.start === 2015 && yearRange.end - yearRange.start > 9
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${yearRange.start === 2015 && yearRange.end - yearRange.start > 9
+                  ? "bg-card text-foreground font-semibold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+                  }`}
               >
                 All
               </button>
@@ -294,60 +304,60 @@ export function Dashboard() {
           <div className="space-y-4">
             <div className="h-64 sm:h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-              {outputMetric === "citations" ? (
-                <LineChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "rgba(255,255,255,0.06)" : "#f0f0f0"} />
-                  <XAxis dataKey="year" stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
-                  <YAxis stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: isDark ? "#18181b" : "#ffffff",
-                      border: isDark ? "1px solid #27272a" : "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                      color: isDark ? "#f4f4f5" : "#111827",
-                      boxShadow: "0 10px 15px -3px rgba(0,0,0,0.3)",
-                      fontSize: "12px",
-                    }}
-                  />
-                  {DEPARTMENTS.map((dept) => (
-                    <Line
-                      key={`line-${dept}`}
-                      type="monotone"
-                      dataKey={dept}
-                      stroke={DEPARTMENT_COLORS[dept]}
-                      strokeWidth={2}
-                      dot={{ fill: DEPARTMENT_COLORS[dept], r: 3 }}
-                      name={dept}
+                {outputMetric === "citations" ? (
+                  <LineChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "rgba(255,255,255,0.06)" : "#f0f0f0"} />
+                    <XAxis dataKey="year" stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
+                    <YAxis stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? "#18181b" : "#ffffff",
+                        border: isDark ? "1px solid #27272a" : "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        color: isDark ? "#f4f4f5" : "#111827",
+                        boxShadow: "0 10px 15px -3px rgba(0,0,0,0.3)",
+                        fontSize: "12px",
+                      }}
                     />
-                  ))}
-                </LineChart>
-              ) : (
-                <BarChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "rgba(255,255,255,0.06)" : "#f0f0f0"} />
-                  <XAxis dataKey="year" stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
-                  <YAxis stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: isDark ? "#18181b" : "#ffffff",
-                      border: isDark ? "1px solid #27272a" : "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                      color: isDark ? "#f4f4f5" : "#111827",
-                      boxShadow: "0 10px 15px -3px rgba(0,0,0,0.3)",
-                      fontSize: "12px",
-                    }}
-                  />
-                  {DEPARTMENTS.map((dept) => (
-                    <Bar
-                      key={`bar-${dept}`}
-                      dataKey={dept}
-                      fill={DEPARTMENT_COLORS[dept]}
-                      radius={[4, 4, 0, 0]}
-                      name={dept}
+                    {DEPARTMENTS.map((dept) => (
+                      <Line
+                        key={`line-${dept}`}
+                        type="monotone"
+                        dataKey={dept}
+                        stroke={DEPARTMENT_COLORS[dept]}
+                        strokeWidth={2}
+                        dot={{ fill: DEPARTMENT_COLORS[dept], r: 3 }}
+                        name={dept}
+                      />
+                    ))}
+                  </LineChart>
+                ) : (
+                  <BarChart data={chartData} margin={{ top: 10, right: 15, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "rgba(255,255,255,0.06)" : "#f0f0f0"} />
+                    <XAxis dataKey="year" stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
+                    <YAxis stroke={isDark ? "#9ca3af" : "#6b7280"} style={{ fontSize: "11px" }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? "#18181b" : "#ffffff",
+                        border: isDark ? "1px solid #27272a" : "1px solid #e5e7eb",
+                        borderRadius: "8px",
+                        color: isDark ? "#f4f4f5" : "#111827",
+                        boxShadow: "0 10px 15px -3px rgba(0,0,0,0.3)",
+                        fontSize: "12px",
+                      }}
                     />
-                  ))}
-                </BarChart>
-              )}
-            </ResponsiveContainer>
+                    {DEPARTMENTS.map((dept) => (
+                      <Bar
+                        key={`bar-${dept}`}
+                        dataKey={dept}
+                        fill={DEPARTMENT_COLORS[dept]}
+                        radius={[4, 4, 0, 0]}
+                        name={dept}
+                      />
+                    ))}
+                  </BarChart>
+                )}
+              </ResponsiveContainer>
             </div>
             <DepartmentLegend />
           </div>
@@ -363,22 +373,20 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => setTopResearchTab("overall")}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                topResearchTab === "overall"
-                  ? "bg-card text-foreground font-semibold shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${topResearchTab === "overall"
+                ? "bg-card text-foreground font-semibold shadow-2xs"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               Overall Top 5
             </button>
             <button
               type="button"
               onClick={() => setTopResearchTab("by-department")}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                topResearchTab === "by-department"
-                  ? "bg-card text-foreground font-semibold shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${topResearchTab === "by-department"
+                ? "bg-card text-foreground font-semibold shadow-2xs"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               By Department
             </button>

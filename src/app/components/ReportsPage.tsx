@@ -16,6 +16,7 @@ import {
   CheckSquare,
   Square,
   Search,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
@@ -69,12 +70,13 @@ export function ReportsPage() {
       if (stats) setDashboardData(stats);
       if (Array.isArray(researchers)) {
         setResearchersList(researchers);
+        // By default, none is selected
         setSelectedResearcherIds((prev) =>
           prev.length > 0
             ? prev.filter((id) =>
                 researchers.some((r: any) => (r.instructorId || r.id) === id)
               )
-            : researchers.map((r: any) => r.instructorId || r.id)
+            : []
         );
       }
       if (Array.isArray(pubs)) {
@@ -182,26 +184,16 @@ export function ReportsPage() {
 
   const handleDepartmentScopeChange = (dept: string) => {
     setExportDepartment(dept);
-    if (dept === "all") {
-      setSelectedResearcherIds(researchersList.map((r: any) => r.instructorId || r.id));
-    } else {
-      setSelectedResearcherIds(
-        researchersList
-          .filter((r: any) => r.department === dept)
-          .map((r: any) => r.instructorId || r.id)
-      );
-    }
   };
 
-  const handleDownload = async (mode: "zip" | "direct-folder" = "zip") => {
+  const handleDownload = async () => {
     if (selectedResearchersObjects.length === 0) {
-      toast.error("Please select at least one researcher to export.");
-      setShowResearcherPicker(true);
+      toast.error("Please select at least one faculty member to export.");
       return;
     }
 
     setIsExporting(true);
-    setExportProgressText("Preparing publications & citation sheets for selected researchers...");
+    setExportProgressText("Preparing publications & citation sheets for selected faculty...");
 
     try {
       // Find all publications belonging to the selected researchers
@@ -229,7 +221,7 @@ export function ReportsPage() {
         for (let i = 0; i < needsDetailFetch.length; i++) {
           const targetPub = needsDetailFetch[i];
           setExportProgressText(
-            `Scraping & enriching full co-authors and citing papers (${i + 1} of ${needsDetailFetch.length})...`
+            `Enriching metadata & citations (${i + 1} of ${needsDetailFetch.length})...`
           );
           try {
             const detailed: any = await apiService.getPublicationById(targetPub.id);
@@ -245,23 +237,28 @@ export function ReportsPage() {
       }
 
       setExportProgressText(
-        `Generating ${selectedResearchersObjects.length} researcher Excel file(s) organized into ${selectedDepartmentsPreview.length} department folder(s)...`
+        selectedResearchersObjects.length === 1
+          ? `Generating Excel report (.xlsx) for ${selectedResearchersObjects[0].name}...`
+          : `Packaging ${selectedResearchersObjects.length} faculty reports into ZIP...`
       );
 
       const res = await exportPerResearcherReportsByDepartment({
         selectedResearchers: selectedResearchersObjects,
         publications: publicationsList,
         exportYear,
-        mode,
       });
 
-      toast.success(
-        `Exported ${res.exportedFiles} Excel report(s) organized into department folder(s): ${res.departments.join(", ")}`
-      );
-    } catch (err: any) {
-      if (err?.name !== "AbortError") {
-        toast.error(err?.message || "Failed to export Excel reports.");
+      if (!res.isZip) {
+        toast.success(
+          `Exported Excel report (.xlsx) for ${selectedResearchersObjects[0]?.name || "selected faculty"}`
+        );
+      } else {
+        toast.success(
+          `Exported ${res.exportedFiles} faculty Excel reports in ZIP archive (${res.departments.join(", ")})`
+        );
       }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to export Excel reports.");
     } finally {
       setIsExporting(false);
       setExportProgressText(null);
@@ -280,95 +277,49 @@ export function ReportsPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* 1. Page Header */}
       <PageHeader
-        title="Institutional Research Reports"
-        description="Official PSU Asingan Publication & Citation Sheets — 1 Excel workbook per researcher organized into Department folders"
+        title="Research Reports & Exports"
+        description="Official institutional research matrices and faculty publication spreadsheets"
         actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadData}
-              disabled={isLoading}
-              className="text-xs h-9 gap-1.5"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-              <span>Refresh</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowResearcherPicker((v) => !v)}
-              className="text-xs h-9 gap-1.5 border-brand/30 text-brand hover:bg-brand-soft"
-            >
-              <Users className="h-3.5 w-3.5" />
-              <span>
-                Select Researchers ({selectedResearchersObjects.length}/{researchersList.length})
-              </span>
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition-transform ${showResearcherPicker ? "rotate-180" : ""}`}
-              />
-            </Button>
-
-            {typeof (window as any).showDirectoryPicker === "function" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDownload("direct-folder")}
-                disabled={isExporting || selectedResearchersObjects.length === 0}
-                className="text-xs h-9 gap-1.5"
-                title="Write department folders and Excel files directly into a chosen folder on your PC"
-              >
-                <FolderOpen className="h-3.5 w-3.5 text-amber-600" />
-                <span className="hidden sm:inline">Save to PC Folder</span>
-              </Button>
-            )}
-
-            <Button
-              size="sm"
-              onClick={() => handleDownload("zip")}
-              disabled={isExporting || selectedResearchersObjects.length === 0}
-              className="text-xs h-9 gap-1.5 bg-brand hover:bg-brand/90 text-white shadow-2xs"
-            >
-              {isExporting ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>{exportProgressText || "Exporting..."}</span>
-                </>
-              ) : (
-                <>
-                  <FolderArchive className="h-3.5 w-3.5" />
-                  <span>
-                    Export {selectedResearchersObjects.length}{" "}
-                    {selectedResearchersObjects.length === 1 ? "Researcher" : "Researchers"} (Dept Folders)
-                  </span>
-                </>
-              )}
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={isLoading}
+            className="text-xs h-9 gap-1.5"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </Button>
         }
       />
 
-      {/* 2. Multi-Researcher & Department Folder Export Strip */}
+      {/* 2. Faculty Research Spreadsheet Generator (Cohesive Export Control following Gestalt Proximity) */}
       <Card className="border-border/60 shadow-xs">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Filter className="w-3.5 h-3.5 text-brand shrink-0" />
-              <span className="font-semibold text-foreground">Per-Researcher Export Scope:</span>
-              <span className="text-muted-foreground">
-                <strong>{selectedResearchersObjects.length}</strong> researcher(s) selected across{" "}
-                <strong>{selectedDepartmentsPreview.length}</strong> department folder(s)
-              </span>
-              {selectedDepartmentsPreview.map((dept) => (
-                <Badge key={dept} variant="secondary" className="text-[10px] font-mono">
-                  📁 {dept}/
-                </Badge>
-              ))}
+        <CardHeader className="pb-3 border-b border-border/60">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <span>Export Faculty Research Spreadsheets</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Select faculty members to download their individual research & citation Excel files. Exporting 1 faculty member downloads 1 Excel file (.xlsx); multiple faculty are packaged in a ZIP archive.
+              </CardDescription>
             </div>
+            {selectedResearchersObjects.length > 0 && (
+              <Badge className="bg-emerald-600 text-white font-mono text-xs px-2.5 py-1 w-fit">
+                {selectedResearchersObjects.length} Faculty Selected
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
 
-            <div className="flex items-center gap-2.5 flex-wrap flex-1 sm:justify-end w-full sm:w-auto">
-              <div className="flex-1 sm:flex-initial sm:w-40">
+        <CardContent className="p-4 sm:p-5 space-y-4">
+          {/* Natural Mapping Filter & Scope Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 flex-wrap flex-1">
+              {/* Department Dropdown */}
+              <div className="w-full sm:w-44">
                 <Select value={exportDepartment} onValueChange={handleDepartmentScopeChange}>
                   <SelectTrigger className="h-8 text-xs w-full">
                     <SelectValue placeholder="All Departments" />
@@ -384,7 +335,8 @@ export function ReportsPage() {
                 </Select>
               </div>
 
-              <div className="flex-1 sm:flex-initial sm:w-32">
+              {/* Year Dropdown */}
+              <div className="w-full sm:w-32">
                 <Select value={exportYear} onValueChange={setExportYear}>
                   <SelectTrigger className="h-8 text-xs w-full">
                     <SelectValue placeholder="All Years" />
@@ -400,97 +352,141 @@ export function ReportsPage() {
                 </Select>
               </div>
 
+              {/* Faculty Name Search Filter */}
+              <div className="relative flex-1 min-w-[200px] w-full sm:w-auto">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                  placeholder="Filter faculty by name..."
+                  className="pl-8 h-8 text-xs w-full"
+                />
+              </div>
+            </div>
+
+            {/* Selection Controls (Select All / Clear) */}
+            <div className="flex items-center gap-2 shrink-0">
               <Button
-                variant="ghost"
+                type="button"
+                variant="outline"
                 size="sm"
-                onClick={() => setShowResearcherPicker((v) => !v)}
-                className="h-8 text-xs text-brand"
+                onClick={selectAllVisibleResearchers}
+                className="h-8 text-xs gap-1.5"
               >
-                {showResearcherPicker ? "Hide Researcher Selector" : "Choose Specific Researchers"}
+                <CheckSquare className="w-3.5 h-3.5 text-brand" />
+                <span>
+                  {selectedResearcherIds.length === pickerFilteredResearchers.length && pickerFilteredResearchers.length > 0
+                    ? "Deselect All"
+                    : `Select All (${pickerFilteredResearchers.length})`}
+                </span>
               </Button>
+              {selectedResearcherIds.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedResearcherIds([])}
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear Selection
+                </Button>
+              )}
             </div>
           </div>
 
-          {/* Collapsible Multi-Researcher Checkbox Selector */}
-          {showResearcherPicker && (
-            <div className="pt-3 border-t border-border/60 space-y-3 animate-in fade-in duration-150">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="relative flex-1 max-w-sm">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={pickerSearch}
-                    onChange={(e) => setPickerSearch(e.target.value)}
-                    placeholder="Filter researchers by name, ID, or department..."
-                    className="pl-8 h-8 text-xs"
-                  />
-                </div>
+          {/* Faculty Checkbox Selection Grid */}
+          {pickerFilteredResearchers.length === 0 ? (
+            <div className="p-6 text-center border border-dashed rounded-xl bg-muted/20">
+              <p className="text-xs text-muted-foreground">
+                No faculty members found for the current department or search filter.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
+              {pickerFilteredResearchers.map((r: any) => {
+                const rKey = r.instructorId || r.id;
+                const isChecked = selectedResearcherIds.includes(rKey);
+                const pubCount = publicationsList.filter((p) => matchesResearcher(p, r)).length;
+                const citCount = publicationsList
+                  .filter((p) => matchesResearcher(p, r))
+                  .reduce((sum, p) => sum + (p.citations || 0), 0);
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={selectAllVisibleResearchers}
-                    className="h-7 text-[11px]"
+                return (
+                  <div
+                    key={rKey}
+                    onClick={() => toggleResearcherSelection(rKey)}
+                    className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2.5 cursor-pointer transition-all ${
+                      isChecked
+                        ? "border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/20 text-foreground shadow-2xs"
+                        : "border-border/60 bg-background hover:bg-muted/40 text-muted-foreground"
+                    }`}
                   >
-                    Select / Deselect Visible ({pickerFilteredResearchers.length})
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedResearcherIds([])}
-                    className="h-7 text-[11px] text-muted-foreground"
-                  >
-                    Clear All
-                  </Button>
-                </div>
-              </div>
-
-              {pickerFilteredResearchers.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-3 text-center">
-                  No registered researchers match the current filter.
-                </p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto pr-1">
-                  {pickerFilteredResearchers.map((r: any) => {
-                    const rKey = r.instructorId || r.id;
-                    const isChecked = selectedResearcherIds.includes(rKey);
-                    const pubCount = publicationsList.filter((p) => matchesResearcher(p, r)).length;
-
-                    return (
-                      <div
-                        key={rKey}
-                        onClick={() => toggleResearcherSelection(rKey)}
-                        className={`p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 cursor-pointer transition-all ${
-                          isChecked
-                            ? "border-brand bg-brand/5 text-foreground"
-                            : "border-border/60 bg-background hover:bg-muted/40 text-muted-foreground"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          {isChecked ? (
-                            <CheckSquare className="w-4 h-4 text-brand shrink-0" />
-                          ) : (
-                            <Square className="w-4 h-4 text-muted-foreground/60 shrink-0" />
-                          )}
-                          <div className="min-w-0">
-                            <p className="font-semibold text-foreground truncate">{r.name}</p>
-                            <p className="text-[10px] text-muted-foreground font-mono truncate">
-                              📁 {r.department || "Unassigned"}/{r.name.replace(/\s+/g, "_")}.xlsx
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-[10px] font-mono shrink-0">
-                          {pubCount} {pubCount === 1 ? "pub" : "pubs"}
-                        </Badge>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {isChecked ? (
+                        <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <Square className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className={`font-semibold truncate ${isChecked ? "text-foreground" : "text-foreground/90"}`}>
+                          {r.name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                          <span className="font-medium text-foreground/80">{r.department || "Faculty"}</span>
+                          <span>•</span>
+                          <span>{pubCount} papers</span>
+                          <span>•</span>
+                          <span>{citCount} citations</span>
+                        </p>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
+
+          {/* Action Bar - Proximity Principle: Positioned directly beneath what it acts on */}
+          <div className="pt-3 border-t border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              {selectedResearchersObjects.length === 0 ? (
+                <span>No faculty selected. Select individual faculty checkboxes above or click "Select All".</span>
+              ) : selectedResearchersObjects.length === 1 ? (
+                <span>Ready to download <strong>1 single Excel file (.xlsx)</strong> for {selectedResearchersObjects[0]?.name}.</span>
+              ) : (
+                <span>Ready to package <strong>{selectedResearchersObjects.length} Excel files</strong> into a single ZIP archive.</span>
+              )}
+            </div>
+
+            <Button
+              onClick={handleDownload}
+              disabled={isExporting || selectedResearchersObjects.length === 0}
+              className={`h-10 px-6 text-xs sm:text-sm font-semibold transition-all shadow-sm ${
+                selectedResearchersObjects.length === 0
+                  ? "bg-muted text-muted-foreground cursor-not-allowed"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
+              }`}
+            >
+              {isExporting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  <span>{exportProgressText || "Exporting..."}</span>
+                </>
+              ) : selectedResearchersObjects.length === 0 ? (
+                <span>Select at least 1 faculty member to export</span>
+              ) : selectedResearchersObjects.length === 1 ? (
+                <>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  <span>Export {selectedResearchersObjects[0]?.name}'s Excel Report (.xlsx)</span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  <span>Export {selectedResearchersObjects.length} Faculty Excel Reports (.zip)</span>
+                </>
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

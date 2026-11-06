@@ -47,7 +47,6 @@ export function SearchEngine() {
   const [searchSource, setSearchSource] = useState<"cache" | "direct" | "apify" | "none" | null>(null);
   const [sourceLabel, setSourceLabel] = useState<string>("");
   const [showTokenManager, setShowTokenManager] = useState(false);
-  const [searchMode, setSearchMode] = useState<"smart" | "author">("smart");
   const [facultyNames, setFacultyNames] = useState<string[]>([]);
   const [registeredResearchers, setRegisteredResearchers] = useState<ManagedResearcher[]>([]);
   const [assignedResearcherMap, setAssignedResearcherMap] = useState<Record<string, string>>({});
@@ -174,7 +173,7 @@ export function SearchEngine() {
     setHasMore(false);
     setSearchResults([]);
 
-    const finalQuery = searchMode === "author" && !q.toLowerCase().startsWith("author:") ? `author:"${q}"` : q;
+    const finalQuery = q;
 
     try {
       const response = await apiService.searchGoogleScholar(finalQuery, { page: 0 });
@@ -191,7 +190,7 @@ export function SearchEngine() {
       setIsFromCache(Boolean(response.fromCache));
       setSearchSource(response.searchSource || "direct");
       setSourceLabel(response.sourceLabel || "");
-      setHasMore(Boolean(response.hasMore ?? (response.results.length === 10)));
+      setHasMore(Boolean(response.hasMore ?? (response.results.length >= 5)));
       setCurrentPage(0);
       setLastUsedToken(Boolean(response.usedToken));
 
@@ -225,9 +224,7 @@ export function SearchEngine() {
     setShowMoreConfirmModal(false);
 
     const nextPage = currentPage + 1;
-    const finalQuery = searchMode === "author" && !searchQuery.toLowerCase().startsWith("author:")
-      ? `author:"${searchQuery}"`
-      : searchQuery;
+    const finalQuery = searchQuery;
 
     try {
       const response = await apiService.searchGoogleScholar(finalQuery, { page: nextPage });
@@ -235,40 +232,46 @@ export function SearchEngine() {
       if (response.requiresApify) {
         setRequiresApify(true);
         setCaptchaDetected(true);
-        toast.error("Google Scholar challenged direct scraping. Connect an Apify token to bypass.");
+        toast.error("Direct search challenged by academic index. Connect an Apify token to bypass.");
         setShowTokenManager(true);
         return;
       }
 
       if (response.results.length === 0) {
         setHasMore(false);
-        toast.info("No additional papers found on Google Scholar for this query.");
+        toast.info("No additional papers found for this query.");
         return;
       }
 
       // Filter out any duplicates already present
       const existingIds = new Set(searchResults.map((r) => r.id));
-      const existingTitles = new Set(searchResults.map((r) => r.title.toLowerCase().trim()));
+      const existingTitles = new Set(searchResults.map((r) => normalizeTitle(r.title)));
       const uniqueNewResults = response.results.filter(
-        (r) => !existingIds.has(r.id) && !existingTitles.has(r.title.toLowerCase().trim())
+        (r) => !existingIds.has(r.id) && !existingTitles.has(normalizeTitle(r.title))
       );
 
-      const itemsToAdd = uniqueNewResults.length > 0 ? uniqueNewResults : response.results;
-      setSearchResults((prev) => [...prev, ...itemsToAdd]);
+      if (uniqueNewResults.length === 0) {
+        setCurrentPage(nextPage);
+        setHasMore(false);
+        toast.info("All available papers for this search have now been loaded.");
+        return;
+      }
+
+      setSearchResults((prev) => [...prev, ...uniqueNewResults]);
       setCurrentPage(nextPage);
-      setHasMore(Boolean(response.hasMore ?? (response.results.length === 10)));
+      setHasMore(Boolean(response.hasMore));
       setLastUsedToken(Boolean(response.usedToken));
       setSearchSource(response.searchSource || "direct");
       setSourceLabel(response.sourceLabel || "");
 
       if (response.usedToken) {
         toast.info(
-          `✓ Loaded ${itemsToAdd.length} more papers via Apify Scraper Token (${response.sourceLabel}).`,
+          `✓ Loaded ${uniqueNewResults.length} more papers via Apify Scraper Token (${response.sourceLabel}).`,
           { icon: "🛡️" }
         );
       } else {
         toast.success(
-          `✓ Loaded ${itemsToAdd.length} more papers directly from Google Scholar (0 scraper tokens used, $0.00).`,
+          `✓ Loaded ${uniqueNewResults.length} more papers directly from academic index (0 scraper tokens used, $0.00).`,
           { icon: "⚡" }
         );
       }
@@ -410,8 +413,8 @@ export function SearchEngine() {
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       {/* 1. Page Header */}
       <PageHeader
-        title="Google Scholar Search"
-        description="Query live academic literature with automatic SQLite caching and registered PSU faculty author matching"
+        title="Search"
+        description="Find research papers, citations, and authors across academic journals and university repositories to explore institutional works and discover new literature."
         actions={
           <div className="flex items-center gap-2">
             {tokenUsage ? (
@@ -443,48 +446,13 @@ export function SearchEngine() {
       {/* 2. SEARCH BAR FIRST (Primary User Action) */}
       <Card className="bg-card border-border/70 shadow-2xs">
         <CardContent className="p-3.5 sm:p-5 space-y-3">
-          {/* Mode Selector */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Search Mode:</span>
-            <div className="grid grid-cols-2 sm:flex sm:items-center p-0.5 rounded-lg bg-muted/50 border border-border/60 text-xs">
-              <button
-                type="button"
-                onClick={() => setSearchMode("smart")}
-                className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer text-center ${
-                  searchMode === "smart"
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <span className="sm:hidden">Smart Search</span>
-                <span className="hidden sm:inline">Smart Search (Topic & Author)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchMode("author")}
-                className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer text-center ${
-                  searchMode === "author"
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <span className="sm:hidden">Author Only</span>
-                <span className="hidden sm:inline">Author Filter (author:...)</span>
-              </button>
-            </div>
-          </div>
-
           {/* Search Form */}
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder={
-                  searchMode === "author"
-                    ? "Enter author name (e.g. Julius Oscar Moreno)"
-                    : "Search researcher, paper title, or topic..."
-                }
+                placeholder="Search paper title, author name, institution (e.g. Pangasinan State University), or topic..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 h-9 sm:h-10 text-xs sm:text-sm bg-background"
@@ -518,25 +486,6 @@ export function SearchEngine() {
               )}
             </Button>
           </form>
-
-          {/* Quick Faculty Search Chips */}
-          {facultyNames.length > 0 && (
-            <div className="pt-1 flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
-              <span className="flex items-center gap-1 shrink-0 text-[11px]">
-                <User className="w-3 h-3 text-brand" /> Quick author search:
-              </span>
-              {facultyNames.slice(0, 6).map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => executeSearch(name)}
-                  className="text-[11px] bg-muted/60 hover:bg-brand-soft hover:text-brand hover:border-brand/40 border border-border/70 px-2.5 py-0.5 rounded-full transition-colors font-medium text-foreground"
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -544,7 +493,7 @@ export function SearchEngine() {
       {requiresApify && searchResults.length === 0 && !isSearching && (
         <Notice
           variant="warning"
-          title="Google Scholar Rate Limit / Anti-Bot Lock"
+          title="Literature Search Verification Required"
           action={
             <Button
               size="sm"
@@ -556,20 +505,20 @@ export function SearchEngine() {
             </Button>
           }
         >
-          Google Scholar has challenged direct queries. Connect a free Apify token ($5 free monthly credits) to activate the proxy failover shield and continue searching.
+          Direct search has encountered an automated query verification challenge. Connect a free backup token ($5 free monthly credits) to activate the proxy failover shield and continue searching.
         </Notice>
       )}
 
       {isSearching && (
-        <Notice variant="info" title="Searching Live Google Scholar...">
-          Querying official Google Scholar results directly with live ranking and relevance.
+        <Notice variant="info" title="Searching Academic Literature...">
+          Searching academic publications and university repositories with live ranking and relevance.
         </Notice>
       )}
 
       {hasSearched && !isSearching && searchResults.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-muted-foreground px-1 gap-2">
           <span>
-            Showing <strong>{searchResults.length}</strong> official Google Scholar papers for "{searchQuery}"
+            Showing <strong>{searchResults.length}</strong> academic publications for "{searchQuery}"
           </span>
           <div className="flex items-center gap-2">
             {searchSource && (
@@ -577,12 +526,12 @@ export function SearchEngine() {
                 {searchSource === "direct" ? (
                   <>
                     <Zap className="w-3.5 h-3.5 text-warning" />
-                    <span>Live Google Scholar (0 tokens used)</span>
+                    <span>Live Academic Index (0 tokens used)</span>
                   </>
                 ) : searchSource === "apify" ? (
                   <>
                     <Shield className="w-3.5 h-3.5 text-brand" />
-                    <span>Apify Scraper Token Failover</span>
+                    <span>Backup Scraper Token Failover</span>
                   </>
                 ) : (
                   <>
@@ -844,7 +793,7 @@ export function SearchEngine() {
                   Showing top {searchResults.length} papers
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  Google Scholar has more results for this query. Load 10 more papers with official ranking.
+                  The academic index has more results for this query. Load 10 more papers with official ranking.
                 </p>
               </div>
 
@@ -869,9 +818,9 @@ export function SearchEngine() {
             </div>
           )}
 
-          {!hasMore && searchResults.length >= 10 && (
+          {!hasMore && searchResults.length > 0 && (
             <p className="text-center text-xs text-muted-foreground py-3">
-              ✓ All available Google Scholar results for this search have been loaded ({searchResults.length} papers total).
+              ✓ All available results for this search have been loaded ({searchResults.length} papers total).
             </p>
           )}
         </div>
@@ -897,7 +846,7 @@ export function SearchEngine() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">Scraper Token Usage Feedback</h3>
-                  <p className="text-xs text-muted-foreground">Confirm loading next batch of Google Scholar papers</p>
+                  <p className="text-xs text-muted-foreground">Confirm loading next batch of academic papers</p>
                 </div>
               </div>
               <Button
@@ -936,14 +885,14 @@ export function SearchEngine() {
               <div className="p-3 rounded-xl border border-success/30 bg-success-soft/30 space-y-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-success flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4" /> Primary: Live Google Scholar Scraper
+                    <CheckCircle2 className="w-4 h-4" /> Primary: Live Academic Scraper
                   </span>
                   <Badge variant="outline" className="text-[10px] bg-success-soft text-success border-success/30 font-bold">
                     0 Tokens ($0.00)
                   </Badge>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Queries Google Scholar directly with live official ranking. Will not consume any scraper tokens or quota under normal conditions.
+                  Queries academic literature indexes directly with live ranking. Does not consume any scraper tokens under normal operation.
                 </p>
               </div>
 
@@ -965,8 +914,8 @@ export function SearchEngine() {
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   {tokenUsage
-                    ? `Only activated if Google Scholar challenges with an anti-bot CAPTCHA. Uses token "${tokenUsage.tokenName}" (${tokenUsage.usedPercentage}% used).`
-                    : "No Apify fallback token configured. If Google Scholar presents a CAPTCHA, direct scraping will prompt to connect a token."}
+                    ? `Only activated if the academic literature index presents an automated verification challenge. Uses token "${tokenUsage.tokenName}" (${tokenUsage.usedPercentage}% used).`
+                    : "No backup token configured. If the academic index presents a verification challenge, direct search will prompt to connect a token."}
                 </p>
               </div>
             </div>
@@ -1036,7 +985,7 @@ export function SearchEngine() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">Scraper Token Management</h3>
-                  <p className="text-xs text-muted-foreground">Manage Apify scraping tokens for Google Scholar fallback queries</p>
+                  <p className="text-xs text-muted-foreground">Manage backup scraping tokens for literature queries</p>
                 </div>
               </div>
               <Button

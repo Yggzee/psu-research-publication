@@ -63,7 +63,7 @@ export function ResearcherProfile() {
     return (
       <div className="space-y-6 max-w-5xl mx-auto">
         <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/researchers")} className="text-xs gap-1.5">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Faculty Roster
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Faculty Researchers
         </Button>
         <Card className="border-border/60">
           <CardContent className="p-12 text-center text-muted-foreground text-xs">
@@ -78,7 +78,7 @@ export function ResearcherProfile() {
     return (
       <div className="space-y-6 max-w-5xl mx-auto">
         <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/researchers")} className="text-xs gap-1.5">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Faculty Roster
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Faculty Researchers
         </Button>
         <EmptyState
           icon={User}
@@ -108,7 +108,7 @@ export function ResearcherProfile() {
               className="text-xs h-8 gap-1.5"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Roster</span>
+              <span>Back to Researchers</span>
             </Button>
             {researcher.scholarUrl && (
               <Button size="sm" asChild className="text-xs h-8 gap-1.5 bg-brand hover:bg-brand/90 text-white">
@@ -268,16 +268,14 @@ export function ResearcherProfile() {
                           categorizeAuthors(pub.authors).map((cat, aIdx) => (
                             <span
                               key={aIdx}
-                              className={`text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1 ${
-                                cat.isPsu
-                                  ? "bg-success-soft text-success border border-success-border"
-                                  : "bg-muted text-muted-foreground border border-border"
-                              }`}
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-1 ${cat.isPsu
+                                ? "bg-success-soft text-success border border-success-border"
+                                : "bg-muted text-muted-foreground border border-border"
+                                }`}
                             >
                               <span
-                                className={`w-1 h-1 rounded-full ${
-                                  cat.isPsu ? "bg-success" : "bg-muted-foreground"
-                                }`}
+                                className={`w-1 h-1 rounded-full ${cat.isPsu ? "bg-success" : "bg-muted-foreground"
+                                  }`}
                               />
                               {cat.name}
                             </span>

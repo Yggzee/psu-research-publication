@@ -30,6 +30,8 @@ export const db = new DatabaseSync(dbPath);
 db.exec('PRAGMA foreign_keys = ON;');
 db.exec('PRAGMA journal_mode = WAL;');
 
+let inBulkTransaction = false;
+
 // Wrap db.prepare to replicate write queries to Turso Cloud SQLite automatically
 const originalPrepare = db.prepare.bind(db);
 db.prepare = (sql) => {
@@ -37,7 +39,7 @@ db.prepare = (sql) => {
   const originalRun = statement.run.bind(statement);
   statement.run = (...args) => {
     const result = originalRun(...args);
-    if (isTursoConfigured && /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql)) {
+    if (isTursoConfigured && !inBulkTransaction && /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql)) {
       executeOnTurso(sql, args).catch((err) => {
         console.warn('[Turso Background Replicate Error]:', err.message);
       });
@@ -46,6 +48,27 @@ db.prepare = (sql) => {
   };
   return statement;
 };
+
+/**
+ * Execute a synchronous callback inside a single atomic SQLite transaction.
+ * Makes inserting 1,000 to 10,000+ rows execute in milliseconds instead of seconds.
+ */
+export function runInTransaction(fn) {
+  db.exec('BEGIN IMMEDIATE;');
+  inBulkTransaction = true;
+  try {
+    const res = fn();
+    db.exec('COMMIT;');
+    return res;
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK;');
+    } catch {}
+    throw err;
+  } finally {
+    inBulkTransaction = false;
+  }
+}
 
 /**
  * Initialize Database Tables
@@ -201,6 +224,17 @@ export function initDatabase() {
   try { db.exec(`ALTER TABLE citing_papers ADD COLUMN volume_issue TEXT`); } catch {}
   try { db.exec(`ALTER TABLE citing_papers ADD COLUMN quarter TEXT`); } catch {}
   try { db.exec(`ALTER TABLE citing_papers ADD COLUMN doi_issn TEXT`); } catch {}
+
+  // High-performance indexes for 1,000–10,000+ citation scale
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_citing_papers_pub_id ON citing_papers(publication_id);
+      CREATE INDEX IF NOT EXISTS idx_citing_papers_pub_year ON citing_papers(publication_id, year);
+      CREATE INDEX IF NOT EXISTS idx_citation_trends_pub_id ON citation_trends(publication_id);
+      CREATE INDEX IF NOT EXISTS idx_publications_owner_id ON publications(owner_id);
+      CREATE INDEX IF NOT EXISTS idx_publications_approval ON publications(approval_status, year DESC);
+    `);
+  } catch {}
 
   // 7. Apify Scraper Tokens Table (Support for multiple tokens, switching, and auto-failover)
   db.exec(`

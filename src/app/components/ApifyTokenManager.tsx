@@ -153,7 +153,7 @@ export function ApifyTokenManager({ onTokenChanged, compact = false }: ApifyToke
                   )}
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Powers live Google Scholar scraping with automated token rotation and failover
+                  Powers live academic literature scraping with automated token rotation and failover
                 </CardDescription>
               </div>
             </div>
@@ -307,7 +307,7 @@ export function ApifyTokenManager({ onTokenChanged, compact = false }: ApifyToke
               <Zap className="w-8 h-8 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
               <h5 className="text-sm font-semibold text-gray-800 dark:text-gray-200">No Apify tokens configured</h5>
               <p className="text-xs text-gray-600 dark:text-gray-400 max-w-md mx-auto mt-1 mb-3">
-                Connect a free Apify API token to start live scraping Google Scholar publications. Apify provides $5 free monthly usage for scraping.
+                Connect a free Apify API token to start live scraping academic publications. Apify provides $5 free monthly usage for scraping.
               </p>
               <Button
                 size="sm"

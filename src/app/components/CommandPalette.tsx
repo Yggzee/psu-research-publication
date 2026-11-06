@@ -65,7 +65,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       toast.error("Access Denied: Only administrators can run batch classification.");
       return;
     }
-    toast.loading("Running Gemini Flash UN SDG Classifier on campus research...", { id: "batch-sdg" });
+    toast.loading("Running AI UN SDG Classifier on campus research...", { id: "batch-sdg" });
     try {
       const res = await apiService.batchClassifySDG();
       toast.success(`Successfully classified ${res.processed} publications into UN SDGs!`, { id: "batch-sdg" });
@@ -114,7 +114,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               className="cursor-pointer"
             >
               <Sparkles className="mr-2 h-4 w-4 text-amber-500" />
-              <span>Batch Auto-Tag All Publications with UN SDGs (Gemini Flash)</span>
+              <span>Batch Auto-Tag All Publications with UN SDGs (AI)</span>
             </CommandItem>
           )}
         </CommandGroup>

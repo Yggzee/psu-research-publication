@@ -19,6 +19,9 @@ import {
   Award,
   ExternalLink,
   Quote,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -33,6 +36,27 @@ import { toast } from "sonner";
 
 type SortOption = "impact-high" | "impact-low" | "citations-high" | "citations-low" | "year-new" | "year-old";
 type ViewMode = "table" | "cards";
+type TableSortColumn = "title" | "researcher" | "authors" | "journal" | "year" | "citations" | "sdg";
+type TableSortDirection = "asc" | "desc";
+
+function extractSdgNum(tags: any): number {
+  if (!tags) return 999;
+  const list = Array.isArray(tags)
+    ? tags
+    : typeof tags === "string"
+    ? (() => {
+        try {
+          const p = JSON.parse(tags);
+          return Array.isArray(p) ? p : [tags];
+        } catch {
+          return [tags];
+        }
+      })()
+    : [];
+  if (!list.length) return 999;
+  const m = String(list[0]).match(/\bSDG\s*(\d+)/i);
+  return m ? parseInt(m[1], 10) : 999;
+}
 
 export function PublicationsPage() {
   const navigate = useNavigate();
@@ -43,6 +67,8 @@ export function PublicationsPage() {
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [selectedResearcher, setSelectedResearcher] = useState<string>("all");
   const [sortBy, setSortBy] = useState<SortOption>("year-new");
+  const [tableSortColumn, setTableSortColumn] = useState<TableSortColumn>("year");
+  const [tableSortDirection, setTableSortDirection] = useState<TableSortDirection>("desc");
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "cards" : "table"
   );
@@ -145,26 +171,70 @@ export function PublicationsPage() {
     });
 
     const sorted = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case "impact-high":
-          return ((b as any).impact_score || b.impactScore || 0) - ((a as any).impact_score || a.impactScore || 0);
-        case "impact-low":
-          return ((a as any).impact_score || a.impactScore || 0) - ((b as any).impact_score || b.impactScore || 0);
-        case "citations-high":
-          return (b.citations || 0) - (a.citations || 0);
-        case "citations-low":
-          return (a.citations || 0) - (b.citations || 0);
-        case "year-new":
-          return b.year - a.year;
-        case "year-old":
-          return a.year - b.year;
+      let res = 0;
+      switch (tableSortColumn) {
+        case "title":
+          res = (a.title || "").localeCompare(b.title || "");
+          break;
+        case "researcher": {
+          const aRes = a.owner_name || a.ownerName || "";
+          const bRes = b.owner_name || b.ownerName || "";
+          res = aRes.localeCompare(bRes);
+          break;
+        }
+        case "authors": {
+          const aAuth = Array.isArray(a.authors) ? a.authors.join(", ") : a.authors || "";
+          const bAuth = Array.isArray(b.authors) ? b.authors.join(", ") : b.authors || "";
+          res = aAuth.localeCompare(bAuth);
+          break;
+        }
+        case "journal":
+          res = (a.journal || "").localeCompare(b.journal || "");
+          break;
+        case "year":
+          res = (a.year || 0) - (b.year || 0);
+          break;
+        case "citations":
+          res = (a.citations || 0) - (b.citations || 0);
+          break;
+        case "sdg": {
+          const aNum = extractSdgNum(a.sdg_tags);
+          const bNum = extractSdgNum(b.sdg_tags);
+          if (aNum === 999 && bNum === 999) return 0;
+          if (aNum === 999) return 1;
+          if (bNum === 999) return -1;
+          return tableSortDirection === "asc" ? aNum - bNum : bNum - aNum;
+        }
         default:
-          return 0;
+          res = 0;
       }
+      return tableSortDirection === "asc" ? res : -res;
     });
 
     return sorted;
-  }, [allPublications, researchersList, searchQuery, selectedYear, selectedResearcher, sortBy]);
+  }, [allPublications, researchersList, searchQuery, selectedYear, selectedResearcher, tableSortColumn, tableSortDirection]);
+
+  // Handle table header click sorting
+  const handleTableSort = (col: TableSortColumn) => {
+    if (tableSortColumn === col) {
+      setTableSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setTableSortColumn(col);
+      // Natural defaults: numbers (year, citations) default to desc, names/titles/sdg default to asc
+      setTableSortDirection(col === "year" || col === "citations" ? "desc" : "asc");
+    }
+  };
+
+  const renderSortIcon = (col: TableSortColumn) => {
+    if (tableSortColumn !== col) {
+      return <ArrowUpDown className="w-3 h-3 text-muted-foreground/40 shrink-0" />;
+    }
+    return tableSortDirection === "asc" ? (
+      <ArrowUp className="w-3 h-3 text-brand shrink-0" />
+    ) : (
+      <ArrowDown className="w-3 h-3 text-brand shrink-0" />
+    );
+  };
 
   // Selection handlers
   const toggleSelect = (id: string, e: React.MouseEvent) => {
@@ -198,7 +268,7 @@ export function PublicationsPage() {
   // Batch Auto-Tag
   const handleBatchAutoTag = async () => {
     setIsBatchRunning(true);
-    toast.loading("Running Gemini Flash Auto-Tagging on selected papers...", { id: "batch-tag" });
+    toast.loading("Running AI Auto-Tagging on selected papers...", { id: "batch-tag" });
     try {
       const res = await apiService.batchClassifySDG();
       toast.success(`Successfully analyzed and classified ${res.processed} papers!`, { id: "batch-tag" });
@@ -251,7 +321,7 @@ export function PublicationsPage() {
               onClick={handleBatchAutoTag}
               disabled={isBatchRunning}
               className="text-xs h-8 gap-1.5 text-ai hover:bg-ai-soft hover:border-ai-border"
-              title="Classify unmapped publications into UN SDGs using Gemini Flash"
+              title="Classify unmapped publications into UN SDGs using AI"
             >
               <Sparkles className={`h-3.5 w-3.5 ${isBatchRunning ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Auto-Tag SDGs</span>
@@ -340,16 +410,48 @@ export function PublicationsPage() {
 
             {/* Sort Filter */}
             <div className="md:col-span-3">
-              <Select value={sortBy} onValueChange={(val) => setSortBy(val as SortOption)}>
+              <Select
+                value={
+                  tableSortColumn === "year" && tableSortDirection === "desc"
+                    ? "year-new"
+                    : tableSortColumn === "year" && tableSortDirection === "asc"
+                    ? "year-old"
+                    : tableSortColumn === "citations" && tableSortDirection === "desc"
+                    ? "citations-high"
+                    : tableSortColumn === "citations" && tableSortDirection === "asc"
+                    ? "citations-low"
+                    : tableSortColumn === "title" && tableSortDirection === "asc"
+                    ? "title-az"
+                    : "custom"
+                }
+                onValueChange={(val) => {
+                  if (val === "year-new") {
+                    setTableSortColumn("year");
+                    setTableSortDirection("desc");
+                  } else if (val === "year-old") {
+                    setTableSortColumn("year");
+                    setTableSortDirection("asc");
+                  } else if (val === "citations-high") {
+                    setTableSortColumn("citations");
+                    setTableSortDirection("desc");
+                  } else if (val === "citations-low") {
+                    setTableSortColumn("citations");
+                    setTableSortDirection("asc");
+                  } else if (val === "title-az") {
+                    setTableSortColumn("title");
+                    setTableSortDirection("asc");
+                  }
+                }}
+              >
                 <SelectTrigger className="h-10 text-xs">
-                  <SelectValue />
+                  <SelectValue placeholder="Sort Publications" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="year-new">Newest First</SelectItem>
-                  <SelectItem value="year-old">Oldest First</SelectItem>
-                  <SelectItem value="citations-high">Most Citations</SelectItem>
-                  <SelectItem value="citations-low">Least Citations</SelectItem>
-                  <SelectItem value="impact-high">Highest Impact Score</SelectItem>
+                  <SelectItem value="year-new">Newest Year First</SelectItem>
+                  <SelectItem value="year-old">Oldest Year First</SelectItem>
+                  <SelectItem value="citations-high">Most Citations First</SelectItem>
+                  <SelectItem value="citations-low">Least Citations First</SelectItem>
+                  <SelectItem value="title-az">Title (A to Z)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -362,7 +464,7 @@ export function PublicationsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={selectAll}
-            className="flex items-center gap-1.5 text-foreground hover:text-blue-600 font-medium transition-colors"
+            className="flex items-center gap-1.5 text-foreground hover:text-blue-600 font-medium transition-colors cursor-pointer"
           >
             {selectedIds.length > 0 && selectedIds.length === filteredAndSortedPublications.length ? (
               <CheckSquare className="h-4 w-4 text-blue-600" />
@@ -393,7 +495,7 @@ export function PublicationsPage() {
         </div>
 
         <p className="text-[11px]">
-          Tip: Click any row to open the <strong>Research Inspector Drawer</strong>
+          Tip: Click any column header to sort. Click any row to inspect details.
         </p>
       </div>
 
@@ -405,18 +507,76 @@ export function PublicationsPage() {
               <thead className="bg-muted/40 border-b border-border/80 text-muted-foreground uppercase tracking-wider text-[11px] font-semibold">
                 <tr>
                   <th className="p-3.5 w-10 text-center"></th>
-                  <th className="p-3.5 min-w-[280px]">Publication Title</th>
-                  <th className="p-3.5 min-w-[160px]">Authors</th>
-                  <th className="p-3.5 min-w-[140px]">Journal / Index</th>
-                  <th className="p-3.5 w-20 text-center">Year</th>
-                  <th className="p-3.5 w-24 text-center">Citations</th>
-                  <th className="p-3.5 min-w-[120px]">UN SDG Goal</th>
+                  <th
+                    className="p-3.5 min-w-[260px] cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleTableSort("title")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Publication Title</span>
+                      {renderSortIcon("title")}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 min-w-[170px] cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleTableSort("researcher")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Registered Researcher</span>
+                      {renderSortIcon("researcher")}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 min-w-[160px] cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleTableSort("authors")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Authors</span>
+                      {renderSortIcon("authors")}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 min-w-[140px] cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleTableSort("journal")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Journal / Index</span>
+                      {renderSortIcon("journal")}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 w-24 text-center cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleTableSort("year")}
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span>Year</span>
+                      {renderSortIcon("year")}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 w-28 text-center cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleTableSort("citations")}
+                  >
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span>Citations</span>
+                      {renderSortIcon("citations")}
+                    </div>
+                  </th>
+                  <th
+                    className="p-3.5 min-w-[130px] cursor-pointer select-none hover:text-foreground transition-colors"
+                    onClick={() => handleTableSort("sdg")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>UN SDG Goal</span>
+                      {renderSortIcon("sdg")}
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {filteredAndSortedPublications.map((pub) => {
                   const isSelected = selectedIds.includes(pub.id);
                   const authorsStr = Array.isArray(pub.authors) ? pub.authors.join(", ") : pub.authors;
+                  const registeredName = pub.owner_name || pub.ownerName;
                   const sdgList: string[] = Array.isArray(pub.sdg_tags)
                     ? pub.sdg_tags
                     : typeof pub.sdg_tags === "string"
@@ -447,11 +607,15 @@ export function PublicationsPage() {
                       </td>
                       <td className="p-3.5 font-semibold text-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                         <div className="line-clamp-2 leading-snug">{pub.title}</div>
-                        {(pub.owner_name || pub.ownerName) && (
-                          <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.2 rounded">
-                            <User className="w-2.5 h-2.5" />
-                            <span>Assigned: {pub.owner_name || pub.ownerName}</span>
+                      </td>
+                      <td className="p-3.5">
+                        {registeredName ? (
+                          <div className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2.5 py-1 rounded-full">
+                            <User className="w-3 h-3 text-blue-600 shrink-0" />
+                            <span className="truncate max-w-[130px]" title={registeredName}>{registeredName}</span>
                           </div>
+                        ) : (
+                          <span className="text-muted-foreground/60 text-[11px] italic">Unassigned</span>
                         )}
                       </td>
                       <td className="p-3.5 text-muted-foreground">
@@ -541,7 +705,7 @@ export function PublicationsPage() {
                       {pub.journal || "PSU Asingan Archive"}
                     </span>
                     <Badge variant="outline" className="text-[10px] font-mono">
-                      {pub.journal_indexing || "Google Scholar"}
+                      {pub.journal_indexing || "Refereed"}
                     </Badge>
                   </div>
                 </CardContent>
@@ -556,7 +720,7 @@ export function PublicationsPage() {
         <EmptyState
           icon={FileText}
           title="No publications matched your search"
-          description='Try adjusting your search query, selecting "All Publication Years", or search for new records from Google Scholar.'
+          description='Try adjusting your search query, selecting "All Publication Years", or searching for new literature records.'
           actionLabel="Clear Filters"
           onAction={() => {
             setSearchQuery("");
@@ -592,7 +756,7 @@ export function PublicationsPage() {
             className="bg-purple-600 hover:bg-purple-700 text-white text-xs h-8 gap-1.5"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            Batch Tag SDGs (Gemini)
+            Batch Tag SDGs (AI)
           </Button>
 
           <Button

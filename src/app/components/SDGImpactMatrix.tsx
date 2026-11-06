@@ -111,7 +111,7 @@ export function SDGImpactMatrix() {
 
   const handleBatchClassify = async () => {
     setIsBatchRunning(true);
-    toast.loading("Re-analyzing campus publications with Gemini Flash...", { id: "sdg-batch" });
+    toast.loading("Re-analyzing campus publications with AI SDG Classifier...", { id: "sdg-batch" });
     try {
       const res = await apiService.batchClassifySDG();
       toast.success(`Successfully classified ${res.processed} publications into UN SDGs!`, { id: "sdg-batch" });
@@ -250,7 +250,7 @@ export function SDGImpactMatrix() {
               className="text-xs h-8 gap-1.5 bg-ai hover:bg-ai/90 text-white shadow-2xs"
             >
               <Sparkles className={`h-3.5 w-3.5 ${isBatchRunning ? "animate-spin" : ""}`} />
-              <span>{isBatchRunning ? "Classifying..." : "Auto-Tag with Gemini"}</span>
+              <span>{isBatchRunning ? "Classifying..." : "Auto-Tag with AI"}</span>
             </Button>
           </div>
         }
@@ -407,7 +407,7 @@ export function SDGImpactMatrix() {
                   <span>17 UN Sustainable Goals Directory</span>
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Select any goal to inspect publication evidence, citations, and Gemini AI alignment rationales
+                  Select any goal to inspect publication evidence, citations, and AI alignment rationales
                 </CardDescription>
               </div>
 
@@ -537,7 +537,7 @@ export function SDGImpactMatrix() {
                     </Badge>
                   </div>
                   <CardDescription className="text-xs mt-0.5">
-                    Faculty evidence, citations, and Gemini AI alignment rationale
+                    Faculty evidence, citations, and AI alignment rationale
                   </CardDescription>
                 </div>
               </div>

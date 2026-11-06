@@ -100,7 +100,7 @@ export function InstructorPublicationsPage() {
     };
 
     try {
-      toast.loading("Saving publication & analyzing UN SDGs with Gemini Flash...", { id: "save-pub" });
+      toast.loading("Saving publication & analyzing UN SDGs with AI...", { id: "save-pub" });
       await apiService.createPublication(newRecord);
 
       // Auto-classify with Gemini Flash in background

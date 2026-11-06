@@ -266,7 +266,7 @@ export function ImpactAnalysisPage() {
         <StatCard
           label="Total Citations"
           value={data.totalCitations.toLocaleString()}
-          subtitle="Cumulative Google Scholar count"
+          subtitle="Cumulative verified citations"
           icon={TrendingUp}
         />
         <StatCard
@@ -275,12 +275,27 @@ export function ImpactAnalysisPage() {
           subtitle="Across all departments"
           icon={FileText}
         />
-        <StatCard
-          label="Citations / Paper"
-          value={(data.totalCitations / safeTotalPubs).toFixed(1)}
-          subtitle="Average citation density"
-          icon={BarChart3}
-        />
+        {(() => {
+          const density = data.totalCitations / safeTotalPubs;
+          const rating =
+            density >= 15.0
+              ? { text: "Outstanding", isPositive: true, desc: "Outstanding (15+ citations/paper)" }
+              : density >= 5.0
+              ? { text: "High Impact", isPositive: true, desc: "High Impact (5+ citations/paper)" }
+              : density >= 1.0
+              ? { text: "Moderate", isPositive: true, desc: "Moderate (1-4 citations/paper)" }
+              : { text: "Developing", isPositive: false, desc: "Developing citation density" };
+
+          return (
+            <StatCard
+              label="Citations / Paper"
+              value={density.toFixed(1)}
+              trend={{ value: rating.text, isPositive: rating.isPositive }}
+              subtitle={rating.desc}
+              icon={BarChart3}
+            />
+          );
+        })()}
         <StatCard
           label="Active Faculty"
           value={data.totalResearchers}
