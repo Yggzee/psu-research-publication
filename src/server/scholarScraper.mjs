@@ -1063,6 +1063,23 @@ export async function scrapeGoogleScholarProfile(profileUrlOrId) {
 }
 
 /**
+ * Reconstruct readable abstract text from OpenAlex inverted index
+ */
+function reconstructOpenAlexAbstract(invertedIndex) {
+  if (!invertedIndex || typeof invertedIndex !== 'object') return '';
+  const wordPairs = [];
+  for (const [word, positions] of Object.entries(invertedIndex)) {
+    if (Array.isArray(positions)) {
+      for (const pos of positions) {
+        wordPairs.push([pos, word]);
+      }
+    }
+  }
+  wordPairs.sort((a, b) => a[0] - b[0]);
+  return wordPairs.map((p) => p[1]).join(' ');
+}
+
+/**
  * Multi-source academic search fallback & supplement (CrossRef API + OpenAlex API)
  * Universal academic search across titles, author names, institutions (e.g. Pangasinan State University), and topics.
  */
@@ -1094,6 +1111,8 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     if (crRes.ok) {
       const crData = await crRes.json();
       for (const item of crData?.message?.items || []) {
+        // Strictly exclude component/supplementary items (.s001, etc.)
+        if (item.type === 'component' || (item.DOI && /\.s\d+$/i.test(item.DOI))) continue;
         const cTitle = Array.isArray(item.title) ? cleanText(item.title[0]) : '';
         if (!cTitle) continue;
         const cAuthors = Array.isArray(item.author)
@@ -1132,7 +1151,7 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     console.warn('[HybridSearch] CrossRef search error:', crErr.message);
   }
 
-  // 2. OpenAlex Search: if author query, attempt author resolution; otherwise search works
+  // 2. OpenAlex Search: full author resolution OR deep topic/content search with reconstructed abstracts
   try {
     if (isPersonNameQuery) {
       try {
@@ -1164,6 +1183,7 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
                   w.host_venue?.display_name ||
                   'Academic Publication';
                 const wUrl = w.doi || w.primary_location?.landing_page_url || w.id || '';
+                const fullAbstract = reconstructOpenAlexAbstract(w.abstract_inverted_index);
                 addResult({
                   id: `oa-${w.id?.split('/').pop() || hashString(wTitle)}`,
                   title: wTitle,
@@ -1171,7 +1191,7 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
                   journal: wJournal,
                   year: w.publication_year || new Date().getFullYear(),
                   citations: Number(w.cited_by_count) || 0,
-                  abstract: '',
+                  abstract: fullAbstract,
                   url: wUrl,
                   pdfUrl: w.open_access?.oa_url || null,
                   citedByLink: '',
@@ -1182,6 +1202,46 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
           }
         }
       } catch {}
+    } else {
+      // Topic / Content Search: OpenAlex searches title, abstract, and full-text content
+      try {
+        const worksUrl = `https://api.openalex.org/works?search=${encodeURIComponent(cleanQ)}&per-page=25&page=${page + 1}&sort=relevance_score:desc&mailto=research@psu.edu.ph`;
+        const worksRes = await fetch(worksUrl, {
+          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+        });
+        if (worksRes.ok) {
+          const worksData = await worksRes.json();
+          for (const w of worksData?.results || []) {
+            const wTitle = cleanText(w.title || w.display_name || '');
+            if (!wTitle) continue;
+            const wAuthors = Array.isArray(w.authorships)
+              ? w.authorships.map((a) => a?.author?.display_name).filter(Boolean)
+              : [cleanQ];
+            const wJournal =
+              w.primary_location?.source?.display_name ||
+              w.host_venue?.display_name ||
+              'Academic Publication';
+            const wUrl = w.doi || w.primary_location?.landing_page_url || w.id || '';
+            const fullAbstract = reconstructOpenAlexAbstract(w.abstract_inverted_index);
+
+            addResult({
+              id: `oa-${w.id?.split('/').pop() || hashString(wTitle)}`,
+              title: wTitle,
+              authors: wAuthors.length > 0 ? wAuthors : [cleanQ],
+              journal: wJournal,
+              year: w.publication_year || new Date().getFullYear(),
+              citations: Number(w.cited_by_count) || 0,
+              abstract: fullAbstract,
+              url: wUrl,
+              pdfUrl: w.open_access?.oa_url || null,
+              citedByLink: '',
+              fromCache: false,
+            });
+          }
+        }
+      } catch (genErr) {
+        console.warn('[HybridSearch] OpenAlex works search error:', genErr.message);
+      }
     }
   } catch (oaErr) {
     console.warn('[HybridSearch] OpenAlex search error:', oaErr.message);

@@ -1082,6 +1082,82 @@ export async function handleApiRequest(req, res) {
       return sendJson(200, { success: true, message: 'Settings saved successfully' });
     }
 
+    /**
+     * Test whether text contains a whole-word or prefix match for a target token
+     */
+    function hasWordMatch(text, targetWord) {
+      if (!text || !targetWord) return false;
+      const cleanTarget = String(targetWord).trim();
+      if (!cleanTarget) return false;
+      const escaped = cleanTarget.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`\\b${escaped}`, 'i');
+      return re.test(text);
+    }
+
+    /**
+     * Extract topic words, stems, and academic domain synonyms for content-aware semantic search
+     */
+    function extractTopicVariants(query) {
+      const clean = String(query || '')
+        .replace(/^author:\s*"?/i, '')
+        .replace(/"$/g, '')
+        .toLowerCase()
+        .trim();
+
+      const stopWords = new Set([
+        'the', 'in', 'of', 'and', 'a', 'an', 'at', 'during', 'for', 'on', 'to', 'with', 
+        'by', 'from', 'as', 'into', 'through', 'over', 'after', 'between', 'under', 
+        'against', 'within', 'without', 'about', 'across', 'towards', 'upon', 'concerning',
+        'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do',
+        'does', 'did', 'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might',
+        'must', 'it', 'its', 'their', 'they', 'them', 'this', 'that', 'these', 'those',
+        'which', 'who', 'whom', 'whose', 'what', 'where', 'when', 'why', 'how',
+        'philippines', 'philippine', 'pangasinan', 'state', 'university', 'campus', 'psu'
+      ]);
+
+      const stem = (w) => {
+        if (w.length <= 3) return w;
+        return w.replace(/ies$/i, 'y').replace(/(ing|ers?|ed|s)$/i, '');
+      };
+
+      const rawWords = clean.split(/[^a-z0-9_-]+/).filter((w) => w.length >= 2);
+      const topicWords = rawWords.filter((w) => !stopWords.has(w));
+      const stems = new Set();
+      const synonyms = new Set();
+
+      for (const w of topicWords) {
+        stems.add(w);
+        const s = stem(w);
+        if (s.length >= 3) stems.add(s);
+
+        if (w.startsWith('farm') || s === 'farm') {
+          ['farmer', 'farmers', 'farming', 'farms', 'agriculture', 'agricultural', 'crop', 'crops', 'cultivation', 'livestock', 'agronomy'].forEach((x) => synonyms.add(x));
+        }
+        if (w.startsWith('fish') || s === 'fish') {
+          ['fishery', 'fisheries', 'fishing', 'fisherfolk', 'aquaculture', 'marine', 'tilapia', 'bangus'].forEach((x) => synonyms.add(x));
+        }
+        if (w === 'robot' || w === 'robotics' || s === 'robot') {
+          ['robot', 'robotics', 'robotic', 'arduino', 'microcontroller', 'automation', 'sensor'].forEach((x) => synonyms.add(x));
+        }
+        if (w === 'ai' || w === 'artificial' || w === 'intelligence') {
+          ['ai', 'machine learning', 'deep learning', 'neural', 'nlp', 'computer vision'].forEach((x) => synonyms.add(x));
+        }
+        if (w === 'iot' || w === 'microcontroller' || w === 'sensor' || w === 'sensors') {
+          ['iot', 'internet of things', 'smart', 'arduino', 'esp32', 'esp8266', 'raspberry pi', 'sensors'].forEach((x) => synonyms.add(x));
+        }
+        if (w === 'arduino') {
+          ['arduino', 'microcontroller'].forEach((x) => synonyms.add(x));
+        }
+      }
+
+      return {
+        rawQuery: clean,
+        topicWords,
+        stems: Array.from(stems),
+        synonyms: Array.from(synonyms),
+      };
+    }
+
     // GET /api/repository/search (Public Institutional Repository Search - UP Saliksik Model)
     if (pathname === '/api/repository/search' && method === 'GET') {
       const q = (url.searchParams.get('q') || '').trim();
@@ -1112,38 +1188,72 @@ export async function handleApiRequest(req, res) {
 
       const allApproved = db.prepare(sql).all(...params);
 
-      // Relevance ranking if query present
+      // Relevance ranking and content-aware semantic search if query present
       let filtered = allApproved;
       if (q) {
-        const qLower = q.toLowerCase();
-        const stemWord = (w) => (w.length > 4 ? w.replace(/(ing|ers?|ed|s)$/i, '') : w);
-        const qStem = stemWord(qLower);
-        const qWords = qLower.split(/\s+/).filter((w) => w.length > 1);
-        const qWordStems = qWords.map(stemWord);
+        const topicVariants = extractTopicVariants(q);
+        const qLower = topicVariants.rawQuery;
+
+        const isContentRelevant = (p) => {
+          const tLower = String(p.title || '').toLowerCase();
+          const aLower = String(p.authors || '').toLowerCase();
+          const oLower = String(p.owner_name || '').toLowerCase();
+          const absLower = String(p.abstract || '').toLowerCase();
+          const kwLower = String(p.keywords || '').toLowerCase();
+          const fullContent = `${tLower} ${aLower} ${oLower} ${absLower} ${kwLower}`;
+
+          if (hasWordMatch(fullContent, qLower)) return true;
+          if (topicVariants.stems.some((s) => hasWordMatch(fullContent, s))) return true;
+          if (topicVariants.synonyms.some((s) => hasWordMatch(fullContent, s))) return true;
+
+          if (topicVariants.topicWords.length >= 2) {
+            const hits = topicVariants.topicWords.filter(
+              (w) => hasWordMatch(fullContent, w) || hasWordMatch(fullContent, w.replace(/(ing|ers?|ed|s)$/i, ''))
+            ).length;
+            if (hits >= Math.ceil(topicVariants.topicWords.length * 0.7)) return true;
+          }
+          return false;
+        };
 
         filtered = allApproved
-          .filter((p) => {
-            const haystack = `${p.title || ''} ${p.authors || ''} ${p.owner_name || ''} ${p.journal || ''} ${p.abstract || ''} ${p.keywords || ''} ${p.sdg_tags || ''}`.toLowerCase();
-            if (haystack.includes(qLower) || haystack.includes(qStem)) return true;
-            return qWords.length > 0 && (qWords.some((w) => haystack.includes(w)) || qWordStems.some((s) => haystack.includes(s)));
-          })
+          .filter(isContentRelevant)
           .map((p) => {
             let score = 0;
             const tLower = String(p.title || '').toLowerCase();
             const aLower = String(p.authors || '').toLowerCase();
+            const oLower = String(p.owner_name || '').toLowerCase();
             const absLower = String(p.abstract || '').toLowerCase();
-            if (tLower.includes(qLower)) score += 100;
-            else if (tLower.includes(qStem)) score += 70;
-            if (aLower.includes(qLower)) score += 80;
-            if (absLower.includes(qLower)) score += 40;
-            for (let i = 0; i < qWords.length; i++) {
-              const w = qWords[i];
-              const s = qWordStems[i];
-              if (tLower.includes(w)) score += 20;
-              else if (tLower.includes(s)) score += 15;
-              if (aLower.includes(w)) score += 10;
-              if (absLower.includes(w)) score += 5;
+            const kwLower = String(p.keywords || '').toLowerCase();
+
+            // Title exact/word match
+            if (hasWordMatch(tLower, qLower)) {
+              score += 200;
+              if (tLower === qLower || tLower.startsWith(qLower)) score += 100;
+            } else if (hasWordMatch(absLower, qLower)) {
+              // Deep content/abstract match (e.g. technology/tools mentioned in text)
+              score += 120;
+            } else if (hasWordMatch(kwLower, qLower)) {
+              score += 100;
             }
+
+            // Author/Faculty match
+            if (hasWordMatch(aLower, qLower) || hasWordMatch(oLower, qLower)) {
+              score += 150;
+            }
+
+            // Stem hits
+            for (const s of topicVariants.stems) {
+              if (hasWordMatch(tLower, s)) score += 40;
+              if (hasWordMatch(absLower, s)) score += 20;
+              if (hasWordMatch(kwLower, s)) score += 20;
+            }
+
+            // Domain synonyms hits (e.g. farmers, crops, agriculture for farming)
+            for (const syn of topicVariants.synonyms) {
+              if (hasWordMatch(tLower, syn)) score += 30;
+              if (hasWordMatch(absLower, syn)) score += 15;
+            }
+
             score += Math.min(30, (Number(p.citations) || 0) * 0.2);
             return { ...p, _score: score };
           })
@@ -2944,6 +3054,7 @@ export async function handleApiRequest(req, res) {
           year: Number(item.year) || new Date().getFullYear(),
           citations: itemCitations,
           abstract: item.abstract || '',
+          keywords: item.keywords || item.subject || '',
           url: item.url || '',
           pdfUrl: item.pdfUrl || null,
           citedByLink: item.citedByLink || item.cited_by_link || '',
@@ -3105,10 +3216,10 @@ export async function handleApiRequest(req, res) {
 
         const cachedScraped = db.prepare('SELECT * FROM scraped_publications ORDER BY citations DESC, year DESC').all();
         for (const sp of cachedScraped) {
-          const haystack = `${sp.title || ''} ${sp.authors || ''} ${sp.journal || ''} ${sp.search_query || ''} ${sp.abstract || ''}`.toLowerCase();
-          const matchesAll = queryWords.length > 0 && queryWords.every((w) => haystack.includes(w));
-          const matchesPartial = queryWords.length >= 2 && queryWords.filter((w) => haystack.includes(w)).length >= Math.ceil(queryWords.length * 0.7);
-          if (haystack.includes(bareLower) || matchesAll || matchesPartial) {
+          const haystack = `${sp.title || ''} ${sp.authors || ''} ${sp.journal || ''} ${sp.abstract || ''}`.toLowerCase();
+          const matchesAll = queryWords.length > 0 && queryWords.every((w) => hasWordMatch(haystack, w));
+          const matchesPartial = queryWords.length >= 2 && queryWords.filter((w) => hasWordMatch(haystack, w)).length >= Math.ceil(queryWords.length * 0.7);
+          if (hasWordMatch(haystack, bareLower) || matchesAll || matchesPartial) {
             addCandidateToPool({
               id: sp.id,
               title: sp.title,
@@ -3422,47 +3533,87 @@ export async function handleApiRequest(req, res) {
         );
       };
 
-      const stemWord = (w) => (w.length > 4 ? w.replace(/(ing|ers?|ed|s)$/i, '') : w);
-      const bareStem = stemWord(bareLower);
+      const topicVariants = extractTopicVariants(bareQuery);
+      const isExplicitAuthorQuery = cleanQuery.toLowerCase().startsWith('author:');
+
+      // STRICT TOPIC RELEVANCE GATE:
+      // Papers that do NOT mention the topic, its stems, or its domain synonyms in their
+      // title, abstract, or keywords MUST be excluded completely.
+      const isTopicRelevant = (item) => {
+        if (isExplicitAuthorQuery || matchedScholarProfile) {
+          const aLower = (Array.isArray(item.authors) ? item.authors.join(' ') : String(item.authors || '')).toLowerCase();
+          return aLower.includes(bareLower) || queryWords.some((w) => hasWordMatch(aLower, w));
+        }
+
+        const tLower = String(item.title || '').toLowerCase();
+        const absLower = String(item.abstract || '').toLowerCase();
+        const kwLower = String(item.keywords || '').toLowerCase();
+        const fullContent = `${tLower} ${absLower} ${kwLower}`;
+
+        // 1. Direct query match anywhere in title, abstract, or keywords
+        if (hasWordMatch(fullContent, bareLower)) return true;
+
+        // 2. Topic stem match (e.g. "farm", "farming", "crop", "crops")
+        if (topicVariants.stems.some((s) => hasWordMatch(fullContent, s))) return true;
+
+        // 3. Domain synonym match (e.g. "farmer", "crops", "agriculture" for "farming")
+        if (topicVariants.synonyms.some((s) => hasWordMatch(fullContent, s))) return true;
+
+        // 4. For multi-word queries, require at least 70% of query words to appear in content
+        if (topicVariants.topicWords.length >= 2) {
+          const hits = topicVariants.topicWords.filter(
+            (w) => hasWordMatch(fullContent, w) || hasWordMatch(fullContent, w.replace(/(ing|ers?|ed|s)$/i, ''))
+          ).length;
+          if (hits >= Math.ceil(topicVariants.topicWords.length * 0.7)) return true;
+        }
+
+        return false;
+      };
+
+      const relevantPool = Array.from(poolMap.values()).filter(isTopicRelevant);
 
       const computeRelevance = (item) => {
         let score = 0;
         const tLower = String(item.title || '').toLowerCase();
-        const aLower = (Array.isArray(item.authors) ? item.authors.join(' ') : String(item.authors || '')).toLowerCase();
         const absLower = String(item.abstract || '').toLowerCase();
-        const jLower = String(item.journal || '').toLowerCase();
+        const kwLower = String(item.keywords || '').toLowerCase();
 
         const isPsu = isPsuItem(item);
         const isPh = isPhItem(item);
 
-        const titleMatches = tLower.includes(bareLower) || tLower.includes(bareStem);
-        const bodyMatches = absLower.includes(bareLower) || absLower.includes(bareStem) || jLower.includes(bareLower);
-        const authorMatches = aLower.includes(bareLower);
-
-        if (titleMatches) {
-          score += 200;
-          if (tLower === bareLower || tLower.startsWith(bareLower)) score += 100;
-        } else if (bodyMatches) {
-          score += 100;
+        // Content Relevance Scoring:
+        // Title exact/word match gets primary boost
+        if (hasWordMatch(tLower, bareLower)) {
+          score += 300;
+          if (tLower === bareLower || tLower.startsWith(bareLower)) score += 150;
+        } else if (hasWordMatch(absLower, bareLower)) {
+          // Deep content/abstract match (e.g. Arduino or specific methods used in text)
+          score += 180;
+        } else if (hasWordMatch(kwLower, bareLower)) {
+          score += 150;
         }
 
-        if (authorMatches) score += 150;
-
-        // Token hits in title
-        for (const w of queryWords) {
-          const sw = stemWord(w);
-          if (tLower.includes(w) || tLower.includes(sw)) score += 30;
-          if (absLower.includes(w) || absLower.includes(sw)) score += 10;
+        // Stem hits
+        for (const s of topicVariants.stems) {
+          if (hasWordMatch(tLower, s)) score += 50;
+          if (hasWordMatch(absLower, s)) score += 25;
+          if (hasWordMatch(kwLower, s)) score += 25;
         }
 
-        // 3-TIER HIERARCHY:
-        // Tier 1: PSU Related Papers (+100,000 if topic matches, +5,000 baseline)
-        // Tier 2: Philippines Related Papers (+10,000 if topic matches, +1,000 baseline)
+        // Domain synonym hits
+        for (const syn of topicVariants.synonyms) {
+          if (hasWordMatch(tLower, syn)) score += 40;
+          if (hasWordMatch(absLower, syn)) score += 20;
+        }
+
+        // 3-TIER HIERARCHY (ONLY FOR VERIFIED RELEVANT PAPERS):
+        // Tier 1: PSU Papers about this Topic (+100,000)
+        // Tier 2: Philippines Papers about this Topic (+10,000)
         // Tier 3: Foreign Papers (+0)
         if (isPsu) {
-          score += (titleMatches || bodyMatches || authorMatches) ? 100000 : 5000;
+          score += 100000;
         } else if (isPh) {
-          score += (titleMatches || bodyMatches || authorMatches) ? 10000 : 1000;
+          score += 10000;
         }
 
         // Citation impact logarithmic score
@@ -3476,7 +3627,7 @@ export async function handleApiRequest(req, res) {
         return score;
       };
 
-      const allRankedResults = Array.from(poolMap.values()).sort(
+      const allRankedResults = relevantPool.sort(
         (a, b) => computeRelevance(b) - computeRelevance(a)
       );
 
