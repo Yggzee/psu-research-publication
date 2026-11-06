@@ -829,8 +829,8 @@ export function AdminPage() {
       {/* ===================================================================== */}
       {activeTab === "registrations" && (
         <SectionCard
-          title="Registration & Invitation Queue"
-          description="Researchers who self-registered or were invited by Admin. Once email is verified, admit them to officially recognize their profile."
+          title="Researcher Invitation & Activation Queue"
+          description="Researchers invited by Admin. Once the researcher confirms their account via their invitation link, admit them to officially recognize their profile."
           action={
             <Badge variant="outline" className="font-mono text-xs">
               {pendingRegistrations.length} pending
@@ -840,8 +840,8 @@ export function AdminPage() {
           {pendingRegistrations.length === 0 ? (
             <EmptyState
               icon={CheckCircle2}
-              title="All Registrations Up to Date"
-              description="New sign-ups from the login page or invited faculty awaiting activation will appear in this queue."
+              title="All Invitations Up to Date"
+              description="Invited faculty researchers awaiting activation will appear in this queue."
             />
           ) : (
             <div className="divide-y divide-border/60">
