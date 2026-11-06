@@ -29,6 +29,8 @@ import {
   Award,
   Sparkles,
   Star,
+  Globe,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -137,6 +139,52 @@ export function AdminPage() {
 
   const [isClassifyingSDG, setIsClassifyingSDG] = useState(false);
 
+  // Public Scraper & Quota Guardrail Settings
+  const [publicScraperEnabled, setPublicScraperEnabled] = useState(true);
+  const [scraperQuotaThreshold, setScraperQuotaThreshold] = useState("1.00");
+  const [publicScraperStatus, setPublicScraperStatus] = useState<any>(null);
+  const [isUpdatingScraperSettings, setIsUpdatingScraperSettings] = useState(false);
+
+  const loadScraperSettings = async () => {
+    try {
+      const [settings, status] = await Promise.all([
+        apiService.getAdminSettings().catch(() => ({})),
+        apiService.getPublicScraperStatus().catch(() => null),
+      ]);
+      if (settings?.public_scraper_enabled !== undefined) {
+        setPublicScraperEnabled(settings.public_scraper_enabled === "true");
+      }
+      if (settings?.scraper_quota_threshold_usd) {
+        setScraperQuotaThreshold(settings.scraper_quota_threshold_usd);
+      }
+      if (status) {
+        setPublicScraperStatus(status);
+      }
+    } catch {}
+  };
+
+  const handleTogglePublicScraper = async (newVal: boolean) => {
+    setIsUpdatingScraperSettings(true);
+    setPublicScraperEnabled(newVal);
+    try {
+      await apiService.updateAdminSettings({
+        public_scraper_enabled: String(newVal),
+        scraper_quota_threshold_usd: scraperQuotaThreshold,
+      });
+      toast.success(
+        newVal
+          ? "✓ Public access to Live Academic Scraper is now ENABLED."
+          : "✓ Public access to Live Academic Scraper is now DISABLED (Institutional Repository only)."
+      );
+      loadScraperSettings();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update scraper settings.");
+      setPublicScraperEnabled(!newVal);
+    } finally {
+      setIsUpdatingScraperSettings(false);
+    }
+  };
+
   const handleRunSDGClassification = async () => {
     setIsClassifyingSDG(true);
     toast.loading("Running AI UN SDG classifier on campus publications...", { id: "sdg-batch" });
@@ -204,6 +252,7 @@ export function AdminPage() {
         apiService.getResearchers().catch(() => []),
         apiService.getClaims().catch(() => []),
         apiService.getPendingRegistrations().catch(() => []),
+        loadScraperSettings().catch(() => null),
       ]);
 
       if (Array.isArray(researchersData)) {
@@ -1266,6 +1315,70 @@ export function AdminPage() {
             description="Manage API token rotation and monthly usage limits for resilient academic literature imports"
           >
             <ApifyTokenManager />
+          </SectionCard>
+
+          {/* PUBLIC ACADEMIC SEARCH ACCESS & CIRCUIT BREAKER */}
+          <SectionCard
+            title="Public Academic Scraper & Quota Guardrail"
+            description="Control whether students and external visitors can trigger live external academic searches, and monitor the automated $1.00 quota circuit breaker."
+          >
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border/80 bg-muted/20">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-brand" />
+                    <Label htmlFor="public-scraper-toggle" className="text-sm font-bold text-foreground">
+                      Allow Public Use of Live Academic Scraper
+                    </Label>
+                    <Badge variant={publicScraperEnabled ? "default" : "secondary"} className="text-[10px]">
+                      {publicScraperEnabled ? "Active" : "Disabled (Repository Only)"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    When enabled, unauthenticated visitors and students can search global literature (with 3-Tier ranking and auto SDG tags). When disabled, public visitors can search the institutional repository only.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    id="public-scraper-toggle"
+                    type="button"
+                    variant={publicScraperEnabled ? "default" : "outline"}
+                    size="sm"
+                    disabled={isUpdatingScraperSettings}
+                    onClick={() => handleTogglePublicScraper(!publicScraperEnabled)}
+                    className="font-bold text-xs"
+                  >
+                    {publicScraperEnabled ? "Disable Public Scraper" : "Enable Public Scraper"}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Automated Circuit Breaker Card */}
+              <div className="p-4 rounded-xl border border-border/70 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="space-y-0.5">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-amber-500" />
+                    Automated Quota Circuit Breaker ($1.00 Threshold Protection)
+                  </span>
+                  <p className="text-muted-foreground text-[11px]">
+                    If remaining external API balance falls to ${scraperQuotaThreshold} or below, the system automatically shuts off public search to protect institutional credit.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto font-mono text-[11px]">
+                  {publicScraperStatus?.quotaCircuitBreakerTripped ? (
+                    <Badge variant="destructive" className="gap-1 font-bold">
+                      Circuit Breaker Tripped (Power-Save Active)
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 gap-1">
+                      Circuit Breaker Normal (${publicScraperStatus?.remainingBalanceUsd?.toFixed(2) ?? "5.00"} Remaining)
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
           </SectionCard>
         </div>
       )}

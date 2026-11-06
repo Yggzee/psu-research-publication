@@ -12,6 +12,7 @@ import {
 } from './scholarScraper.mjs';
 import {
   classifyPublicationSDG,
+  localHeuristicSDG,
   auditJournalReputation,
   askCampusIntelligence,
   calculateSynergy,
@@ -387,6 +388,99 @@ function enqueuePublicationCitationSync(pubIds) {
     }
   }, 50);
 }
+
+// Helper to get active Apify token row
+const getActiveApifyTokenRow = () => {
+  let row = db.prepare('SELECT * FROM apify_tokens WHERE is_active = 1 LIMIT 1').get();
+  if (!row) {
+    row = db.prepare('SELECT * FROM apify_tokens ORDER BY created_at DESC LIMIT 1').get();
+  }
+  if (!row && (process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN)) {
+    return {
+      id: 'env',
+      name: 'Environment Token',
+      token: process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN,
+      actor_id: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-api').replace('/', '~'),
+      is_active: 1,
+      status: 'valid',
+      username: 'Env User',
+      plan: 'FREE',
+      search_count: 0,
+      monthly_usage_usd: 0,
+      max_monthly_usage_usd: 5,
+      cycle_end_at: null,
+      total_runs: null,
+    };
+  }
+  return row || null;
+};
+
+// Helper to fetch live Apify token limits & usage
+const fetchApifyTokenUsage = async (tokenRow, forceLive = false) => {
+  if (!tokenRow || !tokenRow.token) return null;
+  const headers = { Authorization: `Bearer ${tokenRow.token}` };
+
+  let limitsData = null;
+  let runsData = null;
+
+  try {
+    const [limitsRes, runsRes] = await Promise.all([
+      fetch('https://api.apify.com/v2/users/me/limits', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch('https://api.apify.com/v2/actor-runs?limit=1', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]);
+    limitsData = limitsRes?.data;
+    runsData = runsRes?.data;
+  } catch (err) {
+    console.warn('[ApifyUsage] Live fetch error:', err.message);
+  }
+
+  const maxMonthlyUsageUsd = Number(limitsData?.limits?.maxMonthlyUsageUsd) || Number(tokenRow.max_monthly_usage_usd) || 5;
+  const monthlyUsageUsd =
+    limitsData?.current?.monthlyUsageUsd !== undefined
+      ? Number(limitsData.current.monthlyUsageUsd)
+      : Number(tokenRow.monthly_usage_usd) || 0;
+  const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
+  const usedPercentage = maxMonthlyUsageUsd > 0 ? (monthlyUsageUsd / maxMonthlyUsageUsd) * 100 : 0;
+  const totalRuns = runsData?.total !== undefined ? runsData.total : (Number(tokenRow.total_runs) || 0);
+  const cycleEndAt = limitsData?.monthlyUsageCycle?.endAt || tokenRow.cycle_end_at || null;
+
+  if (tokenRow.id && tokenRow.id !== 'env') {
+    try {
+      db.prepare(`
+        UPDATE apify_tokens 
+        SET monthly_usage_usd = ?, max_monthly_usage_usd = ?, cycle_end_at = ?, total_runs = ?
+        WHERE id = ?
+      `).run(monthlyUsageUsd, maxMonthlyUsageUsd, cycleEndAt, totalRuns, tokenRow.id);
+    } catch {}
+  }
+
+  return {
+    tokenId: tokenRow.id,
+    tokenName: tokenRow.name,
+    username: tokenRow.username || null,
+    plan: tokenRow.plan || 'FREE',
+    actorId: tokenRow.actor_id || 'johnvc~google-scholar-api',
+    limitUsd: Number(maxMonthlyUsageUsd.toFixed(2)),
+    usedUsd: Number(monthlyUsageUsd.toFixed(3)),
+    remainingUsd: Number(remainingUsd.toFixed(3)),
+    usedPercentage: Math.min(100, Number(usedPercentage.toFixed(1))),
+    cycleEndAt,
+    totalRuns,
+    searchesCount: Number(tokenRow.search_count) || 0,
+    status: tokenRow.status || 'valid',
+    isActive: Boolean(tokenRow.is_active),
+    lastUpdated: new Date().toISOString(),
+  };
+};
+
+const attachTokenUsage = async (payload, didLiveScrape = false) => {
+  const active = getActiveApifyTokenRow();
+  const tokenUsage = active ? await fetchApifyTokenUsage(active, didLiveScrape) : null;
+  return {
+    ...payload,
+    tokenUsage,
+  };
+};
 
 /**
  * Handle incoming API requests
@@ -910,6 +1004,220 @@ export async function handleApiRequest(req, res) {
       } catch (err) {
         return sendJson(500, { error: `Failed to push to Turso: ${err.message}` });
       }
+    }
+
+    // ----------------------------------------------------
+    // SYSTEM SETTINGS & PUBLIC REPOSITORY SEARCH
+    // ----------------------------------------------------
+    if (pathname === '/api/settings/public-scraper-status' && method === 'GET') {
+      const publicScraperSetting = db.prepare("SELECT value FROM system_settings WHERE key = 'public_scraper_enabled'").get()?.value || 'true';
+      const thresholdSetting = Number(db.prepare("SELECT value FROM system_settings WHERE key = 'scraper_quota_threshold_usd'").get()?.value) || 1.0;
+      
+      const activeToken = getActiveApifyTokenRow();
+      let quotaCircuitBreakerTripped = false;
+      let remainingBalanceUsd = 5.0;
+
+      if (activeToken) {
+        try {
+          const usage = await fetchApifyTokenUsage(activeToken, false);
+          const maxUsd = Number(usage?.maxMonthlyUsageUsd) || 5.0;
+          const usedUsd = Number(usage?.monthlyUsageUsd) || 0.0;
+          remainingBalanceUsd = Math.max(0, maxUsd - usedUsd);
+          if (remainingBalanceUsd <= thresholdSetting) {
+            quotaCircuitBreakerTripped = true;
+          }
+        } catch {}
+      }
+
+      return sendJson(200, {
+        publicScraperEnabled: publicScraperSetting === 'true',
+        quotaCircuitBreakerTripped,
+        remainingBalanceUsd,
+        thresholdUsd: thresholdSetting,
+        isAvailableForPublic: publicScraperSetting === 'true' && !quotaCircuitBreakerTripped,
+      });
+    }
+
+    if (pathname === '/api/admin/settings' && method === 'GET') {
+      const caller = authenticateCaller(req);
+      if (!isCallerAdmin(caller)) {
+        return sendJson(403, { error: 'Forbidden: Admin access required.' });
+      }
+      const rows = db.prepare('SELECT key, value FROM system_settings').all();
+      const settingsMap = {};
+      for (const r of rows) settingsMap[r.key] = r.value;
+      return sendJson(200, settingsMap);
+    }
+
+    if (pathname === '/api/admin/settings' && method === 'PUT') {
+      const caller = authenticateCaller(req);
+      if (!isCallerAdmin(caller)) {
+        return sendJson(403, { error: 'Forbidden: Admin access required.' });
+      }
+      const body = await readJsonBody();
+      const now = new Date().toISOString();
+      const upsert = db.prepare(`
+        INSERT INTO system_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `);
+      runInTransaction(() => {
+        for (const [k, v] of Object.entries(body)) {
+          upsert.run(k, String(v), now);
+        }
+      });
+      return sendJson(200, { success: true, message: 'Settings saved successfully' });
+    }
+
+    // GET /api/repository/search (Public Institutional Repository Search - UP Saliksik Model)
+    if (pathname === '/api/repository/search' && method === 'GET') {
+      const q = (url.searchParams.get('q') || '').trim();
+      const sdg = (url.searchParams.get('sdg') || '').trim();
+      const department = (url.searchParams.get('department') || '').trim();
+      const year = (url.searchParams.get('year') || '').trim();
+      const sort = url.searchParams.get('sort') || 'citations'; // 'citations' | 'recent' | 'title'
+      const page = Math.max(0, parseInt(url.searchParams.get('page') || '0', 10));
+      const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '12', 10)));
+
+      let sql = "SELECT * FROM publications WHERE approval_status = 'approved' AND (is_public = 1 OR is_public IS NULL)";
+      const params = [];
+
+      if (department && department !== 'all') {
+        sql += ` AND (owner_id IN (SELECT instructor_id FROM researchers WHERE department = ?) OR owner_id IN (SELECT id FROM researchers WHERE department = ?))`;
+        params.push(department, department);
+      }
+
+      if (year && year !== 'all') {
+        sql += ` AND year = ?`;
+        params.push(Number(year));
+      }
+
+      if (sdg && sdg !== 'all') {
+        sql += ` AND (sdg_tags LIKE ? OR sdg_tags LIKE ?)`;
+        params.push(`%${sdg}%`, `%${sdg.replace(/^SDG\s*\d+:?\s*/i, '')}%`);
+      }
+
+      const allApproved = db.prepare(sql).all(...params);
+
+      // Relevance ranking if query present
+      let filtered = allApproved;
+      if (q) {
+        const qLower = q.toLowerCase();
+        const qWords = qLower.split(/\s+/).filter((w) => w.length > 1);
+
+        filtered = allApproved
+          .filter((p) => {
+            const haystack = `${p.title || ''} ${p.authors || ''} ${p.owner_name || ''} ${p.journal || ''} ${p.abstract || ''} ${p.keywords || ''} ${p.sdg_tags || ''}`.toLowerCase();
+            if (haystack.includes(qLower)) return true;
+            return qWords.length > 0 && qWords.some((w) => haystack.includes(w));
+          })
+          .map((p) => {
+            let score = 0;
+            const tLower = String(p.title || '').toLowerCase();
+            const aLower = String(p.authors || '').toLowerCase();
+            const absLower = String(p.abstract || '').toLowerCase();
+            if (tLower.includes(qLower)) score += 100;
+            if (aLower.includes(qLower)) score += 80;
+            if (absLower.includes(qLower)) score += 40;
+            for (const w of qWords) {
+              if (tLower.includes(w)) score += 15;
+              if (aLower.includes(w)) score += 10;
+              if (absLower.includes(w)) score += 5;
+            }
+            score += Math.min(30, (Number(p.citations) || 0) * 0.2);
+            return { ...p, _score: score };
+          })
+          .sort((a, b) => b._score - a._score);
+      } else {
+        if (sort === 'recent') {
+          filtered.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0) || (Number(b.citations) || 0) - (Number(a.citations) || 0));
+        } else if (sort === 'title') {
+          filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        } else {
+          filtered.sort((a, b) => (Number(b.citations) || 0) - (Number(a.citations) || 0) || (Number(b.year) || 0) - (Number(a.year) || 0));
+        }
+      }
+
+      const total = filtered.length;
+      const startIndex = page * limit;
+      const paginated = filtered.slice(startIndex, startIndex + limit);
+
+      const results = paginated.map((p) => {
+        let authorsArr = [];
+        try {
+          const parsed = JSON.parse(p.authors);
+          authorsArr = Array.isArray(parsed) ? parsed : [p.authors];
+        } catch {
+          authorsArr = typeof p.authors === 'string' ? p.authors.split(',').map((a) => a.trim()).filter(Boolean) : [];
+        }
+        let sdgArr = [];
+        try {
+          const parsed = JSON.parse(p.sdg_tags);
+          sdgArr = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          sdgArr = p.sdg_tags ? [p.sdg_tags] : [];
+        }
+
+        return {
+          id: p.id,
+          title: p.title,
+          authors: authorsArr,
+          journal: p.journal || 'Academic Publication',
+          year: p.year,
+          citations: Number(p.citations) || 0,
+          abstract: p.abstract || '',
+          url: p.url || '',
+          doi: p.doi || '',
+          keywords: p.keywords || '',
+          volume_issue: p.volume_issue || '',
+          publication_date: p.publication_date || '',
+          publication_level: p.publication_level || 'International',
+          journal_indexing: p.journal_indexing || '',
+          owner_id: p.owner_id,
+          owner_name: p.owner_name,
+          sdg_tags: sdgArr,
+          sdg_rationale: p.sdg_rationale || '',
+          ched_priority: p.ched_priority || '',
+        };
+      });
+
+      const totalPubsCount = db.prepare("SELECT COUNT(*) as c FROM publications WHERE approval_status = 'approved'").get()?.c || 0;
+      const totalCitsCount = db.prepare("SELECT SUM(citations) as c FROM publications WHERE approval_status = 'approved'").get()?.c || 0;
+      const totalFacultyCount = db.prepare('SELECT COUNT(*) as c FROM researchers').get()?.c || 0;
+
+      const topCited = db.prepare("SELECT id, title, authors, citations, year, journal, sdg_tags, abstract, doi, url FROM publications WHERE approval_status = 'approved' ORDER BY citations DESC LIMIT 6").all().map((p) => {
+        let sdgArr = [];
+        try { sdgArr = JSON.parse(p.sdg_tags); } catch {}
+        let authArr = [];
+        try { authArr = JSON.parse(p.authors); } catch { authArr = [p.authors]; }
+        return {
+          id: p.id,
+          title: p.title,
+          authors: authArr,
+          citations: p.citations,
+          year: p.year,
+          journal: p.journal,
+          sdg_tags: sdgArr,
+          abstract: p.abstract,
+          doi: p.doi,
+          url: p.url,
+        };
+      });
+
+      return sendJson(200, {
+        success: true,
+        results,
+        total,
+        page,
+        limit,
+        hasMore: total > startIndex + limit,
+        stats: {
+          totalPublications: totalPubsCount,
+          totalCitations: totalCitsCount,
+          totalResearchers: totalFacultyCount,
+        },
+        topCited,
+      });
     }
 
     // ----------------------------------------------------
@@ -1501,8 +1809,8 @@ export async function handleApiRequest(req, res) {
       // Admins see all; Instructors see public approved + their own drafts; Guests see public approved only
       const rows = filterPublicationsForCaller(allRows, caller);
 
-      // Batch-fetch all citing papers
-      const allCiting = db.prepare('SELECT id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers').all();
+      // Batch-fetch all citing papers (ordered by latest year first, complete records first)
+      const allCiting = db.prepare("SELECT id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all();
       const citingByPubId = {};
       for (const cp of allCiting) {
         if (!citingByPubId[cp.publication_id]) {
@@ -1611,7 +1919,7 @@ export async function handleApiRequest(req, res) {
       }
 
       const trends = db.prepare('SELECT year, citations, id FROM citation_trends WHERE publication_id = ? OR publication_id = ? ORDER BY year ASC').all(id, rawId);
-      let citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+      let citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
 
       // Enrich parent publication metadata if missing keywords, ISSN/DOI, volume/issue, or full co-authors
       if (!isScraped && (!p.keywords || !p.issn_isbn || !p.volume_issue || String(p.authors || '').includes('…'))) {
@@ -1657,7 +1965,7 @@ export async function handleApiRequest(req, res) {
           if (isForceRefresh || citing.length === 0 || totalPaperCitations <= 600) {
             // Synchronously ensure complete citations for fast and accurate UI rendering
             await syncSinglePublicationCitations(id, totalPaperCitations, isForceRefresh);
-            citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+            citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
           } else {
             // For papers with over 600 citations, enqueue background backfill
             enqueuePublicationCitationSync([id]);
@@ -1667,8 +1975,8 @@ export async function handleApiRequest(req, res) {
         }
       }
 
-      // If existing citing papers lack journal or full authors, enrich a small batch with CrossRef and persist
-      const needsCitingEnrich = citing.filter((c) => !c.journal || String(c.authors || '').includes('…')).slice(0, 8);
+      // If existing citing papers lack journal or full authors, enrich a batch with CrossRef and persist
+      const needsCitingEnrich = citing.filter((c) => !c.year || !c.journal || c.authors === 'Academic Authors' || String(c.authors || '').includes('Academic Authors') || String(c.authors || '').includes('…') || c.journal === 'American Chemical Society (ACS)').slice(0, 15);
       if (needsCitingEnrich.length > 0) {
         try {
           await enrichBatchWithCrossRef(needsCitingEnrich, 5);
@@ -1691,7 +1999,7 @@ export async function handleApiRequest(req, res) {
               c.id
             );
           }
-          citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+          citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
         } catch (cErr) {
           console.warn('[EnrichCitingPapers] Error enriching citing papers:', cErr.message);
         }
@@ -1708,7 +2016,7 @@ export async function handleApiRequest(req, res) {
         .sort((a, b) => a.year - b.year);
 
       // Refresh citing array after year inference updates
-      citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
+      citing = db.prepare("SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ? ORDER BY CASE WHEN year IS NOT NULL AND year != '' THEN 0 ELSE 1 END, year DESC, title ASC").all(id, rawId);
 
       const jc3 = p.jc3_points !== null && p.jc3_points !== undefined
         ? Number(p.jc3_points)
@@ -2064,99 +2372,6 @@ export async function handleApiRequest(req, res) {
 
       return sendJson(200, { success: true, message: 'Publication deleted successfully' });
     }
-
-    // Helper to get active Apify token row
-    const getActiveApifyTokenRow = () => {
-      let row = db.prepare('SELECT * FROM apify_tokens WHERE is_active = 1 LIMIT 1').get();
-      if (!row) {
-        row = db.prepare('SELECT * FROM apify_tokens ORDER BY created_at DESC LIMIT 1').get();
-      }
-      if (!row && (process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN)) {
-        return {
-          id: 'env',
-          name: 'Environment Token',
-          token: process.env.APIFY_TOKEN || process.env.APIFY_API_TOKEN,
-          actor_id: (process.env.APIFY_ACTOR_ID || 'johnvc~google-scholar-api').replace('/', '~'),
-          is_active: 1,
-          status: 'valid',
-          username: 'Env User',
-          plan: 'FREE',
-          search_count: 0,
-          monthly_usage_usd: 0,
-          max_monthly_usage_usd: 5,
-          cycle_end_at: null,
-          total_runs: null,
-        };
-      }
-      return row || null;
-    };
-
-    // Helper to fetch live Apify token limits & usage
-    const fetchApifyTokenUsage = async (tokenRow, forceLive = false) => {
-      if (!tokenRow || !tokenRow.token) return null;
-      const headers = { Authorization: `Bearer ${tokenRow.token}` };
-
-      let limitsData = null;
-      let runsData = null;
-
-      try {
-        const [limitsRes, runsRes] = await Promise.all([
-          fetch('https://api.apify.com/v2/users/me/limits', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-          fetch('https://api.apify.com/v2/actor-runs?limit=1', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        ]);
-        limitsData = limitsRes?.data;
-        runsData = runsRes?.data;
-      } catch (err) {
-        console.warn('[ApifyUsage] Live fetch error:', err.message);
-      }
-
-      const maxMonthlyUsageUsd = Number(limitsData?.limits?.maxMonthlyUsageUsd) || Number(tokenRow.max_monthly_usage_usd) || 5;
-      const monthlyUsageUsd =
-        limitsData?.current?.monthlyUsageUsd !== undefined
-          ? Number(limitsData.current.monthlyUsageUsd)
-          : Number(tokenRow.monthly_usage_usd) || 0;
-      const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
-      const usedPercentage = maxMonthlyUsageUsd > 0 ? (monthlyUsageUsd / maxMonthlyUsageUsd) * 100 : 0;
-      const totalRuns = runsData?.total !== undefined ? runsData.total : (Number(tokenRow.total_runs) || 0);
-      const cycleEndAt = limitsData?.monthlyUsageCycle?.endAt || tokenRow.cycle_end_at || null;
-
-      if (tokenRow.id && tokenRow.id !== 'env') {
-        try {
-          db.prepare(`
-            UPDATE apify_tokens 
-            SET monthly_usage_usd = ?, max_monthly_usage_usd = ?, cycle_end_at = ?, total_runs = ?
-            WHERE id = ?
-          `).run(monthlyUsageUsd, maxMonthlyUsageUsd, cycleEndAt, totalRuns, tokenRow.id);
-        } catch {}
-      }
-
-      return {
-        tokenId: tokenRow.id,
-        tokenName: tokenRow.name,
-        username: tokenRow.username || null,
-        plan: tokenRow.plan || 'FREE',
-        actorId: tokenRow.actor_id || 'johnvc~google-scholar-api',
-        limitUsd: Number(maxMonthlyUsageUsd.toFixed(2)),
-        usedUsd: Number(monthlyUsageUsd.toFixed(3)),
-        remainingUsd: Number(remainingUsd.toFixed(3)),
-        usedPercentage: Math.min(100, Number(usedPercentage.toFixed(1))),
-        cycleEndAt,
-        totalRuns,
-        searchesCount: Number(tokenRow.search_count) || 0,
-        status: tokenRow.status || 'valid',
-        isActive: Boolean(tokenRow.is_active),
-        lastUpdated: new Date().toISOString(),
-      };
-    };
-
-    const attachTokenUsage = async (payload, didLiveScrape = false) => {
-      const active = getActiveApifyTokenRow();
-      const tokenUsage = active ? await fetchApifyTokenUsage(active, didLiveScrape) : null;
-      return {
-        ...payload,
-        tokenUsage,
-      };
-    };
 
     // ----------------------------------------------------
     // 5A. GOOGLE SCHOLAR PROFILE FETCH & PSU/NON-PSU REVIEW
@@ -2614,6 +2829,46 @@ export async function handleApiRequest(req, res) {
         return sendJson(200, await attachTokenUsage({ results: [], fromCache: true, page: 0, hasMore: false, count: 0 }));
       }
 
+      // -----------------------------------------------------------------------
+      // Public Scraper Guardrail & Quota Circuit Breaker ($1.00 threshold)
+      // -----------------------------------------------------------------------
+      const caller = authenticateCaller(req);
+      const isUserAdminOrFaculty = Boolean(caller && (caller.role === 'admin' || caller.role === 'instructor'));
+
+      const publicScraperSetting = db.prepare("SELECT value FROM system_settings WHERE key = 'public_scraper_enabled'").get()?.value || 'true';
+      const isScraperEnabledByAdmin = publicScraperSetting === 'true';
+
+      const activeToken = getActiveApifyTokenRow();
+      let quotaCircuitBreakerTripped = false;
+      let remainingBalanceUsd = 5.0;
+
+      if (activeToken) {
+        try {
+          const usage = await fetchApifyTokenUsage(activeToken, false);
+          const maxUsd = Number(usage?.maxMonthlyUsageUsd) || 5.0;
+          const usedUsd = Number(usage?.monthlyUsageUsd) || 0.0;
+          remainingBalanceUsd = Math.max(0, maxUsd - usedUsd);
+          const thresholdSetting = Number(db.prepare("SELECT value FROM system_settings WHERE key = 'scraper_quota_threshold_usd'").get()?.value) || 1.0;
+          if (remainingBalanceUsd <= thresholdSetting) {
+            quotaCircuitBreakerTripped = true;
+          }
+        } catch {}
+      }
+
+      if (!isUserAdminOrFaculty && (!isScraperEnabledByAdmin || quotaCircuitBreakerTripped)) {
+        const reason = !isScraperEnabledByAdmin ? 'admin_disabled' : 'quota_low';
+        return sendJson(200, {
+          results: [],
+          fromCache: true,
+          publicScraperDisabled: true,
+          reason,
+          remainingBalanceUsd,
+          message: reason === 'quota_low'
+            ? 'Global academic live search is currently in power-save mode to conserve institutional API quota ($1.00 or less remaining). Please search the PSU Institutional Repository or sign in as faculty.'
+            : 'Global academic live search has been restricted to faculty and administrators by the system administrator. Please search the PSU Institutional Repository.',
+        });
+      }
+
       const cleanQuery = query;
       const bareQuery = cleanQuery
         .replace(/^author:\s*"?/i, '')
@@ -3014,11 +3269,84 @@ export async function handleApiRequest(req, res) {
         }
       }
 
+      // -----------------------------------------------------------------------
+      // 3-TIER RANKING SYSTEM (PSU FIRST -> PHILIPPINES SECOND -> FOREIGN THIRD)
+      // -----------------------------------------------------------------------
+      const allFacultyRows = db.prepare('SELECT name, first_name, last_name FROM researchers').all();
+      const registeredFacultyNames = allFacultyRows
+        .map((r) => String(r.name || '').toLowerCase().trim())
+        .filter((n) => n.length >= 4);
+
+      const isPsuItem = (item) => {
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''}`.toLowerCase();
+        if (
+          text.includes('pangasinan state university') ||
+          /\bpsu\b/i.test(text) ||
+          text.includes('asingan') ||
+          text.includes('lingayen') ||
+          text.includes('urdaneta') ||
+          text.includes('bayambang') ||
+          text.includes('san carlos') ||
+          text.includes('binmaley') ||
+          text.includes('infanta') ||
+          text.includes('sta. maria') ||
+          text.includes('santa maria') ||
+          text.includes('alaminos')
+        ) {
+          return true;
+        }
+        const authorsArr = Array.isArray(item.authors) ? item.authors : [item.authors];
+        for (const a of authorsArr) {
+          const aLower = String(a || '').toLowerCase().trim();
+          if (!aLower || aLower.length < 4) continue;
+          for (const fn of registeredFacultyNames) {
+            if (aLower.includes(fn) || fn.includes(aLower)) return true;
+          }
+        }
+        return false;
+      };
+
+      const isPhItem = (item) => {
+        if (isPsuItem(item)) return false;
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''}`.toLowerCase();
+        return (
+          text.includes('philippine') ||
+          text.includes('philippines') ||
+          text.includes('filipino') ||
+          text.includes('manila') ||
+          text.includes('luzon') ||
+          text.includes('visayas') ||
+          text.includes('mindanao') ||
+          text.includes('university of the philippines') ||
+          text.includes('up diliman') ||
+          text.includes('up los baños') ||
+          text.includes('de la salle') ||
+          text.includes('ateneo') ||
+          text.includes('university of santo tomas') ||
+          /\bust\b/i.test(text) ||
+          /\bched\b/i.test(text) ||
+          /\bdost\b/i.test(text) ||
+          /\bdeped\b/i.test(text) ||
+          text.includes('state university') ||
+          text.includes('state college')
+        );
+      };
+
       const computeRelevance = (item) => {
         let score = 0;
         const tLower = String(item.title || '').toLowerCase();
         const aLower = (Array.isArray(item.authors) ? item.authors.join(' ') : String(item.authors || '')).toLowerCase();
         const jLower = String(item.journal || '').toLowerCase();
+
+        // 3-TIER HIERARCHY:
+        // Tier 1: PSU Related Papers (+100,000)
+        // Tier 2: Philippines Related Papers (+10,000)
+        // Tier 3: Foreign Papers (+0)
+        if (isPsuItem(item)) {
+          score += 100000;
+        } else if (isPhItem(item)) {
+          score += 10000;
+        }
 
         // Exact query match in title
         if (tLower.includes(bareLower)) {
@@ -3072,6 +3400,29 @@ export async function handleApiRequest(req, res) {
 
       const startIndex = page * limit;
       const pageResults = allRankedResults.slice(startIndex, startIndex + limit);
+
+      // Auto-tag each result with its UN SDG Focus Track so the UI displays SDG tags automatically
+      for (const item of pageResults) {
+        if (!item.sdg_tags || item.sdg_tags.length === 0) {
+          const sdgClass = localHeuristicSDG(item.title, item.abstract);
+          item.sdg_tags = [sdgClass.primarySDG, sdgClass.secondarySDG];
+          item.primary_sdg = sdgClass.primarySDG;
+          item.secondary_sdg = sdgClass.secondarySDG;
+          item.sdg_rationale = sdgClass.rationale;
+          item.ched_priority = sdgClass.chedPriority;
+        }
+        // Label the geographical tier for UI badging
+        if (isPsuItem(item)) {
+          item.geo_tier = 'psu';
+          item.geo_tier_label = 'Pangasinan State University';
+        } else if (isPhItem(item)) {
+          item.geo_tier = 'philippines';
+          item.geo_tier_label = 'Philippines Research';
+        } else {
+          item.geo_tier = 'international';
+          item.geo_tier_label = 'International Literature';
+        }
+      }
 
       // Determine if more results are available on the next page:
       // 1) Our pool has more items beyond the current page, OR

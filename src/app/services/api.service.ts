@@ -34,6 +34,13 @@ export interface ScholarSearchResult {
   citedByLink?: string;
   citedByTotal?: number;
   fromCache?: boolean;
+  sdg_tags?: string[];
+  primary_sdg?: string;
+  secondary_sdg?: string;
+  sdg_rationale?: string;
+  ched_priority?: string;
+  geo_tier?: 'psu' | 'philippines' | 'international';
+  geo_tier_label?: string;
 }
 
 export interface ScholarSearchResponse {
@@ -47,8 +54,11 @@ export interface ScholarSearchResponse {
   hasMore?: boolean;
   usedToken?: boolean;
   requiresApify?: boolean;
-  message: string;
+  message?: string;
   tokenUsage?: ApifyTokenUsage | null;
+  publicScraperDisabled?: boolean;
+  reason?: string;
+  remainingBalanceUsd?: number;
 }
 
 export interface ScholarAuthorDetail {
@@ -641,6 +651,61 @@ class ApiService {
     return this.request('/ai/synergy-match', {
       method: 'POST',
       body: JSON.stringify({ researcherIdA, researcherIdB }),
+    });
+  }
+
+  async getRepositorySearch(params?: {
+    q?: string;
+    sdg?: string;
+    department?: string;
+    year?: string;
+    sort?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    results: any[];
+    total: number;
+    page: number;
+    limit: number;
+    hasMore: boolean;
+    stats: {
+      totalPublications: number;
+      totalCitations: number;
+      totalResearchers: number;
+    };
+    topCited: any[];
+  }> {
+    const sp = new URLSearchParams();
+    if (params?.q) sp.set('q', params.q);
+    if (params?.sdg) sp.set('sdg', params.sdg);
+    if (params?.department) sp.set('department', params.department);
+    if (params?.year) sp.set('year', params.year);
+    if (params?.sort) sp.set('sort', params.sort);
+    if (params?.page !== undefined) sp.set('page', String(params.page));
+    if (params?.limit !== undefined) sp.set('limit', String(params.limit));
+    const qs = sp.toString();
+    return this.request(`/repository/search${qs ? `?${qs}` : ''}`);
+  }
+
+  async getPublicScraperStatus(): Promise<{
+    publicScraperEnabled: boolean;
+    quotaCircuitBreakerTripped: boolean;
+    remainingBalanceUsd: number;
+    thresholdUsd: number;
+    isAvailableForPublic: boolean;
+  }> {
+    return this.request('/settings/public-scraper-status');
+  }
+
+  async getAdminSettings(): Promise<Record<string, string>> {
+    return this.request('/admin/settings');
+  }
+
+  async updateAdminSettings(settings: Record<string, string>): Promise<{ success: boolean; message: string }> {
+    return this.request('/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
     });
   }
 }

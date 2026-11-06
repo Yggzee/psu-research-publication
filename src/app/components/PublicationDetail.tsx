@@ -91,6 +91,21 @@ export function PublicationDetail() {
   const [citingPage, setCitingPage] = useState(1);
   const CITATIONS_PER_PAGE = 10;
 
+  type CiteSortColumn = "index" | "authors" | "title" | "journal" | "vol" | "year" | "quarter";
+  type CiteSortDirection = "asc" | "desc";
+  const [citeSortColumn, setCiteSortColumn] = useState<CiteSortColumn>("year");
+  const [citeSortDirection, setCiteSortDirection] = useState<CiteSortDirection>("desc");
+
+  const handleCiteSort = (col: CiteSortColumn) => {
+    if (citeSortColumn === col) {
+      setCiteSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setCiteSortColumn(col);
+      setCiteSortDirection(col === "year" ? "desc" : "asc");
+    }
+    setCitingPage(1);
+  };
+
   // Inline Edit Mode for Excel Metadata fields
   const [isEditingExcel, setIsEditingExcel] = useState(false);
   const [savingExcel, setSavingExcel] = useState(false);
@@ -339,16 +354,56 @@ export function PublicationDetail() {
     }
   };
 
-  const filteredCitingPapers = citingPapers.filter((cp) => {
-    if (!citingSearch.trim()) return true;
-    const q = citingSearch.toLowerCase();
-    const cTitle = String(cp.title || "").toLowerCase();
-    const cAuthors = Array.isArray(cp.authors)
-      ? cp.authors.join(", ").toLowerCase()
-      : String(cp.authors || "").toLowerCase();
-    const cJournal = String(cp.journal || "").toLowerCase();
-    return cTitle.includes(q) || cAuthors.includes(q) || cJournal.includes(q);
-  });
+  const filteredCitingPapers = useMemo(() => {
+    const list = citingPapers.filter((cp) => {
+      if (!citingSearch.trim()) return true;
+      const q = citingSearch.toLowerCase();
+      const cTitle = String(cp.title || "").toLowerCase();
+      const cAuthors = Array.isArray(cp.authors)
+        ? cp.authors.join(", ").toLowerCase()
+        : String(cp.authors || "").toLowerCase();
+      const cJournal = String(cp.journal || "").toLowerCase();
+      return cTitle.includes(q) || cAuthors.includes(q) || cJournal.includes(q);
+    });
+
+    return [...list].sort((a, b) => {
+      let comparison = 0;
+      switch (citeSortColumn) {
+        case "year": {
+          const aYr = Number(a.year) || 0;
+          const bYr = Number(b.year) || 0;
+          comparison = aYr - bYr;
+          break;
+        }
+        case "title": {
+          comparison = String(a.title || "").localeCompare(String(b.title || ""));
+          break;
+        }
+        case "authors": {
+          const aAuth = Array.isArray(a.authors) ? a.authors.join(", ") : String(a.authors || "");
+          const bAuth = Array.isArray(b.authors) ? b.authors.join(", ") : String(b.authors || "");
+          comparison = aAuth.localeCompare(bAuth);
+          break;
+        }
+        case "journal": {
+          comparison = String(a.journal || "").localeCompare(String(b.journal || ""));
+          break;
+        }
+        case "vol": {
+          comparison = String(a.volume_issue || "").localeCompare(String(b.volume_issue || ""));
+          break;
+        }
+        case "quarter": {
+          comparison = String(a.quarter || "").localeCompare(String(b.quarter || ""));
+          break;
+        }
+        case "index":
+        default:
+          return 0;
+      }
+      return citeSortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [citingPapers, citingSearch, citeSortColumn, citeSortDirection]);
 
   const totalFilteredCitations = filteredCitingPapers.length;
   const totalCitingPages = Math.max(
@@ -819,10 +874,22 @@ export function PublicationDetail() {
         <CardHeader className="bg-teal-950/5 dark:bg-teal-950/20 border-b border-border/60 py-3 px-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Quote className="w-4 h-4 text-teal-600" />
-                <CardTitle className="text-sm font-bold">
-                  Official Citation Sheet — Papers Citing This Research ({citingPapers.length} Recorded / {publication.citations || 0} Total)
+                <CardTitle className="text-sm font-bold flex items-center gap-2 flex-wrap">
+                  <span>Official Citation Sheet — Papers Citing This Research ({citingPapers.length} Recorded / {publication.citations || 0} Total)</span>
+                  {citingPapers.length < (publication.citations || 0) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 hover:bg-amber-500/20"
+                      onClick={() => loadData(true)}
+                      disabled={refreshing}
+                    >
+                      <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
+                      Sync Remaining Citations ({publication.citations - citingPapers.length} pending)
+                    </Button>
+                  )}
                 </CardTitle>
               </div>
               <CardDescription className="text-[11px] mt-0.5">
@@ -868,26 +935,80 @@ export function PublicationDetail() {
                   <thead className="bg-teal-900/90 text-white uppercase tracking-wider text-[9px] font-bold">
                     <tr>
                       <th className="py-2 px-2 w-10 text-center border-r border-teal-800">#</th>
-                      <th className="py-2 px-2.5 min-w-[210px] max-w-[280px] border-r border-teal-800">
-                        Author(s) Who Cited the Research Output
+                      <th
+                        className="py-2 px-2.5 min-w-[210px] max-w-[280px] border-r border-teal-800 cursor-pointer select-none hover:bg-teal-800/60 transition-colors"
+                        onClick={() => handleCiteSort("authors")}
+                        title="Click to sort by Citing Authors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>Author(s) Who Cited the Research Output</span>
+                          <span className="text-[10px] ml-1 font-mono text-teal-300">
+                            {citeSortColumn === "authors" ? (citeSortDirection === "asc" ? "▲" : "▼") : "↕"}
+                          </span>
+                        </div>
                         <span className="block text-[8px] font-normal text-teal-200 normal-case">
                           Lead Researcher & All Co-Researchers
                         </span>
                       </th>
-                      <th className="py-2 px-2.5 min-w-[240px] border-r border-teal-800">
-                        Title of Article Where the Research Output Was Cited
+                      <th
+                        className="py-2 px-2.5 min-w-[240px] border-r border-teal-800 cursor-pointer select-none hover:bg-teal-800/60 transition-colors"
+                        onClick={() => handleCiteSort("title")}
+                        title="Click to sort by Article Title"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>Title of Article Where the Research Output Was Cited</span>
+                          <span className="text-[10px] ml-1 font-mono text-teal-300">
+                            {citeSortColumn === "title" ? (citeSortDirection === "asc" ? "▲" : "▼") : "↕"}
+                          </span>
+                        </div>
                       </th>
-                      <th className="py-2 px-2.5 min-w-[150px] border-r border-teal-800">
-                        Title of Journal
+                      <th
+                        className="py-2 px-2.5 min-w-[150px] border-r border-teal-800 cursor-pointer select-none hover:bg-teal-800/60 transition-colors"
+                        onClick={() => handleCiteSort("journal")}
+                        title="Click to sort by Journal Title"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>Title of Journal</span>
+                          <span className="text-[10px] ml-1 font-mono text-teal-300">
+                            {citeSortColumn === "journal" ? (citeSortDirection === "asc" ? "▲" : "▼") : "↕"}
+                          </span>
+                        </div>
                       </th>
-                      <th className="py-2 px-2 min-w-[100px] text-center border-r border-teal-800">
-                        Vol. / Issue / Page
+                      <th
+                        className="py-2 px-2 min-w-[100px] text-center border-r border-teal-800 cursor-pointer select-none hover:bg-teal-800/60 transition-colors"
+                        onClick={() => handleCiteSort("vol")}
+                        title="Click to sort by Volume / Issue / Page"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Vol. / Issue / Page</span>
+                          <span className="text-[10px] font-mono text-teal-300">
+                            {citeSortColumn === "vol" ? (citeSortDirection === "asc" ? "▲" : "▼") : "↕"}
+                          </span>
+                        </div>
                       </th>
-                      <th className="py-2 px-2 w-20 text-center border-r border-teal-800">
-                        Year
+                      <th
+                        className="py-2 px-2 w-20 text-center border-r border-teal-800 cursor-pointer select-none hover:bg-teal-800/60 transition-colors"
+                        onClick={() => handleCiteSort("year")}
+                        title="Click to sort by Year"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Year</span>
+                          <span className="text-[10px] font-mono text-teal-300">
+                            {citeSortColumn === "year" ? (citeSortDirection === "asc" ? "▲" : "▼") : "↕"}
+                          </span>
+                        </div>
                       </th>
-                      <th className="py-2 px-2 w-20 text-center border-r border-teal-800">
-                        Quarter
+                      <th
+                        className="py-2 px-2 w-20 text-center border-r border-teal-800 cursor-pointer select-none hover:bg-teal-800/60 transition-colors"
+                        onClick={() => handleCiteSort("quarter")}
+                        title="Click to sort by Quarter"
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          <span>Quarter</span>
+                          <span className="text-[10px] font-mono text-teal-300">
+                            {citeSortColumn === "quarter" ? (citeSortDirection === "asc" ? "▲" : "▼") : "↕"}
+                          </span>
+                        </div>
                       </th>
                       <th className="py-2 px-2 w-24 text-center">Link</th>
                     </tr>

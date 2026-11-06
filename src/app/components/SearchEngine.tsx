@@ -178,6 +178,13 @@ export function SearchEngine() {
     try {
       const response = await apiService.searchGoogleScholar(finalQuery, { page: 0 });
 
+      if (response.publicScraperDisabled) {
+        toast.error(response.message || "Global academic live search is currently restricted.");
+        setCacheNotice(response.message || "Global academic live search is restricted.");
+        setSearchResults([]);
+        return;
+      }
+
       if (response.requiresApify) {
         setRequiresApify(true);
         setCaptchaDetected(true);
@@ -613,10 +620,20 @@ export function SearchEngine() {
                           </a>
                         )}
 
-                        <StatusBadge
-                          status={isPSU ? "verified" : "unpublished"}
-                          label={isPSU ? "PSU Faculty Paper" : "External / Non-PSU"}
-                        />
+                        {/* 3-Tier Geo Badge */}
+                        {result.geo_tier === "psu" || isPSU ? (
+                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
+                            🏛️ Pangasinan State University
+                          </Badge>
+                        ) : result.geo_tier === "philippines" ? (
+                          <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold gap-1">
+                            🇵🇭 Philippines Research
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground border-border/80 font-normal gap-1">
+                            🌐 International Literature
+                          </Badge>
+                        )}
 
                         {isSaved && (
                           <StatusBadge
@@ -635,6 +652,25 @@ export function SearchEngine() {
                           />
                         )}
                       </div>
+
+                      {/* SDG Focus Track Badges */}
+                      {Array.isArray(result.sdg_tags) && result.sdg_tags.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                            SDG Focus:
+                          </span>
+                          {result.sdg_tags.map((tag) => (
+                            <Badge
+                              key={tag}
+                              variant="secondary"
+                              className="text-[10px] h-5 px-2 bg-brand/10 text-brand border border-brand/20 font-medium"
+                              title={result.sdg_rationale || undefined}
+                            >
+                              🎯 {tag}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
 
                       <p className="text-xs text-muted-foreground">
                         Authors: <span className="text-foreground">{result.authors.join(", ")}</span>

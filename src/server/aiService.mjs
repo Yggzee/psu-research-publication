@@ -386,7 +386,7 @@ You can inspect any paper and simulate custom percentage shares in the Research 
 /**
  * High-Precision Academic Classifier for UN Sustainable Development Goals (SDGs 1-17)
  */
-function localHeuristicSDG(title = '', abstract = '') {
+export function localHeuristicSDG(title = '', abstract = '') {
   const combined = `${title} ${abstract}`.toLowerCase();
 
   const rules = [
@@ -608,7 +608,7 @@ Respond with ONLY raw valid JSON (no markdown formatting, no backticks):
 }`;
 
   try {
-    const raw = await callGemini(prompt, 'You are an academic evaluator. Output valid JSON only.');
+    const raw = await callLLM(prompt, 'You are an academic evaluator. Output valid JSON only.');
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     const parsed = JSON.parse(cleaned);
 
@@ -625,10 +625,10 @@ Respond with ONLY raw valid JSON (no markdown formatting, no backticks):
       rationale: JSON.stringify(rationales),
       rationales,
       chedPriority: parsed.chedPriority || 'Smart Education and Pedagogical Advancement',
-      source: 'gemini',
+      source: getLastProvider(),
     };
   } catch (err) {
-    console.warn('[classifyPublicationSDG] Gemini failed, using local heuristic:', err.message);
+    console.warn('[classifyPublicationSDG] AI providers failed, using local heuristic fallback:', err.message);
     return localHeuristicSDG(cleanTitle, abstract);
   }
 }

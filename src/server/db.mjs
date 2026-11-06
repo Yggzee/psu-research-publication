@@ -304,6 +304,31 @@ export function initDatabase() {
     );
   `);
 
+  // 10. System Settings Table (Public Scraper toggles, Quota Circuit Breakers, etc.)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+
+  // Seed default system settings if missing
+  const initSetting = (key, defaultValue) => {
+    const existing = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
+    if (!existing) {
+      db.prepare('INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)').run(
+        key,
+        defaultValue,
+        new Date().toISOString()
+      );
+    }
+  };
+
+  initSetting('public_scraper_enabled', 'true');
+  initSetting('scraper_quota_threshold_usd', '1.00');
+  initSetting('scraper_daily_limit', '100');
+
   // Seed default admin account ONLY if no admin exists
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!existingAdmin) {

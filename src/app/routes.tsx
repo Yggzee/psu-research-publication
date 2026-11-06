@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, useLocation, Outlet, useRouteError } fro
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { SplashScreen } from "./components/SplashScreen";
+import { PublicRepositoryPortal } from "./components/PublicRepositoryPortal";
 import { LoginScreen } from "./components/LoginScreen";
 import { DashboardLayout } from "./components/DashboardLayout";
 import { Dashboard } from "./components/Dashboard";
@@ -105,6 +106,16 @@ function ErrorBoundary() {
 export const router = createBrowserRouter([
   {
     path: "/",
+    element: <PublicRepositoryPortal />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/repository",
+    element: <PublicRepositoryPortal />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/splash",
     element: <SplashScreen />,
     errorElement: <ErrorBoundary />,
   },
