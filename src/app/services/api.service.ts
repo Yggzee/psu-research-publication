@@ -410,8 +410,8 @@ class ApiService {
     return this.request<Publication[]>('/publications');
   }
 
-  async getPublicationById(id: string): Promise<Publication> {
-    return this.request<Publication>(`/publications/${id}`);
+  async getPublicationById(id: string, refresh = false): Promise<Publication> {
+    return this.request<Publication>(`/publications/${id}${refresh ? '?refresh=true' : ''}`);
   }
 
   async createPublication(data: Partial<Publication> & {

@@ -517,9 +517,14 @@ export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
     // 1. Try resolving via DOI on OpenAlex
     if (cleanDoi) {
       try {
-        const doiRes = await fetch(`https://api.openalex.org/works/https://doi.org/${encodeURIComponent(cleanDoi)}`, {
+        let doiRes = await fetch(`https://api.openalex.org/works/doi:${cleanDoi}`, {
           headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
         });
+        if (!doiRes.ok) {
+          doiRes = await fetch(`https://api.openalex.org/works/https://doi.org/${encodeURIComponent(cleanDoi)}`, {
+            headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+          });
+        }
         if (doiRes.ok) {
           const doiData = await doiRes.json();
           if (doiData?.id) {
@@ -532,7 +537,7 @@ export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
     // 2. Fallback to title search on OpenAlex if no DOI match
     if (!openAlexWorkId && cleanSearchTitle) {
       try {
-        const searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(cleanSearchTitle)}&per-page=3`;
+        const searchUrl = `https://api.openalex.org/works?search=${encodeURIComponent(cleanSearchTitle)}&per-page=5`;
         const searchRes = await fetch(searchUrl, {
           headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
         });
@@ -559,9 +564,15 @@ export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
       while (cursor && results.length < maxResults && safetyPages < maxCursorPages) {
         safetyPages++;
         const citesUrl = `https://api.openalex.org/works?filter=cites:${openAlexWorkId}&per-page=200&cursor=${encodeURIComponent(cursor)}`;
-        const citesRes = await fetch(citesUrl, {
+        let citesRes = await fetch(citesUrl, {
           headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
         });
+        if (!citesRes.ok && citesRes.status === 429) {
+          await new Promise((r) => setTimeout(r, 600));
+          citesRes = await fetch(citesUrl, {
+            headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+          });
+        }
         if (!citesRes.ok) break;
         const citesData = await citesRes.json();
         const works = citesData?.results || [];
@@ -624,13 +635,14 @@ export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
       }
     }
 
-    // 4. Supplement with Semantic Scholar Graph API (paginated in batches of 1,000 up to 10,000) if we still need more citing papers
+    // 4. Supplement with Semantic Scholar Graph API (paginated in batches of 100 up to 10,000) if we still need more citing papers
     if (results.length < maxResults) {
       try {
         let s2PaperId = cleanDoi ? `DOI:${cleanDoi}` : null;
         if (!s2PaperId && cleanSearchTitle) {
           const s2Search = await fetch(
-            `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(cleanSearchTitle)}&limit=3&fields=title`
+            `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(cleanSearchTitle)}&limit=3&fields=title`,
+            { headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' } }
           );
           if (s2Search.ok) {
             const s2SearchData = await s2Search.json();
@@ -643,10 +655,11 @@ export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
         }
 
         if (s2PaperId) {
-          const s2Limit = 1000;
+          const s2Limit = 100;
           for (let offset = 0; offset < Math.min(maxResults, 9000) && results.length < maxResults; offset += s2Limit) {
             const s2Res = await fetch(
-              `https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(s2PaperId)}/citations?fields=title,authors,year,venue,publicationDate,externalIds,url&offset=${offset}&limit=${s2Limit}`
+              `https://api.semanticscholar.org/graph/v1/paper/${encodeURIComponent(s2PaperId)}/citations?fields=title,authors,year,venue,publicationDate,externalIds,url&offset=${offset}&limit=${s2Limit}`,
+              { headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' } }
             );
             if (!s2Res.ok) break;
             const s2Data = await s2Res.json();
@@ -687,16 +700,23 @@ export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
       } catch {}
     }
 
-    // 5. Supplement with CrossRef Bibliographic Query if we still need more citing papers to reach maxResults
+    // 5. Supplement with CrossRef Bibliographic Query (fully offset-paginated) if we still need more citing papers to reach maxResults
     if (results.length < maxResults && cleanSearchTitle) {
       try {
-        const crUrl = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(cleanSearchTitle)}&rows=100`;
-        const crRes = await fetch(crUrl, {
-          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
-        });
-        if (crRes.ok) {
+        const crRowsPerPage = 100;
+        const needed = maxResults - results.length;
+        const maxOffset = Math.min(needed + 100, 2000);
+        for (let offset = 0; offset < maxOffset && results.length < maxResults; offset += crRowsPerPage) {
+          const crUrl = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(cleanSearchTitle)}&rows=${crRowsPerPage}&offset=${offset}`;
+          const crRes = await fetch(crUrl, {
+            headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+          });
+          if (!crRes.ok) break;
           const crData = await crRes.json();
-          for (const item of crData?.message?.items || []) {
+          const items = crData?.message?.items || [];
+          if (items.length === 0) break;
+
+          for (const item of items) {
             if (results.length >= maxResults) break;
             const cTitle = Array.isArray(item.title) ? item.title[0] : '';
             if (!cTitle) continue;
@@ -735,6 +755,19 @@ export async function fetchCitingPapersFromOpenAlex(paper, maxResults = 10000) {
               link: item.DOI ? `https://doi.org/${item.DOI}` : item.URL || '',
             });
           }
+          if (items.length < crRowsPerPage) break;
+        }
+      } catch {}
+    }
+
+    // 6. Supplement with Google Scholar direct citation scraping if still below maxResults and cited_by_link is available
+    if (results.length < maxResults && paper.cited_by_link) {
+      try {
+        const neededPages = Math.min(Math.ceil((maxResults - results.length) / 10) + 1, 20);
+        const gsCiting = await scrapeGoogleScholarCitations(paper.cited_by_link, neededPages);
+        for (const gc of gsCiting) {
+          if (results.length >= maxResults) break;
+          addUniqueCiting(gc);
         }
       } catch {}
     }

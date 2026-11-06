@@ -116,7 +116,7 @@ export function PublicationDetail() {
       const decodedId = decodeURIComponent(id);
       const [resData, pubData] = await Promise.all([
         apiService.getResearchers().catch(() => []),
-        apiService.getPublicationById(decodedId).catch(() => null),
+        apiService.getPublicationById(decodedId, isRefresh).catch(() => null),
       ]);
 
       setResearchers(resData || []);
@@ -514,7 +514,7 @@ export function PublicationDetail() {
                   onClick={() => window.open(citedByUrl, "_blank")}
                 >
                   <BookOpen className="w-3.5 h-3.5" />
-                  Google Scholar Citations
+                  Indexed Citations
                 </Button>
               )}
               <Button
@@ -853,7 +853,7 @@ export function PublicationDetail() {
                   onClick={() => window.open(citedByUrl, "_blank")}
                 >
                   <ExternalLink className="w-3 h-3" />
-                  Scholar Cited-By
+                  Cited-By Source
                 </Button>
               )}
             </div>
@@ -897,7 +897,7 @@ export function PublicationDetail() {
                       const globalIndex = startCiteIndex + idx + 1;
                       const citingAuthors = parseAuthorsList(citingPaper.authors);
                       const citingJournal =
-                        citingPaper.journal || "Academic Publication / Google Scholar";
+                        citingPaper.journal || "Academic Publication";
                       const citingVolIssue = citingPaper.volume_issue || "—";
                       const citingYear = citingPaper.year
                         ? String(citingPaper.year)
@@ -1127,7 +1127,7 @@ export function PublicationDetail() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {publication.citations > 0
-                    ? 'Click "Refresh & Enrich Data" above or view on Google Scholar to inspect citing articles.'
+                    ? 'Click "Refresh & Enrich Data" above or view external source to inspect citing articles.'
                     : "When external researchers cite this paper in indexed journals, their full author list and article details will appear here automatically."}
                 </p>
               </div>
@@ -1139,7 +1139,7 @@ export function PublicationDetail() {
                   className="mt-2 gap-1.5 text-xs"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  View Citing Papers on Google Scholar
+                  View External Citing Papers
                 </Button>
               )}
             </div>

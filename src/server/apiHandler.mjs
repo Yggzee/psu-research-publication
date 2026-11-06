@@ -274,7 +274,7 @@ function computePublicationCitationYears(dbInstance, p, persistTrends = false) {
 const syncedPublicationsCache = new Map();
 const activeCitationSyncJobs = new Set();
 
-async function syncSinglePublicationCitations(pubId, maxLimit = 10000) {
+async function syncSinglePublicationCitations(pubId, maxLimit = 10000, force = false) {
   if (!pubId || activeCitationSyncJobs.has(pubId)) return;
   activeCitationSyncJobs.add(pubId);
   try {
@@ -283,22 +283,64 @@ async function syncSinglePublicationCitations(pubId, maxLimit = 10000) {
     const totalTarget = Math.min(maxLimit, Number(p.citations) || 0);
     if (totalTarget <= 0) return;
 
-    const existingCount = db.prepare('SELECT COUNT(*) as c FROM citing_papers WHERE publication_id = ?').get(pubId)?.c || 0;
-    if (existingCount >= totalTarget) {
+    const existingRows = db.prepare('SELECT * FROM citing_papers WHERE publication_id = ?').all(pubId);
+    const existingCount = existingRows.length;
+    if (!force && existingCount >= totalTarget) {
       syncedPublicationsCache.set(pubId, totalTarget);
       return;
     }
 
-    // Prioritize OpenAlex (Cursor Paginated) + Semantic Scholar (Offset Paginated) + CrossRef
+    // Prioritize OpenAlex (Cursor Paginated) + Semantic Scholar (Offset Paginated) + CrossRef (Paginated)
     let fetchedCiting = await fetchCitingPapersFromOpenAlex(p, totalTarget);
 
-    // Fallback to Google Scholar direct only if OpenAlex/S2 returned 0 and cited_by_link is present
-    if (fetchedCiting.length === 0 && p.cited_by_link) {
-      fetchedCiting = await scrapeGoogleScholarCitations(p.cited_by_link, Math.min(100, totalTarget));
+    // Supplement with Google Scholar direct if OpenAlex/S2/CrossRef have not yet reached totalTarget
+    if (fetchedCiting.length < totalTarget && p.cited_by_link) {
+      try {
+        const neededPages = Math.min(Math.ceil((totalTarget - fetchedCiting.length) / 10) + 1, 30);
+        const gsCiting = await scrapeGoogleScholarCitations(p.cited_by_link, neededPages);
+        if (gsCiting.length > 0) {
+          fetchedCiting = [...fetchedCiting, ...gsCiting];
+        }
+      } catch {}
     }
 
-    if (fetchedCiting.length > existingCount) {
-      const toInsert = fetchedCiting.slice(0, totalTarget);
+    // Clean title for deduplication
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Merge existing citing papers with newly fetched citing papers to ensure no citing papers are lost
+    const mergedList = [];
+    const seenTitles = new Set();
+    const parentNorm = norm(p.title);
+
+    for (const fc of fetchedCiting) {
+      if (mergedList.length >= totalTarget) break;
+      const k = norm(fc.title);
+      if (!k || k.length < 8 || seenTitles.has(k)) continue;
+      if (parentNorm && (k === parentNorm || k.includes(parentNorm) || parentNorm.includes(k))) continue;
+      seenTitles.add(k);
+      mergedList.push(fc);
+    }
+
+    for (const er of existingRows) {
+      if (mergedList.length >= totalTarget) break;
+      const k = norm(er.title);
+      if (!k || k.length < 8 || seenTitles.has(k)) continue;
+      if (parentNorm && (k === parentNorm || k.includes(parentNorm) || parentNorm.includes(k))) continue;
+      seenTitles.add(k);
+      mergedList.push({
+        title: er.title,
+        authors: er.authors,
+        year: er.year,
+        link: er.link,
+        journal: er.journal,
+        volume_issue: er.volume_issue,
+        quarter: er.quarter,
+        doi_issn: er.doi_issn,
+      });
+    }
+
+    if (mergedList.length > existingCount || (force && mergedList.length > 0)) {
+      const toInsert = mergedList.slice(0, totalTarget);
       const insertStmt = db.prepare(`
         INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -324,7 +366,12 @@ async function syncSinglePublicationCitations(pubId, maxLimit = 10000) {
       });
       computePublicationCitationYears(db, p, true);
     }
-    syncedPublicationsCache.set(pubId, totalTarget);
+
+    if (mergedList.length >= totalTarget) {
+      syncedPublicationsCache.set(pubId, totalTarget);
+    } else {
+      syncedPublicationsCache.delete(pubId);
+    }
   } catch (err) {
     console.warn(`[CitationSync] Background sync error for ${pubId}:`, err.message);
   } finally {
@@ -1599,26 +1646,20 @@ export async function handleApiRequest(req, res) {
       }
 
       const totalPaperCitations = Number(p.citations) || 0;
-      const alreadySyncedTarget = syncedPublicationsCache.get(id) || 0;
+      const isForceRefresh = url.searchParams.get('refresh') === 'true' || url.searchParams.get('force') === 'true';
+      if (isForceRefresh) {
+        syncedPublicationsCache.delete(id);
+      }
 
-      // Auto-fetch or backfill citing papers if cached count is less than recorded citations
-      if (totalPaperCitations > 0 && (citing.length === 0 || (citing.length < totalPaperCitations && alreadySyncedTarget < totalPaperCitations))) {
+      // Auto-fetch or backfill citing papers if missing or incomplete compared to total recorded citations
+      if (totalPaperCitations > 0 && (isForceRefresh || citing.length === 0 || citing.length < totalPaperCitations)) {
         try {
-          if (citing.length === 0 && totalPaperCitations <= 600) {
-            // Fast synchronous sync for papers up to 600 citations
-            await syncSinglePublicationCitations(id, totalPaperCitations);
-            citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
-          } else if (citing.length === 0 && totalPaperCitations > 600) {
-            // For high-citation papers (1,000–10,000+), fetch initial 400 immediately so UI is populated right away,
-            // then stream the remaining thousands in the background without blocking or timing out the request
-            await syncSinglePublicationCitations(id, 400);
-            syncedPublicationsCache.delete(id);
-            citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
-            enqueuePublicationCitationSync([id]);
-          } else if (totalPaperCitations <= 600) {
-            await syncSinglePublicationCitations(id, totalPaperCitations);
+          if (isForceRefresh || citing.length === 0 || totalPaperCitations <= 600) {
+            // Synchronously ensure complete citations for fast and accurate UI rendering
+            await syncSinglePublicationCitations(id, totalPaperCitations, isForceRefresh);
             citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
           } else {
+            // For papers with over 600 citations, enqueue background backfill
             enqueuePublicationCitationSync([id]);
           }
         } catch (err) {
