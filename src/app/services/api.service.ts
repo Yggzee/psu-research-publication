@@ -26,6 +26,7 @@ export interface ScholarSearchResult {
   title: string;
   authors: string[];
   journal: string;
+  affiliation?: string;
   year: number;
   citations: number;
   abstract?: string;
@@ -77,6 +78,7 @@ export interface ScholarProfilePublication {
   isPsuPaper?: boolean;
   hasCollaborators?: boolean;
   journal: string;
+  affiliation?: string;
   year: number;
   citations: number;
   url?: string;

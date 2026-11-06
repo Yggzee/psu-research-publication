@@ -3422,42 +3422,46 @@ export async function handleApiRequest(req, res) {
       // 3-TIER RANKING SYSTEM (PSU FIRST -> PHILIPPINES SECOND -> FOREIGN THIRD)
       // -----------------------------------------------------------------------
       const allFacultyRows = db.prepare('SELECT name, first_name, last_name FROM researchers').all();
-      const registeredFacultyNames = allFacultyRows
-        .map((r) => String(r.name || '').toLowerCase().trim())
-        .filter((n) => n.length >= 4);
 
       const isPsuItem = (item) => {
-        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.url || ''}`.toLowerCase();
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
+        
+        // 1. Direct institutional and campus markers for Pangasinan State University
         if (
           text.includes('pangasinan state university') ||
-          text.includes('pangasinan') ||
-          text.includes('asingan') ||
-          text.includes('lingayen') ||
-          text.includes('urdaneta') ||
-          text.includes('bayambang') ||
-          text.includes('san carlos') ||
-          text.includes('binmaley') ||
-          text.includes('infanta') ||
-          text.includes('sta. maria') ||
-          text.includes('santa maria') ||
-          text.includes('alaminos') ||
-          text.includes('sta. barbara') ||
-          text.includes('santa barbara') ||
-          text.includes('sual') ||
-          text.includes('bolinao') ||
-          text.includes('tayug') ||
-          text.includes('dagupan') ||
-          text.includes('calasiao') ||
-          (/\bpsu\b/i.test(text) && (text.includes('university') || text.includes('philippine') || text.includes('campus') || text.includes('dr.') || text.includes('prof.')))
+          text.includes('psu.edu.ph') ||
+          /\bpangasinan\s+state\b/i.test(text) ||
+          (/\bpsu\b/i.test(text) && /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos|sta\.?\s*maria|santa\s*maria|pangasinan|campus)\b/i.test(text)) ||
+          /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos)\s+campus\b/i.test(text) ||
+          /\b(san carlos|sta\.?\s*maria|santa\s*maria)\s+campus\b/i.test(text) ||
+          /\bpsu\s+(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos|sta\.?\s*maria|santa\s*maria)\b/i.test(text) ||
+          /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos),\s*pangasinan\b/i.test(text) ||
+          /\b(sual|bolinao|tayug|dagupan|calasiao),\s*pangasinan\b/i.test(text) ||
+          /\b(municipality|town|port|power\s*plant)\s+of\s+sual\b/i.test(text)
         ) {
           return true;
         }
+
+        // 2. Strict author verification against registered faculty in database
         const authorsArr = Array.isArray(item.authors) ? item.authors : [item.authors];
         for (const a of authorsArr) {
-          const aLower = String(a || '').toLowerCase().trim();
-          if (!aLower || aLower.length < 4) continue;
-          for (const fn of registeredFacultyNames) {
-            if (aLower.includes(fn) || fn.includes(aLower)) return true;
+          const aClean = String(a || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (!aClean || aClean.length < 4) continue;
+
+          for (const fac of allFacultyRows) {
+            const facLast = String(fac.last_name || '').toLowerCase().trim();
+            const facFirst = String(fac.first_name || '').toLowerCase().trim();
+            const facFull = String(fac.name || `${fac.first_name} ${fac.last_name}`).toLowerCase().trim();
+
+            if (facFull && (aClean === facFull || aClean.includes(facFull))) return true;
+            if (facLast && facLast.length >= 3) {
+              const authorTokens = aClean.split(' ');
+              if (authorTokens.includes(facLast)) {
+                const firstInitial = facFirst ? facFirst[0] : '';
+                if (facFirst && aClean.includes(facFirst)) return true;
+                if (firstInitial && authorTokens.some((t) => t === firstInitial || t.startsWith(firstInitial))) return true;
+              }
+            }
           }
         }
         return false;
@@ -3465,71 +3469,25 @@ export async function handleApiRequest(req, res) {
 
       const isPhItem = (item) => {
         if (isPsuItem(item)) return false;
-        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.url || ''}`.toLowerCase();
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
+
         return (
-          text.includes('philippine') ||
-          text.includes('philippines') ||
-          text.includes('filipino') ||
-          text.includes('manila') ||
-          text.includes('luzon') ||
-          text.includes('visayas') ||
-          text.includes('mindanao') ||
-          text.includes('batangas') ||
-          text.includes('nueva ecija') ||
-          text.includes('ilocos') ||
-          text.includes('cagayan') ||
-          text.includes('benguet') ||
-          text.includes('baguio') ||
-          text.includes('tarlac') ||
-          text.includes('pampanga') ||
-          text.includes('bulacan') ||
-          text.includes('laguna') ||
-          text.includes('cavite') ||
-          text.includes('quezon') ||
-          text.includes('bicol') ||
-          text.includes('cebu') ||
-          text.includes('bohol') ||
-          text.includes('iloilo') ||
-          text.includes('leyte') ||
-          text.includes('davao') ||
-          text.includes('zamboanga') ||
-          text.includes('bukidnon') ||
-          text.includes('tawi-tawi') ||
-          text.includes('surigao') ||
-          text.includes('catanduanes') ||
-          text.includes('palawan') ||
-          text.includes('bataan') ||
-          text.includes('zambales') ||
-          text.includes('la union') ||
-          text.includes('abra') ||
-          text.includes('isabela') ||
-          text.includes('university of the philippines') ||
-          text.includes('up diliman') ||
-          text.includes('up los baños') ||
-          text.includes('uplb') ||
-          text.includes('up manila') ||
-          text.includes('de la salle') ||
-          text.includes('dlsu') ||
-          text.includes('ateneo') ||
-          text.includes('admu') ||
-          text.includes('university of santo tomas') ||
-          /\bust\b/i.test(text) ||
-          /\bched\b/i.test(text) ||
-          /\bdost\b/i.test(text) ||
-          /\bdeped\b/i.test(text) ||
-          /\bclsu\b/i.test(text) ||
-          /\bmmsu\b/i.test(text) ||
-          /\bbsu\b/i.test(text) ||
-          /\bvsu\b/i.test(text) ||
-          /\bda-bar\b/i.test(text) ||
-          /\bphilrice\b/i.test(text) ||
-          /\bpcaarrd\b/i.test(text) ||
-          /\bseafdec\b/i.test(text) ||
+          /\b(philippines?|filipino|pilipinas)\b/i.test(text) ||
+          /\b(university of the philippines|up diliman|up los baños|uplb|up manila|up visayas|up baguio|up mindanao)\b/i.test(text) ||
+          /\b(de la salle|dlsu|ateneo|admu|polytechnic university of the philippines|pup|mapua)\b/i.test(text) ||
+          /\b(university of santo tomas|ust\s+(manila|hospital|faculty|college|graduate|publishing))\b/i.test(text) ||
+          /\b(clsu|mmsu|bsu|vsu|wmsu|cmu|dmmmsu|tsu|isu|csu|usep|pnu|philrice|pcaarrd|seafdec|da-bar)\b/i.test(text) ||
+          /\b(dost|ched|deped|denr|doh|pids)\b/i.test(text) ||
           text.includes('.edu.ph') ||
           text.includes('.gov.ph') ||
-          text.includes('.ph/') ||
-          text.includes('state university') ||
-          text.includes('state college')
+          /\.ph(\/|$)/i.test(text) ||
+          /\b(metro manila|quezon city|davao city|cebu city|baguio city|iloilo city|cagayan de oro|bacolod city|zamboanga city)\b/i.test(text) ||
+          /\b(nueva ecija|ilocos norte|ilocos sur|batangas|benguet|tarlac|pampanga|bulacan|laguna|bohol|leyte|bukidnon|palawan|bataan|zambales)\b/i.test(text) ||
+          /\b(province of pangasinan|pangasinan province)\b/i.test(text) ||
+          /\bla union,\s*philippines?\b/i.test(text) ||
+          /\bcavite,\s*philippines?\b/i.test(text) ||
+          /\bprovince of (la union|cavite|abra|bicol)\b/i.test(text) ||
+          /\bbicol\s+(region|university|peninsula)\b/i.test(text)
         );
       };
 

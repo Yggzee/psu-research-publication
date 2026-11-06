@@ -563,7 +563,7 @@ export function SearchEngine() {
       {searchResults.length > 0 && (
         <div className="space-y-3">
           {searchResults.map((result) => {
-            const isPSU = isPSUPaper(result.authors);
+            const isPSU = result.geo_tier ? result.geo_tier === "psu" : isPSUPaper(result.authors);
             const existingRecord = getExistingPublicationRecord(result.title);
             const isSaved = Boolean(
               existingRecord &&
@@ -620,7 +620,7 @@ export function SearchEngine() {
                         )}
 
                         {/* 3-Tier Geo Badge */}
-                        {result.geo_tier === "psu" || isPSU ? (
+                        {isPSU ? (
                           <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
                             <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                             <span>Pangasinan State University</span>
