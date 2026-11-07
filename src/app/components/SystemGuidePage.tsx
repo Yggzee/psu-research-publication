@@ -1399,32 +1399,6 @@ export function SystemGuidePage() {
                   </p>
                 </div>
               </div>
-
-              {/* Top Quick Prev / Next Controls */}
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!prevCategory}
-                  onClick={() => prevCategory && setCurrentIndex(currentIndex - 1)}
-                  className="h-9 px-3 text-xs gap-1"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Previous</span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  disabled={!nextCategory}
-                  onClick={() => nextCategory && setCurrentIndex(currentIndex + 1)}
-                  className="h-9 px-3.5 text-xs gap-1 bg-brand hover:bg-brand/90 text-white font-semibold"
-                >
-                  <span>Next Page</span>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
             </div>
 
             {/* Section 1: Detailed 2-Paragraph Narrative */}
@@ -1564,30 +1538,7 @@ export function SystemGuidePage() {
                 <ChevronRight className="w-4 h-4" />
               </Button>
             ) : (
-              <Button
-                type="button"
-                variant="default"
-                onClick={() =>
-                  navigate(
-                    !loggedIn
-                      ? "/"
-                      : currentUser?.role === "admin"
-                      ? "/dashboard"
-                      : "/dashboard/publications"
-                  )
-                }
-                className="w-full sm:w-auto h-11 px-6 text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>
-                  Finish Guide & Return to{" "}
-                  {!loggedIn
-                    ? "Public Search"
-                    : currentUser?.role === "admin"
-                    ? "Dashboard"
-                    : "My Publications"}
-                </span>
-              </Button>
+              <div />
             )}
           </div>
         </main>

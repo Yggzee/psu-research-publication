@@ -21,4 +21,6 @@ Every feature addition, bug fix, or database change must work seamlessly not onl
 
 ## 3. UI & Design Guidelines
 - **No Emojis:** Never use emojis in any component, alert, badge, or button. Always use icons from `lucide-react`.
+- **No Redundant Action Buttons:** Never place two or more buttons on the same page that perform the exact same action or navigate to the exact same page (e.g., duplicate "Back to Public Search" buttons). Keep strictly one button per distinct action.
+- **Proactive Rule Capture:** Whenever the user introduces a new rule or a preference that looks like a project-wide rule, always ask if it should be added to `AGENTS.md`.
 - **Responsive & Structured Layouts:** Use Tailwind CSS flexbox and grid layouts aligned with the existing PSU institutional theme.

@@ -62,6 +62,13 @@ Always enforce the following standardized terminology and formatting across all 
    - Refer to all retrieved and indexed scholarly works as **"Publications"** (never "Papers" or "Scholarly Works").
    - On the researcher's publications page (`InstructorPublicationsPage.tsx`), use **"My Publications"** (page header), **"My Published Research"** (Tab 1), **"Institutional Repository"** (Tab 2), and **"Add Publication"** (action button/modal). Do not include an option to add ongoing/in-progress unpublished research.
 
+## Mandatory UI & Workflow Rules
+
+1. **No Redundant / Duplicate Action Buttons:**
+   - Never place multiple buttons or links on the same page that perform the exact same action or navigate to the exact same destination (for example, having multiple "Back to Public Search", "Return to Dashboard", or duplicate pagination/help buttons on a single screen). Each distinct action or navigation target must have only **one** button on the page.
+2. **Proactive `AGENTS.md` Rule Confirmation:**
+   - Every time we come up with a new rule, or the user states a requirement or preference that looks like a system-wide rule, **always ask the user if that rule should be added to `AGENTS.md`**.
+
 ## Project Guidelines
 
 Read and always follow the instructions in the [project guidelines](guidelines/Guidelines.md) unless the user requests otherwise.
