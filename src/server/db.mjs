@@ -390,10 +390,10 @@ export function initDatabase() {
 // Call on import to guarantee schema existence
 initDatabase();
 
-if (isTursoConfigured) {
-  initTursoSchema().then(() => {
-    rehydrateFromTurso(db);
-  }).catch((err) => {
-    console.warn('[Turso Startup Error]:', err.message);
-  });
-}
+export const dbReadyPromise = isTursoConfigured
+  ? initTursoSchema()
+      .then(() => rehydrateFromTurso(db, originalPrepare))
+      .catch((err) => {
+        console.warn('[Turso Startup Error]:', err.message);
+      })
+  : Promise.resolve();

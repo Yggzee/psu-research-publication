@@ -304,8 +304,10 @@ export async function initTursoSchema() {
  * Rehydrate local SQLite database from Turso Cloud on container boot.
  * This guarantees Render containers waking from sleep never lose a single record!
  */
-export async function rehydrateFromTurso(localDb) {
+export async function rehydrateFromTurso(localDb, rawPrepare = null) {
   if (!tursoClient) return;
+
+  const prepareFn = rawPrepare || localDb.prepare.bind(localDb);
 
   try {
     console.log('[Turso Sync] Syncing latest records from Turso Cloud into local database...');
@@ -324,27 +326,68 @@ export async function rehydrateFromTurso(localDb) {
       'system_settings'
     ];
 
+    // Check if Turso Cloud is brand-new (0 users in cloud, while local DB has seed data)
+    let tursoUserCount = 0;
+    try {
+      const userCheck = await tursoClient.execute('SELECT COUNT(*) as c FROM users');
+      tursoUserCount = Number(userCheck.rows?.[0]?.c || 0);
+    } catch {}
+
+    if (tursoUserCount === 0) {
+      console.log('[Turso Sync] Turso Cloud is empty — pushing initial seed tables to Turso Cloud...');
+      for (const table of tables) {
+        await pushTableToTurso(localDb, table);
+      }
+      console.log('[Turso Sync] Initial seed push to Turso Cloud complete!');
+      return;
+    }
+
     let totalRestored = 0;
+
+    // Temporarily disable foreign key enforcement during bulk table replacement
+    try { localDb.exec('PRAGMA foreign_keys = OFF;'); } catch {}
 
     for (const table of tables) {
       try {
         const result = await tursoClient.execute(`SELECT * FROM ${table}`);
-        if (result.rows && result.rows.length > 0) {
-          const columns = result.columns;
-          const placeholders = columns.map(() => '?').join(', ');
-          const colNames = columns.join(', ');
-          const insertStmt = localDb.prepare(`INSERT OR REPLACE INTO ${table} (${colNames}) VALUES (${placeholders})`);
+        if (result.rows) {
+          localDb.exec('BEGIN IMMEDIATE;');
+          try {
+            // If Turso has rows for core tables (or even 0 rows for dynamic tables like invitation_requests),
+            // clear stale git-baked local rows so deletions on Render also persist across restarts.
+            if (result.rows.length > 0 || ['invitation_requests', 'email_logs', 'ai_chat_sessions'].includes(table)) {
+              prepareFn(`DELETE FROM ${table}`).run();
+            }
 
-          for (const row of result.rows) {
-            const values = columns.map(c => row[c]);
-            insertStmt.run(...values);
-            totalRestored++;
+            if (result.rows.length > 0) {
+              const localColsInfo = prepareFn(`PRAGMA table_info(${table})`).all();
+              const validLocalCols = new Set(localColsInfo.map(col => col.name));
+              const columns = result.columns.filter(c => validLocalCols.has(c));
+
+              if (columns.length > 0) {
+                const placeholders = columns.map(() => '?').join(', ');
+                const colNames = columns.join(', ');
+                const insertStmt = prepareFn(`INSERT OR REPLACE INTO ${table} (${colNames}) VALUES (${placeholders})`);
+
+                for (const row of result.rows) {
+                  const values = columns.map(c => row[c]);
+                  insertStmt.run(...values);
+                  totalRestored++;
+                }
+              }
+            }
+            localDb.exec('COMMIT;');
+          } catch (txErr) {
+            try { localDb.exec('ROLLBACK;'); } catch {}
+            throw txErr;
           }
         }
       } catch (err) {
         console.warn(`[Turso Sync] Error syncing table ${table}:`, err.message);
       }
     }
+
+    try { localDb.exec('PRAGMA foreign_keys = ON;'); } catch {}
 
     console.log(`[Turso Sync] Successfully rehydrated ${totalRestored} records from Turso Cloud!`);
   } catch (err) {
@@ -361,17 +404,19 @@ export async function pushTableToTurso(localDb, tableName) {
     const rows = localDb.prepare(`SELECT * FROM ${tableName}`).all();
     if (rows.length === 0) return;
 
+    const statements = [];
     for (const row of rows) {
       const keys = Object.keys(row);
       const cols = keys.join(', ');
       const placeholders = keys.map(() => '?').join(', ');
       const values = keys.map(k => row[k]);
 
-      await tursoClient.execute({
+      statements.push({
         sql: `INSERT OR REPLACE INTO ${tableName} (${cols}) VALUES (${placeholders})`,
         args: values,
       });
     }
+    await executeBatchOnTurso(statements);
   } catch (err) {
     console.warn(`[Turso Push] Error pushing ${tableName}:`, err.message);
   }

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { db, runInTransaction } from './db.mjs';
+import { db, runInTransaction, dbReadyPromise } from './db.mjs';
 import { isTursoConfigured, rehydrateFromTurso, pushTableToTurso } from './turso.mjs';
 import {
   scrapeGoogleScholarDirect,
@@ -133,8 +133,10 @@ export function cleanupOrphanedPublications(dbInstance) {
   }
 }
 
-// Run initial orphan cleanup on module load
-cleanupOrphanedPublications(db);
+// Run initial orphan cleanup after Turso rehydration completes
+dbReadyPromise.then(() => {
+  cleanupOrphanedPublications(db);
+}).catch(() => {});
 
 /**
  * Infer the publication year of a citing paper from its explicit year, URL, ResearchGate ObjectId, or volume/issue string.
@@ -500,6 +502,7 @@ const attachTokenUsage = async (payload, didLiveScrape = false) => {
  * Compatible with Vite dev server middleware and standalone Node http server
  */
 export async function handleApiRequest(req, res) {
+  await dbReadyPromise;
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
   const method = req.method;

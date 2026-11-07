@@ -1,4 +1,4 @@
-import { db } from './db.mjs';
+import { db, dbReadyPromise } from './db.mjs';
 
 export function normalizeTitle(t) {
   if (!t) return '';
@@ -52,5 +52,7 @@ export function deduplicateDatabase() {
   return { removed: toDelete.length, uniqueCount };
 }
 
-// Run if called directly
-deduplicateDatabase();
+// Run after database / Turso rehydration completes
+dbReadyPromise.then(() => {
+  deduplicateDatabase();
+}).catch(() => {});
