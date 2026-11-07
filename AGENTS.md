@@ -2,14 +2,16 @@
 
 React + Vite + Tailwind CSS project with a Node.js + SQLite/Turso backend, deployed on Render and Turso Cloud.
 
-## Development Server
+## Development & Production Servers
 
-A Vite development server is always running on `$PORT` (default 8443). Source changes
-are reflected through hot reload.
+- **Local Development (`npm run dev`):** Runs Vite with the embedded `/api/*` backend middleware on `$PORT` (default `8443`).
+- **Production (`npm run build` && `npm start`):** Builds the frontend to `dist/` and runs `node src/server/prod.mjs` on Render with Turso Cloud SQLite persistence.
 
 ## Key Files
 
 - `src/main.tsx` - Browser entry point
+- `src/app/routes.tsx` - Frontend route definitions and role-based route guards
+- `src/app/components/SystemGuidePage.tsx` - Role-aware step-by-step visual system guide (`/guide`)
 - `src/server/apiHandler.mjs` - Unified backend API handler (used in both Vite dev and Render prod)
 - `src/server/db.mjs` - Local SQLite initialization, schema migrations, and automatic Turso write/transaction replication
 - `src/server/turso.mjs` - Turso Cloud SQLite schema initialization (`initTursoSchema`), cold-start rehydration (`rehydrateFromTurso`), and batch replication
@@ -66,7 +68,9 @@ Always enforce the following standardized terminology and formatting across all 
 
 1. **No Redundant / Duplicate Action Buttons:**
    - Never place multiple buttons or links on the same page that perform the exact same action or navigate to the exact same destination (for example, having multiple "Back to Public Search", "Return to Dashboard", or duplicate pagination/help buttons on a single screen). Each distinct action or navigation target must have only **one** button on the page.
-2. **Proactive `AGENTS.md` Rule Confirmation:**
+2. **Keep the System Visual Guide (`SystemGuidePage.tsx`) Synchronized:**
+   - Whenever you add, rename, or modify a page, button, badge, or workflow in the workspace, you **MUST** also update `src/app/components/SystemGuidePage.tsx` (`/guide`) so its visual button replicas, simulated charts, and plain-language narrative explanations always match the live workspace.
+3. **Proactive `AGENTS.md` Rule Confirmation:**
    - Every time we come up with a new rule, or the user states a requirement or preference that looks like a system-wide rule, **always ask the user if that rule should be added to `AGENTS.md`**.
 
 ## Project Guidelines
