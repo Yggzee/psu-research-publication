@@ -8,7 +8,7 @@ import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import psuLogo from "../assets/psu-logo.png";
 import psuBuilding from "../assets/psu_newbuilding.jpg";
-import { setCurrentUser, getCurrentUser } from "../utils/researchStore";
+import { setCurrentUser, getCurrentUser, getManagedResearchers } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
 
 export function LoginScreen() {
