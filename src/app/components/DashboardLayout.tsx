@@ -19,6 +19,7 @@ import {
   Sparkles,
   History,
   ChevronRight,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
@@ -285,8 +286,8 @@ export function DashboardLayout() {
             );
           })}
 
-          <div className="pt-2 mt-1 border-t border-border/60 flex items-center justify-between px-2">
-            <span className="text-[11px] text-muted-foreground truncate max-w-[110px]" title={currentUser.name}>
+          <div className="pt-2 mt-1 border-t border-border/60 flex items-center justify-between pl-11 pr-2 min-h-[36px]">
+            <span className="text-[11px] text-muted-foreground truncate max-w-[95px]" title={currentUser.name}>
               {currentUser.role === "admin" ? "Research Coordinator" : currentUser.instructorId || "Researcher"}
             </span>
             <Button
@@ -611,6 +612,17 @@ export function DashboardLayout() {
 
       {/* Global Command Palette (Ctrl+K) */}
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
+
+      {/* Single Bottom-Left Question Mark (?) Guide Button */}
+      <button
+        type="button"
+        onClick={() => navigate("/guide")}
+        title="About & System Visual Guide"
+        aria-label="Open About and System Visual Guide"
+        className="fixed bottom-20 lg:bottom-3.5 left-3.5 z-40 w-9 h-9 rounded-full bg-brand text-white shadow-lg hover:bg-brand/90 hover:scale-105 transition-all flex items-center justify-center cursor-pointer ring-2 ring-background"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
 
       {/* Floating Ask Campus AI Mascot Bubble (Persistent Help Widget) */}
       <FloatingAskAIBubble />

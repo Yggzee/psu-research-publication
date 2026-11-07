@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  HelpCircle,
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
@@ -250,7 +251,7 @@ export function PublicRepositoryPortal() {
           <div className="flex items-center gap-3 font-mono text-[11px] bg-muted/40 border border-border/60 px-3 py-1.5 rounded-lg">
             <span className="flex items-center gap-1.5" title="Verified Publications">
               <BookOpen className="w-3.5 h-3.5 text-brand" />
-              <strong className="text-foreground">{repoStats.totalPublications}</strong> Researches
+              <strong className="text-foreground">{repoStats.totalPublications}</strong> Publications
             </span>
             <span className="text-border">•</span>
             <span className="flex items-center gap-1.5" title="Total Global Citations">
@@ -258,9 +259,9 @@ export function PublicRepositoryPortal() {
               <strong className="text-foreground">{repoStats.totalCitations}</strong> Citations
             </span>
             <span className="text-border">•</span>
-            <span className="flex items-center gap-1.5" title="Faculty Authors">
+            <span className="flex items-center gap-1.5" title="Registered Researchers">
               <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-              <strong className="text-foreground">{repoStats.totalResearchers}</strong> Faculty
+              <strong className="text-foreground">{repoStats.totalResearchers}</strong> Researchers
             </span>
           </div>
 
@@ -995,9 +996,20 @@ export function PublicRepositoryPortal() {
           Asingan Campus • Commission on Higher Education (CHED) Accredited Repository Standards • United Nations SDGs Aligned
         </p>
         <p className="text-[10px] text-muted-foreground/80">
-          Faculty, researchers, and campus administrators may sign in using the top-right portal button to access research analytics and management tools.
+          Researchers and the Research Coordinator may sign in using the top-right portal button to access research analytics and management tools.
         </p>
       </footer>
+
+      {/* Single Bottom-Left Question Mark (?) Guide Button */}
+      <button
+        type="button"
+        onClick={() => navigate("/guide")}
+        title="About & System Visual Guide"
+        aria-label="Open About and System Visual Guide"
+        className="fixed bottom-5 left-5 z-40 w-10 h-10 rounded-full bg-brand text-white shadow-lg hover:bg-brand/90 hover:scale-105 transition-all flex items-center justify-center cursor-pointer ring-2 ring-background"
+      >
+        <HelpCircle className="w-5 h-5" />
+      </button>
     </div>
   );
 }

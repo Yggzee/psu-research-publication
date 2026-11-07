@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router";
 import { motion } from "motion/react";
-import { Mail, Lock, User, CheckCircle2, AlertCircle, ArrowLeft, Loader2, Send, X } from "lucide-react";
+import { Mail, Lock, User, CheckCircle2, AlertCircle, ArrowLeft, Loader2, Send, X, HelpCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -589,6 +589,17 @@ export function LoginScreen() {
           </div>
         </div>
       )}
+
+      {/* Single Bottom-Left Question Mark (?) Guide Button */}
+      <button
+        type="button"
+        onClick={() => navigate("/guide")}
+        title="About & System Visual Guide"
+        aria-label="Open About and System Visual Guide"
+        className="fixed bottom-5 left-5 z-40 w-10 h-10 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 hover:scale-105 transition-all flex items-center justify-center cursor-pointer ring-2 ring-white"
+      >
+        <HelpCircle className="w-5 h-5" />
+      </button>
     </div>
   );
 }

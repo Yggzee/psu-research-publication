@@ -22,6 +22,7 @@ import { CampusAIChatHistory } from "./components/CampusAIChatHistory";
 import { getCurrentUser, isAuthenticated } from "./utils/researchStore";
 import { VerifyInvitationPage } from "./components/VerifyInvitationPage";
 import { VerifyEmailPage } from "./components/VerifyEmailPage";
+import { SystemGuidePage } from "./components/SystemGuidePage";
 
 export function ProtectedRoute({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
@@ -112,6 +113,16 @@ export const router = createBrowserRouter([
   {
     path: "/repository",
     element: <PublicRepositoryPortal />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/guide",
+    element: <SystemGuidePage />,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    path: "/about",
+    element: <SystemGuidePage />,
     errorElement: <ErrorBoundary />,
   },
   {
