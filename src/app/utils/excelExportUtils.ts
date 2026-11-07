@@ -775,6 +775,5 @@ export function exportResearchMatrixToExcel(options: ExcelExportOptions): void {
         : [{ name: "PSU_Asingan_Campus", department: exportDepartment === "all" ? "Campus" : exportDepartment }],
     publications,
     exportYear,
-    mode: "individual",
   });
 }

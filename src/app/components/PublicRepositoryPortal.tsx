@@ -460,12 +460,12 @@ export function PublicRepositoryPortal() {
                     value={globalQuery}
                     onChange={(e) => setGlobalQuery(e.target.value)}
                     placeholder="Search global literature across millions of papers (PSU & PH prioritized)..."
-                    disabled={isScraperLockedForPublic}
+                    disabled={Boolean(isScraperLockedForPublic)}
                     className="pl-12 pr-28 h-13 sm:h-14 text-sm sm:text-base rounded-2xl bg-card border-border/80 focus-visible:ring-brand shadow-xs"
                   />
                   <Button
                     type="submit"
-                    disabled={isGlobalLoading || isScraperLockedForPublic || !globalQuery.trim()}
+                    disabled={isGlobalLoading || Boolean(isScraperLockedForPublic) || !globalQuery.trim()}
                     className="absolute right-2 top-1/2 -translate-y-1/2 h-9 sm:h-10 px-4 sm:px-6 rounded-xl font-bold bg-brand hover:bg-brand/90 text-white text-xs sm:text-sm"
                   >
                     {isGlobalLoading ? "Searching..." : "Search"}

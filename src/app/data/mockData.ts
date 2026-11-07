@@ -34,6 +34,16 @@ export interface Publication {
   ownerName?: string;
   owner_id?: string;
   ownerId?: string;
+  publication_date?: string;
+  publicationDate?: string;
+  volume_issue?: string;
+  volumeIssue?: string;
+  issn_isbn?: string;
+  issnIsbn?: string;
+  doi?: string;
+  keywords?: string;
+  publication_level?: string;
+  publicationLevel?: string;
   citingPapers?: {
     title: string;
     authors?: string;

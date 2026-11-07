@@ -23,6 +23,7 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
+  Tag,
   Building2,
   Globe,
 } from "lucide-react";

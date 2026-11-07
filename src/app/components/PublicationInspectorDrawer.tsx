@@ -43,6 +43,10 @@ export interface InspectedPublication {
   doi?: string;
   issn_isbn?: string;
   issnIsbn?: string;
+  jc3_points?: number;
+  jc3Points?: number;
+  nbc461_points?: number;
+  nbc461Points?: number;
   volume_issue?: string;
   volumeIssue?: string;
   publication_date?: string;

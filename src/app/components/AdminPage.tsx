@@ -152,7 +152,7 @@ export function AdminPage() {
   const loadScraperSettings = async () => {
     try {
       const [settings, status] = await Promise.all([
-        apiService.getAdminSettings().catch(() => ({})),
+        apiService.getAdminSettings().catch(() => ({} as Record<string, string>)),
         apiService.getPublicScraperStatus().catch(() => null),
       ]);
       if (settings?.public_scraper_enabled !== undefined) {
