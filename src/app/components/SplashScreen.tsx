@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { GraduationCap } from "lucide-react";
-import psuLogo from "figma:asset/0f3e65de85ff26584e9a3039d47bcf17ff6e6368.png";
+import psuLogo from "../assets/psu-logo.png";
 
 export function SplashScreen() {
   const navigate = useNavigate();

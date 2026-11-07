@@ -6,8 +6,8 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import psuLogo from "figma:asset/0f3e65de85ff26584e9a3039d47bcf17ff6e6368.png";
-import psuBuilding from "../../imports/psu_newbuilding.jpg";
+import psuLogo from "../assets/psu-logo.png";
+import psuBuilding from "../assets/psu_newbuilding.jpg";
 import { setCurrentUser, getCurrentUser } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
 

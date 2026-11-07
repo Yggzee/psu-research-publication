@@ -8,19 +8,23 @@ import { sqliteApiPlugin } from './src/server/vitePlugin.mjs'
 
 export default defineConfig({
   plugins: [
-    // The React and Tailwind plugins are both required for Make, even if
-    // Tailwind is not being actively used – do not remove them
     react(),
     tailwindcss(),
     sqliteApiPlugin(),
   ],
   resolve: {
     alias: {
-      // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
     },
   },
-
-  // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
+  server: {
+    host: '0.0.0.0',
+    port: parseInt(process.env.PORT || '8443'),
+    strictPort: true,
+  },
+  preview: {
+    host: '0.0.0.0',
+    port: parseInt(process.env.PORT || '8443'),
+  },
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

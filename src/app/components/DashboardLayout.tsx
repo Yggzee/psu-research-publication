@@ -23,7 +23,7 @@ import {
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
-import psuLogo from "figma:asset/0f3e65de85ff26584e9a3039d47bcf17ff6e6368.png";
+import psuLogo from "../assets/psu-logo.png";
 import { clearCurrentUser, getCurrentUser } from "../utils/researchStore";
 import { useTheme } from "../utils/themeContext";
 import { ConfirmModal } from "./ConfirmModal";

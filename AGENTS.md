@@ -15,8 +15,7 @@ are reflected through hot reload.
 - `src/server/turso.mjs` - Turso Cloud SQLite schema initialization (`initTursoSchema`), cold-start rehydration (`rehydrateFromTurso`), and batch replication
 - `src/server/prod.mjs` - Render production HTTP server serving `dist/` and `/api/*`
 - `render.yaml` - Render cloud deployment configuration
-- `vite.figma.config.ts` - Figma Make wrapper configuration
-- `.mise.toml` - Toolchain versions
+- `vite.config.ts` - Vite dev & build configuration
 
 ## Mandatory Turso Cloud & Render Deployment Rules
 
