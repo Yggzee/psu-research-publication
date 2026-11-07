@@ -432,7 +432,7 @@ export async function scrapeGoogleScholarDirect(query, pageOrOptions = 0, limit 
             authors = authorsPart.split(',').map((a) => a.trim().replace(/…$/, '').trim()).filter(Boolean);
           }
           if (authors.length === 0) {
-            authors = [query];
+            continue;
           }
 
           const ym = authorSummary.match(/\b(19\d{2}|20\d{2})\b/);
@@ -1090,8 +1090,45 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     .trim();
   if (!cleanQ) return [];
 
+  const isExplicitAuthor = /^author:/i.test(String(rawQuery || '').trim());
   const words = cleanQ.split(/\s+/).filter(Boolean);
-  const isPersonNameQuery = words.length >= 2 && words.length <= 3 && !/university|college|school|campus|department|journal|republic|philippines|state|system/i.test(cleanQ);
+  const nameTokens = cleanQ
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !['sir', 'maam', 'dr', 'prof', 'mr', 'ms', 'mrs', 'engr', 'atty'].includes(w));
+
+  const isPersonNameQuery =
+    isExplicitAuthor ||
+    (words.length >= 2 &&
+      words.length <= 4 &&
+      nameTokens.length >= 2 &&
+      nameTokens.length <= 3 &&
+      !/university|college|school|campus|department|journal|republic|philippines|state|system|analysis|development|assessment|evaluation|education|technology|learning|management|farming|agriculture|arduino|iot|model|framework|study|impact|effect|design|implementation/i.test(cleanQ));
+
+  const matchesPersonAuthorList = (authorsArr) => {
+    if (!Array.isArray(authorsArr) || authorsArr.length === 0) return false;
+    if (nameTokens.length === 0) return false;
+    const targetLast = nameTokens[nameTokens.length - 1];
+    const targetFirst = nameTokens[0];
+    const targetFirstInitial = targetFirst[0];
+
+    return authorsArr.some((a) => {
+      const aNorm = String(a || '')
+        .toLowerCase()
+        .replace(/[^a-z\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!aNorm) return false;
+      const aWords = aNorm.split(' ');
+      if (!aWords.includes(targetLast)) return false;
+      if (nameTokens.length === 1) return true;
+      return (
+        aWords.includes(targetFirst) ||
+        aWords.some((w) => w !== targetLast && (w.startsWith(targetFirst) || (w.length <= 3 && w.startsWith(targetFirstInitial))))
+      );
+    });
+  };
 
   const results = [];
   const seenNorm = new Set();
@@ -1102,17 +1139,30 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     results.push(item);
   };
 
+  const EXCLUDED_CROSSREF_TYPES = new Set([
+    'component',
+    'reference-entry',
+    'reference-book',
+    'dataset',
+    'peer-review',
+    'grant',
+    'standard',
+  ]);
+
   // 1. CrossRef Search: Comprehensive, un-rate-limited global academic index
   try {
-    const crUrl = `https://api.crossref.org/works?query=${encodeURIComponent(cleanQ)}&rows=25&offset=${page * 15}`;
+    const crQueryParam = isPersonNameQuery
+      ? `query.author=${encodeURIComponent(nameTokens.join(' '))}`
+      : `query=${encodeURIComponent(cleanQ)}`;
+    const crUrl = `https://api.crossref.org/works?${crQueryParam}&rows=25&offset=${page * 15}`;
     const crRes = await fetch(crUrl, {
       headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
     });
     if (crRes.ok) {
       const crData = await crRes.json();
       for (const item of crData?.message?.items || []) {
-        // Strictly exclude component/supplementary items (.s001, etc.)
-        if (item.type === 'component' || (item.DOI && /\.s\d+$/i.test(item.DOI))) continue;
+        // Strictly exclude component/reference/dictionary items and supplementary files (.s001, etc.)
+        if (EXCLUDED_CROSSREF_TYPES.has(item.type) || (item.DOI && /(\.s\d+|\/benz\/)/i.test(item.DOI))) continue;
         const cTitle = Array.isArray(item.title) ? cleanText(item.title[0]) : '';
         if (!cTitle) continue;
         const cAuthors = Array.isArray(item.author)
@@ -1120,6 +1170,16 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
               .map((a) => [a.given, a.family].filter(Boolean).join(' ') || a.name || '')
               .filter(Boolean)
           : [];
+
+        // Never fabricate authors on anonymous/dictionary entries
+        if (cAuthors.length === 0) continue;
+        if (isPersonNameQuery && !matchesPersonAuthorList(cAuthors)) continue;
+
+        const cJournal =
+          (Array.isArray(item['container-title']) && item['container-title'][0]) ||
+          item.publisher ||
+          'Academic Publication';
+        if (/\b(benezit dictionary|oxford art online|who's who)\b/i.test(cJournal)) continue;
 
         const crAffiliations = [];
         if (Array.isArray(item.author)) {
@@ -1133,10 +1193,6 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
         }
         const cAffiliation = [...new Set(crAffiliations)].join('; ');
 
-        const cJournal =
-          (Array.isArray(item['container-title']) && item['container-title'][0]) ||
-          item.publisher ||
-          'Academic Publication';
         const dateParts =
           item.published?.['date-parts']?.[0] ||
           item['published-print']?.['date-parts']?.[0] ||
@@ -1147,7 +1203,7 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
         addResult({
           id: `cr-${hashString(item.DOI || cTitle)}`,
           title: cTitle,
-          authors: cAuthors.length > 0 ? cAuthors : [cleanQ],
+          authors: cAuthors,
           journal: cleanText(cJournal),
           affiliation: cAffiliation,
           year: Number(cYear),
@@ -1170,7 +1226,17 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     if (!wTitle) return;
     const wAuthors = Array.isArray(w.authorships)
       ? w.authorships.map((a) => a?.author?.display_name).filter(Boolean)
-      : [cleanQ];
+      : [];
+
+    // Never fabricate the search query as an author if the work has no authors
+    if (wAuthors.length === 0) return;
+    if (isPersonNameQuery && !matchesPersonAuthorList(wAuthors)) return;
+
+    const wJournal =
+      w.primary_location?.source?.display_name ||
+      w.host_venue?.display_name ||
+      'Academic Publication';
+    if (/\b(benezit dictionary|oxford art online)\b/i.test(wJournal)) return;
 
     const wInstitutions = [];
     if (Array.isArray(w.authorships)) {
@@ -1184,17 +1250,13 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     }
     const wAffiliation = [...new Set(wInstitutions)].join('; ');
 
-    const wJournal =
-      w.primary_location?.source?.display_name ||
-      w.host_venue?.display_name ||
-      'Academic Publication';
     const wUrl = w.doi || w.primary_location?.landing_page_url || w.id || '';
     const fullAbstract = reconstructOpenAlexAbstract(w.abstract_inverted_index);
 
     addResult({
       id: `oa-${w.id?.split('/').pop() || hashString(wTitle)}`,
       title: wTitle,
-      authors: wAuthors.length > 0 ? wAuthors : [cleanQ],
+      authors: wAuthors,
       journal: wJournal,
       affiliation: wAffiliation,
       year: w.publication_year || new Date().getFullYear(),
@@ -1211,26 +1273,34 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
   try {
     if (isPersonNameQuery) {
       try {
-        const authUrl = `https://api.openalex.org/authors?filter=display_name.search:${encodeURIComponent(cleanQ)}&per-page=3&mailto=research@psu.edu.ph`;
-        const authRes = await fetch(authUrl, {
-          headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
-        });
-        if (authRes.ok) {
-          const authData = await authRes.json();
-          const authorIds = (authData?.results || [])
-            .map((a) => a?.id?.split('/').pop())
-            .filter(Boolean);
-
-          if (authorIds.length > 0) {
-            const worksUrl = `https://api.openalex.org/works?filter=authorships.author.id:${authorIds.join('|')}&per-page=20&page=${page + 1}&sort=cited_by_count:desc&mailto=research@psu.edu.ph`;
-            const worksRes = await fetch(worksUrl, {
-              headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
-            });
-            if (worksRes.ok) {
-              const worksData = await worksRes.json();
-              for (const w of worksData?.results || []) {
-                parseOpenAlexWork(w);
+        const searchNames = [...new Set([cleanQ, nameTokens.join(' ')].filter(Boolean))];
+        const authorIdSet = new Set();
+        for (const sName of searchNames) {
+          const authUrl = `https://api.openalex.org/authors?filter=display_name.search:${encodeURIComponent(sName)}&per-page=5&mailto=research@psu.edu.ph`;
+          const authRes = await fetch(authUrl, {
+            headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+          });
+          if (authRes.ok) {
+            const authData = await authRes.json();
+            for (const a of authData?.results || []) {
+              const idPart = a?.id?.split('/').pop();
+              if (idPart && matchesPersonAuthorList([a.display_name])) {
+                authorIdSet.add(idPart);
               }
+            }
+          }
+        }
+
+        const authorIds = [...authorIdSet];
+        if (authorIds.length > 0) {
+          const worksUrl = `https://api.openalex.org/works?filter=authorships.author.id:${authorIds.join('|')}&per-page=20&page=${page + 1}&sort=cited_by_count:desc&mailto=research@psu.edu.ph`;
+          const worksRes = await fetch(worksUrl, {
+            headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+          });
+          if (worksRes.ok) {
+            const worksData = await worksRes.json();
+            for (const w of worksData?.results || []) {
+              parseOpenAlexWork(w);
             }
           }
         }
