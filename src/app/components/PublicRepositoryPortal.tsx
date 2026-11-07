@@ -1003,10 +1003,10 @@ export function PublicRepositoryPortal() {
         <p className="font-semibold text-foreground">
           Pangasinan State University — Institutional Research Repository
         </p>
-        <p className="text-[11px]">
+        <p className="text-[11px] text-muted-foreground">
           Asingan Campus • Commission on Higher Education (CHED) Accredited Repository Standards • United Nations SDGs Aligned
         </p>
-        <p className="text-[10px] text-muted-foreground/80">
+        <p className="text-[11px] text-muted-foreground">
           Researchers and the Research Coordinator may sign in using the top-right portal button to access research analytics and management tools.
         </p>
       </footer>

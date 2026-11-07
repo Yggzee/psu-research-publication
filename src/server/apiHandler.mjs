@@ -25,6 +25,7 @@ import {
   getAppBaseUrl,
 } from './emailService.mjs';
 import { rateLimiter } from './rateLimiter.mjs';
+import { applySecurityHeaders } from './securityHeaders.mjs';
 import {
   matchesResearcher,
   signSessionToken,
@@ -502,6 +503,7 @@ const attachTokenUsage = async (payload, didLiveScrape = false) => {
  * Compatible with Vite dev server middleware and standalone Node http server
  */
 export async function handleApiRequest(req, res) {
+  applySecurityHeaders(res);
   await dbReadyPromise;
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;

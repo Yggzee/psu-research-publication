@@ -16,6 +16,8 @@ React + Vite + Tailwind CSS project with a Node.js + SQLite/Turso backend, deplo
 - `src/server/db.mjs` - Local SQLite initialization, schema migrations, and automatic Turso write/transaction replication
 - `src/server/turso.mjs` - Turso Cloud SQLite schema initialization (`initTursoSchema`), cold-start rehydration (`rehydrateFromTurso`), and batch replication
 - `src/server/prod.mjs` - Render production HTTP server serving `dist/` and `/api/*`
+- `src/server/securityHeaders.mjs` - Shared HTTP security headers (`HSTS`, `CSP`, `X-Frame-Options`, `COOP`, `CORP`, `COEP`, etc.)
+- `public/robots.txt` & `public/.well-known/security.txt` - Crawler indexing rules and RFC 9116 security contact metadata
 - `Dockerfile` & `render.yaml` - Render cloud deployment configuration (Docker & Node runtime)
 - `vite.config.ts` - Vite dev & build configuration
 
@@ -74,6 +76,14 @@ Always enforce the following standardized terminology and formatting across all 
    - Every time we come up with a new rule, or the user states a requirement or preference that looks like a system-wide rule, **always ask the user if that rule should be added to `AGENTS.md`**.
 4. **Facebook-Style Dark Mode Readability (`src/styles/theme.css`):**
    - Always maintain the Facebook Dark Mode surface and text hierarchy (`#18191a` page background, `#242526` elevated cards/sidebar, `#3a3b3c` inputs/muted surfaces, `#3e4042` borders, `#e4e6eb` primary text, `#b0b3b8` secondary text, and `#2d88ff` accent blue) so dark mode is never pitch-black or hard to read.
+5. **Pre-Change Breakdown & Plan Explanation Before Working:**
+   - Before working on any bug fix, error, or feature request, **always provide a clear breakdown of the error/issue and explain what files and logic will be changed** before making edits.
+6. **Mandatory Security, SEO & Accessibility Audit on Major Changes / New Features:**
+   - Whenever making major changes or adding a new feature to the system, **always verify all web security, SEO, and accessibility protections**:
+     - **HTTP Security Headers (`src/server/securityHeaders.mjs`):** Verify `Strict-Transport-Security` (HSTS), `Content-Security-Policy` (CSP with `upgrade-insecure-requests` and `frame-ancestors 'self'`), `X-Frame-Options`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` (COOP), `Cross-Origin-Resource-Policy` (CORP), and `Cross-Origin-Embedder-Policy` (COEP) are applied on all responses and compatible with any new assets or endpoints.
+     - **Crawler & Security Policies (`public/robots.txt`, `public/.well-known/security.txt`, `src/server/prod.mjs`):** Verify `/robots.txt` and `/.well-known/security.txt` resolve as `text/plain; charset=UTF-8` and missing non-HTML extensions return `404` instead of `index.html`.
+     - **SEO & Social Metadata (`index.html`):** Ensure meta description, OpenGraph (`og:*`), Twitter Card, and canonical tags remain intact.
+     - **WCAG AA Color Contrast:** Ensure all text elements maintain at least a `4.5:1` contrast ratio in both Light Mode and Dark Mode.
 
 ## Project Guidelines
 

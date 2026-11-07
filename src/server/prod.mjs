@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleApiRequest } from './apiHandler.mjs';
+import { applySecurityHeaders } from './securityHeaders.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,10 +12,12 @@ const PORT = parseInt(process.env.PORT || process.env.API_PORT || '8080', 10);
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=UTF-8',
+  '.txt': 'text/plain; charset=UTF-8',
+  '.xml': 'application/xml; charset=UTF-8',
   '.js': 'application/javascript; charset=UTF-8',
   '.mjs': 'application/javascript; charset=UTF-8',
   '.css': 'text/css; charset=UTF-8',
-  '.json': 'application/json',
+  '.json': 'application/json; charset=UTF-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -28,6 +31,8 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer(async (req, res) => {
+  applySecurityHeaders(res);
+
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(parsedUrl.pathname);
 
@@ -42,24 +47,33 @@ const server = http.createServer(async (req, res) => {
   // Prevent directory traversal attacks
   if (!filePath.startsWith(DIST_DIR)) {
     res.statusCode = 403;
+    res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
     return res.end('Forbidden');
   }
 
   // Check if file exists
-  let stat;
+  const requestedExt = path.extname(pathname).toLowerCase();
   try {
-    stat = fs.statSync(filePath);
+    let stat = fs.statSync(filePath);
     if (stat.isDirectory()) {
       filePath = path.join(filePath, 'index.html');
       stat = fs.statSync(filePath);
     }
   } catch {
-    // If static file doesn't exist, fallback to index.html for SPA client-side routing
+    // If a specific non-HTML file was requested (e.g. .txt, .js, .png) and doesn't exist, return 404
+    if (requestedExt && requestedExt !== '.html') {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
+      return res.end('Not Found');
+    }
+
+    // Fallback to index.html for extensionless SPA client-side routes
     filePath = path.join(DIST_DIR, 'index.html');
     try {
-      stat = fs.statSync(filePath);
+      fs.statSync(filePath);
     } catch {
       res.statusCode = 404;
+      res.setHeader('Content-Type', 'text/plain; charset=UTF-8');
       return res.end('Frontend build not found. Did you run npm run build?');
     }
   }
