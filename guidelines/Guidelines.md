@@ -12,6 +12,13 @@ Every feature addition, bug fix, or database change must work seamlessly not onl
 - **Render Production Build & Push:**
   - Verify changes with `node --check` and `npm run build`, update `render.yaml` / `src/server/prod.mjs` if needed, and push commits to `origin/main` so Render auto-deploys.
 
-## 2. UI & Design Guidelines
+## 2. Mandatory System Terminology & ID Rules
+- **Researchers & Researcher:** Always call the collection **"Researchers"** (never "Roster" or "Faculty Roster") and each individual **"Researcher"**.
+- **Faculty vs. Non-Faculty Scope:** Only show the Faculty/Non-Faculty mark on `ResearchersPage.tsx` and `ResearcherProfile.tsx` formatted as **`Faculty (<Department>)`** (e.g., `Faculty (BSIT)`) or **`Non-Faculty`**. Everywhere else in the system, call them **Researcher / Researchers**.
+- **Instructor ID (`ASIN-00000`):** Always call the ID **"Instructor ID"**. Both Faculty and Non-Faculty use the `ASIN-00000` format, with **`ASIN-`** locked/non-editable and only the **5 numeric digits (`00000`)** editable in invitation channels.
+- **Research Coordinator:** Always call Sir Rodelio M. Garin **"Research Coordinator"** with a single clean role badge (no duplicate/conflicting administrator titles).
+- **Publications:** Always call indexed/retrieved works **"Publications"**, with **"My Publications"**, **"My Published Research"**, and **"Add Publication"** on the researcher's page (no ongoing/unpublished research option).
+
+## 3. UI & Design Guidelines
 - **No Emojis:** Never use emojis in any component, alert, badge, or button. Always use icons from `lucide-react`.
 - **Responsive & Structured Layouts:** Use Tailwind CSS flexbox and grid layouts aligned with the existing PSU institutional theme.
