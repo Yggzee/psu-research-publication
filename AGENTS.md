@@ -16,7 +16,7 @@ React + Vite + Tailwind CSS project with a Node.js + SQLite/Turso backend, deplo
 - `src/server/db.mjs` - Local SQLite initialization, schema migrations, and automatic Turso write/transaction replication
 - `src/server/turso.mjs` - Turso Cloud SQLite schema initialization (`initTursoSchema`), cold-start rehydration (`rehydrateFromTurso`), and batch replication
 - `src/server/prod.mjs` - Render production HTTP server serving `dist/` and `/api/*`
-- `render.yaml` - Render cloud deployment configuration
+- `Dockerfile` & `render.yaml` - Render cloud deployment configuration (Docker & Node runtime)
 - `vite.config.ts` - Vite dev & build configuration
 
 ## Mandatory Turso Cloud & Render Deployment Rules
