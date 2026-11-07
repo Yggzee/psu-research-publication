@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso } from './turso.mjs';
+import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso, executeBatchOnTurso } from './turso.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +31,7 @@ db.exec('PRAGMA foreign_keys = ON;');
 db.exec('PRAGMA journal_mode = WAL;');
 
 let inBulkTransaction = false;
+let pendingTursoBatch = [];
 
 // Wrap db.prepare to replicate write queries to Turso Cloud SQLite automatically
 const originalPrepare = db.prepare.bind(db);
@@ -39,10 +40,14 @@ db.prepare = (sql) => {
   const originalRun = statement.run.bind(statement);
   statement.run = (...args) => {
     const result = originalRun(...args);
-    if (isTursoConfigured && !inBulkTransaction && /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql)) {
-      executeOnTurso(sql, args).catch((err) => {
-        console.warn('[Turso Background Replicate Error]:', err.message);
-      });
+    if (isTursoConfigured && /^\s*(INSERT|UPDATE|DELETE|REPLACE)/i.test(sql)) {
+      if (inBulkTransaction) {
+        pendingTursoBatch.push({ sql, args });
+      } else {
+        executeOnTurso(sql, args).catch((err) => {
+          console.warn('[Turso Background Replicate Error]:', err.message);
+        });
+      }
     }
     return result;
   };
@@ -56,9 +61,16 @@ db.prepare = (sql) => {
 export function runInTransaction(fn) {
   db.exec('BEGIN IMMEDIATE;');
   inBulkTransaction = true;
+  pendingTursoBatch = [];
   try {
     const res = fn();
     db.exec('COMMIT;');
+    if (isTursoConfigured && pendingTursoBatch.length > 0) {
+      const batchToSync = [...pendingTursoBatch];
+      executeBatchOnTurso(batchToSync).catch((err) => {
+        console.warn('[Turso Batch Replicate Error]:', err.message);
+      });
+    }
     return res;
   } catch (err) {
     try {
@@ -67,6 +79,7 @@ export function runInTransaction(fn) {
     throw err;
   } finally {
     inBulkTransaction = false;
+    pendingTursoBatch = [];
   }
 }
 

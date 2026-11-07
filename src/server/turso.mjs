@@ -1,4 +1,20 @@
 import { createClient } from '@libsql/client';
+import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure .env is loaded before reading TURSO_DATABASE_URL
+const rootEnvPath = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(rootEnvPath) && typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile(rootEnvPath);
+  } catch {
+    // ignore if already loaded
+  }
+}
 
 const TURSO_URL = process.env.TURSO_DATABASE_URL || process.env.LIBSQL_URL || '';
 const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN || process.env.LIBSQL_AUTH_TOKEN || '';
@@ -40,7 +56,25 @@ export async function executeOnTurso(sql, args = []) {
 }
 
 /**
- * Initialize remote Turso database tables if they do not exist
+ * Execute a batch of write statements on Turso Cloud in a single round-trip
+ */
+export async function executeBatchOnTurso(statements = []) {
+  if (!tursoClient || !statements.length) return null;
+  try {
+    const CHUNK_SIZE = 100;
+    for (let i = 0; i < statements.length; i += CHUNK_SIZE) {
+      const chunk = statements.slice(i, i + CHUNK_SIZE);
+      await tursoClient.batch(chunk, 'write');
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Turso Cloud Batch Write Warning]:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Initialize remote Turso database tables and column migrations if they do not exist
  */
 export async function initTursoSchema() {
   if (!tursoClient) return;
@@ -53,12 +87,19 @@ export async function initTursoSchema() {
       email TEXT,
       password TEXT NOT NULL,
       name TEXT NOT NULL,
+      middle_initial TEXT,
       role TEXT NOT NULL DEFAULT 'instructor',
       department TEXT,
       is_faculty INTEGER NOT NULL DEFAULT 1,
       photo_url TEXT,
       scholar_url TEXT,
       google_scholar_id TEXT,
+      status TEXT DEFAULT 'active',
+      verification_token TEXT,
+      verification_token_expires_at TEXT,
+      email_verified_at TEXT,
+      registration_type TEXT DEFAULT 'manual',
+      has_scholar INTEGER DEFAULT 1,
       created_at TEXT NOT NULL
     );`,
     `CREATE TABLE IF NOT EXISTS researchers (
@@ -67,6 +108,7 @@ export async function initTursoSchema() {
       instructor_id TEXT UNIQUE NOT NULL,
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
+      middle_initial TEXT,
       name TEXT NOT NULL,
       email TEXT,
       department TEXT NOT NULL,
@@ -75,6 +117,8 @@ export async function initTursoSchema() {
       photo_url TEXT,
       scholar_url TEXT,
       google_scholar_id TEXT,
+      status TEXT DEFAULT 'active',
+      has_scholar INTEGER DEFAULT 1,
       total_publications INTEGER DEFAULT 0,
       total_citations INTEGER DEFAULT 0,
       created_at TEXT NOT NULL
@@ -97,6 +141,19 @@ export async function initTursoSchema() {
       is_public INTEGER NOT NULL DEFAULT 1,
       file_name TEXT,
       cited_by_link TEXT,
+      sdg_tags TEXT,
+      sdg_rationale TEXT,
+      journal_indexing TEXT,
+      is_predatory_flag INTEGER DEFAULT 0,
+      nbc461_points REAL DEFAULT 0.0,
+      jc3_points REAL DEFAULT 0.0,
+      ched_priority TEXT,
+      doi TEXT,
+      keywords TEXT,
+      issn_isbn TEXT,
+      volume_issue TEXT,
+      publication_date TEXT,
+      publication_level TEXT DEFAULT 'International',
       created_at TEXT NOT NULL
     );`,
     `CREATE TABLE IF NOT EXISTS scraped_publications (
@@ -124,7 +181,11 @@ export async function initTursoSchema() {
       title TEXT NOT NULL,
       authors TEXT,
       year INTEGER,
-      link TEXT
+      link TEXT,
+      journal TEXT,
+      volume_issue TEXT,
+      quarter TEXT,
+      doi_issn TEXT
     );`,
     `CREATE TABLE IF NOT EXISTS apify_tokens (
       id TEXT PRIMARY KEY,
@@ -156,6 +217,31 @@ export async function initTursoSchema() {
       status TEXT NOT NULL DEFAULT 'pending',
       admin_notes TEXT,
       created_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS email_logs (
+      id TEXT PRIMARY KEY,
+      recipient_email TEXT NOT NULL,
+      recipient_name TEXT,
+      subject TEXT NOT NULL,
+      email_type TEXT NOT NULL,
+      verification_token TEXT,
+      verification_link TEXT,
+      html_content TEXT,
+      status TEXT NOT NULL DEFAULT 'sent',
+      created_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      title TEXT NOT NULL,
+      messages_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );`
   ];
 
@@ -166,6 +252,51 @@ export async function initTursoSchema() {
       console.warn('[Turso Schema Warning]:', err.message);
     }
   }
+
+  // Run idempotent column migrations on Turso for pre-existing tables
+  const columnMigrations = [
+    `ALTER TABLE users ADD COLUMN middle_initial TEXT`,
+    `ALTER TABLE users ADD COLUMN scholar_url TEXT`,
+    `ALTER TABLE users ADD COLUMN google_scholar_id TEXT`,
+    `ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`,
+    `ALTER TABLE users ADD COLUMN verification_token TEXT`,
+    `ALTER TABLE users ADD COLUMN verification_token_expires_at TEXT`,
+    `ALTER TABLE users ADD COLUMN email_verified_at TEXT`,
+    `ALTER TABLE users ADD COLUMN registration_type TEXT DEFAULT 'manual'`,
+    `ALTER TABLE users ADD COLUMN has_scholar INTEGER DEFAULT 1`,
+    `ALTER TABLE researchers ADD COLUMN middle_initial TEXT`,
+    `ALTER TABLE researchers ADD COLUMN scholar_url TEXT`,
+    `ALTER TABLE researchers ADD COLUMN google_scholar_id TEXT`,
+    `ALTER TABLE researchers ADD COLUMN status TEXT DEFAULT 'active'`,
+    `ALTER TABLE researchers ADD COLUMN has_scholar INTEGER DEFAULT 1`,
+    `ALTER TABLE publications ADD COLUMN cited_by_link TEXT`,
+    `ALTER TABLE publications ADD COLUMN sdg_tags TEXT`,
+    `ALTER TABLE publications ADD COLUMN sdg_rationale TEXT`,
+    `ALTER TABLE publications ADD COLUMN journal_indexing TEXT`,
+    `ALTER TABLE publications ADD COLUMN is_predatory_flag INTEGER DEFAULT 0`,
+    `ALTER TABLE publications ADD COLUMN nbc461_points REAL DEFAULT 0.0`,
+    `ALTER TABLE publications ADD COLUMN jc3_points REAL DEFAULT 0.0`,
+    `ALTER TABLE publications ADD COLUMN ched_priority TEXT`,
+    `ALTER TABLE publications ADD COLUMN doi TEXT`,
+    `ALTER TABLE publications ADD COLUMN keywords TEXT`,
+    `ALTER TABLE publications ADD COLUMN issn_isbn TEXT`,
+    `ALTER TABLE publications ADD COLUMN volume_issue TEXT`,
+    `ALTER TABLE publications ADD COLUMN publication_date TEXT`,
+    `ALTER TABLE publications ADD COLUMN publication_level TEXT DEFAULT 'International'`,
+    `ALTER TABLE citing_papers ADD COLUMN journal TEXT`,
+    `ALTER TABLE citing_papers ADD COLUMN volume_issue TEXT`,
+    `ALTER TABLE citing_papers ADD COLUMN quarter TEXT`,
+    `ALTER TABLE citing_papers ADD COLUMN doi_issn TEXT`,
+  ];
+
+  for (const migrationSql of columnMigrations) {
+    try {
+      await tursoClient.execute(migrationSql);
+    } catch {
+      // Column already exists on Turso — ignore
+    }
+  }
+
   console.log('[Turso] Cloud schema initialized.');
 }
 
@@ -186,7 +317,11 @@ export async function rehydrateFromTurso(localDb) {
       'scraped_publications',
       'citation_trends',
       'citing_papers',
-      'apify_tokens'
+      'apify_tokens',
+      'invitation_requests',
+      'email_logs',
+      'ai_chat_sessions',
+      'system_settings'
     ];
 
     let totalRestored = 0;

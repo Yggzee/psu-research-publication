@@ -1009,7 +1009,19 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'Turso Cloud is not configured. Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in Render.' });
       }
       try {
-        const tables = ['users', 'researchers', 'publications', 'scraped_publications', 'citation_trends', 'citing_papers', 'apify_tokens'];
+        const tables = [
+          'users',
+          'researchers',
+          'publications',
+          'scraped_publications',
+          'citation_trends',
+          'citing_papers',
+          'apify_tokens',
+          'invitation_requests',
+          'email_logs',
+          'ai_chat_sessions',
+          'system_settings'
+        ];
         for (const t of tables) {
           await pushTableToTurso(db, t);
         }
