@@ -72,6 +72,8 @@ Always enforce the following standardized terminology and formatting across all 
    - Whenever you add, rename, or modify a page, button, badge, or workflow in the workspace, you **MUST** also update `src/app/components/SystemGuidePage.tsx` (`/guide`) so its visual button replicas, simulated charts, and plain-language narrative explanations always match the live workspace.
 3. **Proactive `AGENTS.md` Rule Confirmation:**
    - Every time we come up with a new rule, or the user states a requirement or preference that looks like a system-wide rule, **always ask the user if that rule should be added to `AGENTS.md`**.
+4. **Facebook-Style Dark Mode Readability (`src/styles/theme.css`):**
+   - Always maintain the Facebook Dark Mode surface and text hierarchy (`#18191a` page background, `#242526` elevated cards/sidebar, `#3a3b3c` inputs/muted surfaces, `#3e4042` borders, `#e4e6eb` primary text, `#b0b3b8` secondary text, and `#2d88ff` accent blue) so dark mode is never pitch-black or hard to read.
 
 ## Project Guidelines
 
