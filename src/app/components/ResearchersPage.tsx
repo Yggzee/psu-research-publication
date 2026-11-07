@@ -106,8 +106,8 @@ export function ResearchersPage() {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* 1. Page Header */}
       <PageHeader
-        title="Faculty Researchers"
-        description="Registered faculty researchers across Pangasinan State University - Asingan"
+        title="Researchers"
+        description="Registered researchers across Pangasinan State University - Asingan"
         actions={
           <Button
             variant="outline"
@@ -132,7 +132,7 @@ export function ResearchersPage() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search faculty by name or department..."
+                placeholder="Search researchers by name or department..."
                 className="pl-9 h-8 text-xs bg-background"
               />
               {searchQuery && (
@@ -150,14 +150,14 @@ export function ResearchersPage() {
             <div className="flex items-center gap-2 flex-wrap">
               {/* Department Dropdown */}
               <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className="h-8 text-xs w-36">
-                  <SelectValue placeholder="All Departments" />
+                <SelectTrigger className="h-8 text-xs w-40">
+                  <SelectValue placeholder="All Researchers" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all" className="text-xs">All Departments</SelectItem>
+                  <SelectItem value="all" className="text-xs">All Researchers</SelectItem>
                   {departments.map((dept) => (
                     <SelectItem key={dept} value={dept} className="text-xs">
-                      {dept}
+                      {dept === "Non-Faculty" || dept === "Non Teaching" ? "Non-Faculty" : `Faculty (${dept})`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -165,12 +165,12 @@ export function ResearchersPage() {
 
               {/* Sort By Dropdown */}
               <Select value={sortBy} onValueChange={(val) => setSortBy(val as SortOption)}>
-                <SelectTrigger className="h-8 text-xs w-32">
+                <SelectTrigger className="h-8 text-xs w-36">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="citations" className="text-xs">Most Citations</SelectItem>
-                  <SelectItem value="publications" className="text-xs">Most Papers</SelectItem>
+                  <SelectItem value="publications" className="text-xs">Most Publications</SelectItem>
                   <SelectItem value="name" className="text-xs">Name (A-Z)</SelectItem>
                 </SelectContent>
               </Select>
@@ -209,7 +209,7 @@ export function ResearchersPage() {
           {filteredAndSortedResearchers.length === 0 ? (
             <EmptyState
               icon={Users}
-              title="No Faculty Researchers Found"
+              title="No Researchers Found"
               description="No registered researchers matched your query. Adjust your search or clear filters."
             />
           ) : (
@@ -217,6 +217,13 @@ export function ResearchersPage() {
               {filteredAndSortedResearchers.map((researcher) => {
                 const photo = getFacultyPhoto(researcher.name) || (researcher as any).photoUrl;
                 const deptColor = DEPARTMENT_COLORS[researcher.department as Department] || "#6b7280";
+                const isNonFaculty =
+                  researcher.isFaculty === false ||
+                  researcher.department === "Non-Faculty" ||
+                  researcher.department === "Non Teaching";
+                const classificationLabel = isNonFaculty
+                  ? "Non-Faculty"
+                  : `Faculty (${researcher.department || "BSIT"})`;
 
                 return (
                   <Card
@@ -244,14 +251,14 @@ export function ResearchersPage() {
                             {researcher.name}
                           </h3>
 
-                          {/* Department Indicator */}
+                          {/* Faculty / Non-Faculty Classification Mark */}
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
                               style={{ backgroundColor: deptColor }}
                             />
-                            <span className="text-xs text-muted-foreground truncate">
-                              {researcher.department}
+                            <span className="text-xs font-medium text-muted-foreground truncate">
+                              {classificationLabel}
                             </span>
                           </div>
 
@@ -299,6 +306,8 @@ export function ResearchersPage() {
         <div className="space-y-6">
           {Object.entries(researchersByDepartment).map(([dept, deptResearchers]) => {
             const deptColor = DEPARTMENT_COLORS[dept as Department] || "#6b7280";
+            const groupLabel =
+              dept === "Non-Faculty" || dept === "Non Teaching" ? "Non-Faculty" : `Faculty (${dept})`;
 
             return (
               <div key={dept} className="space-y-3">
@@ -308,10 +317,10 @@ export function ResearchersPage() {
                     style={{ backgroundColor: deptColor }}
                   />
                   <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                    {dept}
+                    {groupLabel}
                   </h3>
                   <Badge variant="outline" className="text-[10px] font-mono ml-1">
-                    {deptResearchers.length} faculty
+                    {deptResearchers.length} {deptResearchers.length === 1 ? "researcher" : "researchers"}
                   </Badge>
                 </div>
 
@@ -342,7 +351,7 @@ export function ResearchersPage() {
                               {researcher.name}
                             </p>
                             <p className="text-[11px] text-muted-foreground font-mono">
-                              {researcher.totalPublications || 0} papers • {researcher.totalCitations || 0} citations
+                              {researcher.totalPublications || 0} publications • {researcher.totalCitations || 0} citations
                             </p>
                           </div>
                         </div>

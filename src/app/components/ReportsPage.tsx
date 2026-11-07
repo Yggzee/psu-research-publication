@@ -123,7 +123,7 @@ export function ReportsPage() {
   );
 
   // Department order
-  const departmentOrder = ["BSIT", "BSBA", "BEE", "BTLED", "BIT", "BSE", "Non Teaching"];
+  const departmentOrder = ["BSIT", "BSBA", "BEE", "BTLED", "BIT", "BSE", "Non-Faculty"];
 
   // Department stats from researchers list
   const deptStats: { [key: string]: { researchers: number; citations: number; publications: number } } = {};

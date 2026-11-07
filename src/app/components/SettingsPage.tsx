@@ -111,7 +111,7 @@ export function SettingsPage() {
       {/* 1. Page Header */}
       <PageHeader
         title="Settings & System Preferences"
-        description="Customize your interface appearance, faculty credentials, and cloud database persistence"
+        description="Customize your interface appearance, researcher credentials, and cloud database persistence"
       />
 
       {/* 2. Navigation Tabs */}
@@ -205,7 +205,7 @@ export function SettingsPage() {
               <CardTitle className="text-sm font-semibold">Account Security & Password</CardTitle>
             </div>
             <CardDescription className="text-xs">
-              Change your password to keep your faculty research credentials secure.
+              Change your password to keep your researcher credentials secure.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -332,7 +332,7 @@ export function SettingsPage() {
               <div>
                 <p className="font-semibold text-xs text-foreground">Auto-Fetch Missing Citations</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Automatically query Google Scholar citing papers when viewing papers with citations.
+                  Automatically query Google Scholar citing publications when viewing publications with citations.
                 </p>
               </div>
               <Button
@@ -408,7 +408,7 @@ function TursoDatabaseCard() {
         {tursoStatus?.isConfigured ? (
           <div className="space-y-3">
             <p className="text-xs text-foreground leading-relaxed">
-              Your application is connected to <strong>Turso Cloud SQLite</strong>. All faculty accounts, publications, and citations are backed up permanently.
+              Your application is connected to <strong>Turso Cloud SQLite</strong>. All researcher accounts, publications, and citations are backed up permanently.
             </p>
             {tursoStatus.databaseUrl && (
               <p className="text-xs font-mono text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">

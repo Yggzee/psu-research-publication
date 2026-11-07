@@ -166,7 +166,7 @@ export function VerifyInvitationPage() {
                       {userData.email}
                     </div>
                     <div className="flex items-center justify-between text-gray-600 pt-1 border-t border-blue-100">
-                      <span>ID: <strong className="text-blue-900">{userData.instructorId}</strong></span>
+                      <span>Instructor ID: <strong className="text-blue-900">{userData.instructorId}</strong></span>
                       <span className="flex items-center gap-1">
                         <Building className="w-3 h-3" />
                         {userData.department}

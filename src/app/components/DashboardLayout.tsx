@@ -287,7 +287,7 @@ export function DashboardLayout() {
 
           <div className="pt-2 mt-1 border-t border-border/60 flex items-center justify-between px-2">
             <span className="text-[11px] text-muted-foreground truncate max-w-[110px]" title={currentUser.name}>
-              {currentUser.role === "admin" ? "Admin" : currentUser.instructorId || "Instructor"}
+              {currentUser.role === "admin" ? "Research Coordinator" : currentUser.instructorId || "Researcher"}
             </span>
             <Button
               variant="ghost"

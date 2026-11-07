@@ -69,7 +69,7 @@ import {
   type TabItem,
 } from "./common";
 
-const DEPARTMENTS = ["BSIT", "BSBA", "BSE", "BEE", "BTLED", "BIT", "Non Teaching"];
+const DEPARTMENTS = ["BSIT", "BSBA", "BSE", "BEE", "BTLED", "BIT", "Non-Faculty"];
 
 const emptyForm = {
   lastName: "",
@@ -351,6 +351,16 @@ export function AdminPage() {
       return;
     }
 
+    let finalInstructorId = form.instructorId.trim();
+    if (!editingId) {
+      const digitsOnly = finalInstructorId.replace(/^ASIN-/i, "").replace(/\D/g, "");
+      if (digitsOnly.length !== 5) {
+        setFormError("Instructor ID must be 5 digits (format: ASIN-00000).");
+        return;
+      }
+      finalInstructorId = `ASIN-${digitsOnly}`;
+    }
+
     if (!form.email.trim()) {
       setFormError("Email address is required for researcher invitation & account verification.");
       return;
@@ -358,16 +368,17 @@ export function AdminPage() {
 
     const mi = form.middleInitial.trim();
     const fullName = mi ? `${form.firstName.trim()} ${mi} ${form.lastName.trim()}` : `${form.firstName.trim()} ${form.lastName.trim()}`;
+    const isFacultyMember = form.isFaculty && form.department !== "Non-Faculty" && form.department !== "Non Teaching";
 
     const payload = {
       firstName: form.firstName.trim(),
       middleInitial: mi || undefined,
       lastName: form.lastName.trim(),
-      instructorId: form.instructorId.trim(),
+      instructorId: finalInstructorId,
       password: form.password ? form.password.trim() : undefined,
-      department: form.isFaculty ? form.department : "Non Teaching",
+      department: isFacultyMember ? form.department : "Non-Faculty",
       email: form.email.trim(),
-      isFaculty: form.isFaculty,
+      isFaculty: isFacultyMember,
       photoUrl: form.photoUrl,
       scholarUrl: form.scholarUrl.trim(),
       sendInvite: form.sendInvite,
@@ -556,11 +567,12 @@ export function AdminPage() {
   };
 
   const handleApproveInvitationRequest = (req: InvitationRequest) => {
+    const cleanDigits = (req.instructor_id || "").replace(/^ASIN-/i, "").replace(/\D/g, "").slice(0, 5);
     setForm({
       firstName: req.first_name,
       lastName: req.last_name,
       middleInitial: req.middle_initial || "",
-      instructorId: req.instructor_id,
+      instructorId: cleanDigits,
       email: req.email,
       department: req.department || "BSIT",
       isFaculty: true,
@@ -573,7 +585,7 @@ export function AdminPage() {
     setEditingId(null);
     setIsAdding(true);
     setActiveTab("researchers");
-    toast.info(`Reviewing invitation for ${req.name}. Click 'Save & Dispatch Invitation' to send.`);
+    toast.info(`Reviewing invitation for ${req.name}. Click 'Create & Send Invitation' to send.`);
   };
 
   const facultyCount = researchers.filter((member) => member.isFaculty).length;
@@ -611,7 +623,7 @@ export function AdminPage() {
     },
     {
       id: "researchers",
-      label: "Faculty Roster",
+      label: "Researchers",
       count: researchers.length,
       icon: GraduationCap,
     },
@@ -639,7 +651,7 @@ export function AdminPage() {
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-foreground">Institutional Admin Access Restricted</h2>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              You do not have administrative privileges to manage faculty rosters, system credentials, or campus registrations.
+              You do not have administrative privileges to manage researchers, system credentials, or campus invitations.
             </p>
           </div>
           <Button
@@ -729,15 +741,12 @@ export function AdminPage() {
                   </h2>
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">
                     <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                    Campus Research Coordinator
-                  </span>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-muted text-muted-foreground border border-border">
-                    PSU-002
+                    Research Coordinator
                   </span>
                 </div>
 
                 <p className="text-xs text-muted-foreground">
-                  Pangasinan State University – Asingan Campus • Department of Information Technology (BSIT)
+                  Pangasinan State University – Asingan Campus
                 </p>
 
                 <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-muted-foreground pt-0.5 flex-wrap">
@@ -747,10 +756,6 @@ export function AdminPage() {
                   <span>•</span>
                   <span className="font-medium text-foreground">
                     <strong className="text-brand font-semibold">{coordinatorData.totalCitations}</strong> Citations
-                  </span>
-                  <span>•</span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-semibold">
-                    Campus Research Coordinator
                   </span>
                 </div>
               </div>
@@ -776,7 +781,7 @@ export function AdminPage() {
                 className="h-8 text-xs gap-1.5 border-brand/30 text-brand hover:bg-brand-soft"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Sync My Papers</span>
+                <span>Sync My Publications</span>
               </Button>
 
               <Button
@@ -833,21 +838,26 @@ export function AdminPage() {
       {/* 3. Neutral StatCards Overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
-          label="Active Faculty"
-          value={facultyCount}
-          subtitle="Teaching instructors"
-          icon={UserCheck}
-        />
-        <StatCard
-          label="Non-Teaching Staff"
-          value={nonTeachingCount}
-          subtitle="Support & administrative"
+          label="Total Researchers"
+          value={researchers.length}
+          subtitle="Registered in system"
           icon={Users}
         />
         <StatCard
-          label="Pending Registrations"
+          label="Invitation Requests"
+          value={invitationRequests.length}
+          subtitle="Awaiting invitation"
+          icon={UserCheck}
+          trend={
+            invitationRequests.length > 0
+              ? { value: "Review Needed", isPositive: false }
+              : undefined
+          }
+        />
+        <StatCard
+          label="Pending Activations"
           value={pendingRegistrations.length}
-          subtitle="Awaiting admin approval"
+          subtitle="Invited researchers"
           icon={Clock}
           trend={
             pendingRegistrations.length > 0
@@ -858,7 +868,7 @@ export function AdminPage() {
         <StatCard
           label="Pending Claims"
           value={pendingClaims.length}
-          subtitle="Paper authorship claims"
+          subtitle="Publication claims"
           icon={KeyRound}
           trend={
             pendingClaims.length > 0
@@ -876,10 +886,10 @@ export function AdminPage() {
       {/* ===================================================================== */}
       {activeTab === "registrations" && (
         <div className="space-y-6">
-          {/* SECTION 1: INCOMING REQUESTS FROM FACULTY */}
+          {/* SECTION 1: INCOMING REQUESTS */}
           <SectionCard
-            title="Incoming Invitation Requests from Faculty"
-            description="Faculty researchers who submitted an 'Ask for Invitation' request from the portal. Review their credentials and dispatch their official invitation."
+            title="Incoming Invitation Requests"
+            description="Researchers who submitted an 'Ask for Invitation' request from the portal. Review their credentials and dispatch their official invitation."
             action={
               <Badge variant="outline" className="font-mono text-xs">
                 {invitationRequests.length} requests
@@ -890,7 +900,7 @@ export function AdminPage() {
               <EmptyState
                 icon={CheckCircle2}
                 title="No Pending Invitation Requests"
-                description="When a faculty researcher asks for an invitation on the portal, their request will appear here for one-click approval."
+                description="When a researcher asks for an invitation on the portal, their request will appear here for one-click approval."
               />
             ) : (
               <div className="divide-y divide-border/60">
@@ -972,7 +982,7 @@ export function AdminPage() {
               <EmptyState
                 icon={CheckCircle2}
                 title="All Invitations Up to Date"
-                description="Invited faculty researchers awaiting activation will appear in this queue."
+                description="Invited researchers awaiting activation will appear in this queue."
               />
             ) : (
               <div className="divide-y divide-border/60">
@@ -986,12 +996,8 @@ export function AdminPage() {
                         <p className="font-semibold text-sm text-foreground">{item.name}</p>
                         
                         <Badge variant="outline" className="text-[10px] font-medium">
-                          {item.registrationType === "self_registration" ? "Self-Registered" : "Admin Invited"}
+                          Invited Researcher
                         </Badge>
-
-                        <span className="text-xs text-muted-foreground font-medium">
-                          {item.department} • {item.isFaculty ? "Faculty" : "Non-Teaching"}
-                        </span>
 
                         {item.isEmailVerified ? (
                           <StatusBadge status="verified" label="Email Verified" />
@@ -1001,9 +1007,9 @@ export function AdminPage() {
                       </div>
 
                       <p className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
-                        <span>ID: <strong className="text-foreground">{item.instructorId}</strong></span>
+                        <span>Instructor ID: <strong className="text-foreground font-mono">{item.instructorId}</strong></span>
                         <span>Email: <strong className="text-foreground">{item.email}</strong></span>
-                        <span>Registered: {new Date(item.createdAt).toLocaleDateString()}</span>
+                        <span>Invited: {new Date(item.createdAt).toLocaleDateString()}</span>
                       </p>
 
                       {item.scholarUrl && (
@@ -1078,7 +1084,7 @@ export function AdminPage() {
           {isAdding && (
             <SectionCard
               title={editingId ? `Edit Researcher: ${editingId}` : "Invite & Register New Researcher"}
-              description="Provide faculty credentials. An institutional invitation will be dispatched so they can activate their account."
+              description="Provide researcher credentials. An official invitation will be dispatched so they can activate their account."
               action={
                 <Button variant="ghost" size="sm" onClick={resetForm} className="h-8 text-xs">
                   Cancel
@@ -1124,14 +1130,34 @@ export function AdminPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Instructor / Employee ID *</Label>
-                  <Input
-                    value={form.instructorId}
-                    onChange={(e) => setForm({ ...form, instructorId: e.target.value })}
-                    placeholder="e.g. AS-2024-001"
-                    disabled={Boolean(editingId)}
-                    className="h-8 text-xs font-mono"
-                  />
+                  <Label className="text-xs font-semibold">Instructor ID *</Label>
+                  {editingId ? (
+                    <Input
+                      value={form.instructorId}
+                      disabled
+                      className="h-8 text-xs font-mono"
+                    />
+                  ) : (
+                    <div className="flex items-center rounded-md border border-border bg-background focus-within:ring-2 focus-within:ring-brand/20 focus-within:border-brand overflow-hidden h-8">
+                      <span className="px-2.5 h-full flex items-center bg-muted border-r border-border text-xs font-mono font-bold text-foreground select-none shrink-0">
+                        ASIN-
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={5}
+                        value={form.instructorId.replace(/^ASIN-/i, "")}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            instructorId: e.target.value.replace(/\D/g, "").slice(0, 5),
+                          })
+                        }
+                        placeholder="00000"
+                        className="w-full h-full px-2.5 text-xs font-mono text-foreground bg-transparent outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">
@@ -1146,10 +1172,16 @@ export function AdminPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Department</Label>
+                  <Label className="text-xs font-semibold">Department / Classification</Label>
                   <Select
-                    value={form.department}
-                    onValueChange={(val) => setForm({ ...form, department: val })}
+                    value={form.isFaculty ? form.department : "Non-Faculty"}
+                    onValueChange={(val) => {
+                      if (val === "Non-Faculty") {
+                        setForm({ ...form, department: "Non-Faculty", isFaculty: false });
+                      } else {
+                        setForm({ ...form, department: val, isFaculty: true });
+                      }
+                    }}
                   >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
@@ -1157,7 +1189,7 @@ export function AdminPage() {
                     <SelectContent>
                       {DEPARTMENTS.map((dept) => (
                         <SelectItem key={dept} value={dept} className="text-xs">
-                          {dept}
+                          {dept === "Non-Faculty" ? "Non-Faculty" : `Faculty (${dept})`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1177,14 +1209,6 @@ export function AdminPage() {
 
               <div className="flex items-center justify-between pt-4 mt-4 border-t border-border/60">
                 <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-xs cursor-pointer">
-                    <Checkbox
-                      checked={form.isFaculty}
-                      onCheckedChange={(checked) => setForm({ ...form, isFaculty: Boolean(checked) })}
-                    />
-                    <span>Academic Faculty (Teaching)</span>
-                  </label>
-
                   {!editingId && (
                     <label className="flex items-center gap-2 text-xs cursor-pointer">
                       <Checkbox
@@ -1213,10 +1237,10 @@ export function AdminPage() {
             </SectionCard>
           )}
 
-          {/* Roster Table Card */}
+          {/* Researchers Table Card */}
           <SectionCard
-            title="Institutional Faculty Roster"
-            description="Active faculty researchers officially recognized in the PSU Asingan tracking system"
+            title="Researchers"
+            description="Active researchers officially recognized in the PSU Asingan tracking system"
             action={
               <div className="flex items-center gap-2">
                 <div className="relative">
@@ -1224,20 +1248,20 @@ export function AdminPage() {
                   <Input
                     value={rosterSearch}
                     onChange={(e) => setRosterSearch(e.target.value)}
-                    placeholder="Search roster..."
+                    placeholder="Search researchers..."
                     className="pl-8 h-8 text-xs w-40 sm:w-56 bg-card"
                   />
                 </div>
 
                 <Select value={rosterDeptFilter} onValueChange={setRosterDeptFilter}>
-                  <SelectTrigger className="h-8 text-xs w-28">
-                    <SelectValue placeholder="Department" />
+                  <SelectTrigger className="h-8 text-xs w-32">
+                    <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all" className="text-xs">All Depts</SelectItem>
+                    <SelectItem value="all" className="text-xs">All Researchers</SelectItem>
                     {DEPARTMENTS.map((dept) => (
                       <SelectItem key={dept} value={dept} className="text-xs">
-                        {dept}
+                        {dept === "Non-Faculty" ? "Non-Faculty" : `Faculty (${dept})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1251,8 +1275,8 @@ export function AdminPage() {
                 title="No Researchers Found"
                 description={
                   rosterSearch || rosterDeptFilter !== "all"
-                    ? "No faculty records match your active search filter."
-                    : "Add faculty members using the Invite Researcher action above."
+                    ? "No researcher records match your active search filter."
+                    : "Add researchers using the Invite Researcher action above."
                 }
               />
             ) : (
@@ -1283,18 +1307,14 @@ export function AdminPage() {
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-semibold text-foreground truncate">
-                              {researcher.name || "Unnamed Faculty"}
+                              {researcher.name || "Unnamed Researcher"}
                             </p>
                             {isCoordinator && (
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1 shadow-2xs">
                                 <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                Campus Research Coordinator
+                                Research Coordinator
                               </span>
                             )}
-                            <StatusBadge
-                              status={researcher.isFaculty ? "active" : "unpublished"}
-                              label={researcher.isFaculty ? "Faculty" : "Non-Teaching"}
-                            />
                             {researcher.scholarUrl && (
                               <a
                                 href={researcher.scholarUrl.startsWith("http") ? researcher.scholarUrl : `https://scholar.google.com/citations?user=${researcher.scholarUrl}&hl=en`}
@@ -1307,7 +1327,7 @@ export function AdminPage() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground truncate">
-                            ID: <strong className="font-mono">{researcher.instructorId || "N/A"}</strong> • {researcher.department || "BSIT"} {researcher.email && `• ${researcher.email}`}
+                            Instructor ID: <strong className="font-mono">{researcher.instructorId || "N/A"}</strong> {researcher.email && `• ${researcher.email}`}
                           </p>
                         </div>
                       </div>

@@ -70,7 +70,7 @@ export function SearchEngine() {
   const [lastUsedToken, setLastUsedToken] = useState<boolean | null>(null);
   const resultsTopRef = useRef<HTMLDivElement>(null);
 
-  const currentUser = getCurrentUser() || { name: "Faculty", instructorId: "", role: "instructor" as const };
+  const currentUser = getCurrentUser() || { name: "Researcher", instructorId: "", role: "instructor" as const };
   const isInstructor = currentUser.role === "instructor";
 
   const loadSavedPublications = async () => {
@@ -350,7 +350,7 @@ export function SearchEngine() {
       return;
     }
     if (existing && (existing.approval_status === "pending" || existing.approvalStatus === "pending")) {
-      toast.info(`This publication is already pending approval from the System Administrator.`);
+      toast.info(`This publication is already pending approval from the Research Coordinator.`);
       return;
     }
 
@@ -382,7 +382,7 @@ export function SearchEngine() {
         toast.info(res.message || `Publication already exists in repository.`);
       } else {
         toast.success(
-          `Claim submitted! "${result.title}" assigned to ${currentUser.name} and awaiting approval from Sir Rodelio M. Garin.`
+          `Claim submitted! "${result.title}" assigned to ${currentUser.name} and awaiting approval from Research Coordinator Sir Rodelio M. Garin.`
         );
       }
       setClaimedIds((ids) => [...ids, result.id]);
@@ -400,7 +400,7 @@ export function SearchEngine() {
       {/* 1. Page Header */}
       <PageHeader
         title="Search"
-        description="Find research papers, citations, and authors across academic journals and university repositories to explore institutional works and discover new literature."
+        description="Find publications, citations, and authors across academic journals and university repositories to explore institutional works and discover new literature."
         actions={
           <div className="flex items-center gap-2">
             {tokenUsage ? (
@@ -438,7 +438,7 @@ export function SearchEngine() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search paper title, author name, institution (e.g. Pangasinan State University), or topic..."
+                placeholder="Search publication title, author name, institution (e.g. Pangasinan State University), or topic..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 h-9 sm:h-10 text-xs sm:text-sm bg-background"
@@ -630,7 +630,7 @@ export function SearchEngine() {
                         {!isSaved && isClaimed && (
                           <StatusBadge
                             status="pending"
-                            label={`Pending Admin Approval (Sir Garin) • Assigned to ${assignedOwnerName || currentUser.name}`}
+                            label={`Pending Approval (Research Coordinator) • Assigned to ${assignedOwnerName || currentUser.name}`}
                           />
                         )}
                       </div>
@@ -719,7 +719,7 @@ export function SearchEngine() {
                             </option>
                             {registeredResearchers.map((r) => (
                               <option key={r.instructorId} value={r.instructorId}>
-                                {r.name} ({r.instructorId} • {r.department})
+                                {r.name} ({r.instructorId})
                               </option>
                             ))}
                           </select>
@@ -770,7 +770,7 @@ export function SearchEngine() {
                           </Button>
                         )}
 
-                        {/* Claim Paper (Researcher: assigns to self & requires Admin Sir Garin approval) */}
+                        {/* Claim Publication (Researcher: assigns to self & requires Research Coordinator Sir Garin approval) */}
                         {isInstructor && (
                           <Button
                             size="sm"
@@ -779,7 +779,7 @@ export function SearchEngine() {
                             title={
                               !selectedResearcherId
                                 ? "Assign this publication to yourself first before claiming"
-                                : "Submit claim to Sir Rodelio M. Garin for repository approval"
+                                : "Submit claim to Research Coordinator Sir Rodelio M. Garin for repository approval"
                             }
                             className="h-8 text-xs bg-brand hover:bg-brand/90 disabled:opacity-50 text-white gap-1.5"
                           >
@@ -790,7 +790,7 @@ export function SearchEngine() {
                             )}
                             <span>
                               {selectedResearcherId
-                                ? "Claim & Request Admin Approval"
+                                ? "Claim & Request Approval"
                                 : "Assign to Self to Claim"}
                             </span>
                           </Button>
@@ -889,7 +889,7 @@ export function SearchEngine() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">Scraper Token Usage Feedback</h3>
-                  <p className="text-xs text-muted-foreground">Confirm loading next batch of academic papers</p>
+                  <p className="text-xs text-muted-foreground">Confirm loading next batch of academic publications</p>
                 </div>
               </div>
               <Button
@@ -910,11 +910,11 @@ export function SearchEngine() {
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
                 <span>Current Results:</span>
-                <span className="font-semibold text-foreground">Top {searchResults.length} papers</span>
+                <span className="font-semibold text-foreground">Top {searchResults.length} publications</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
                 <span>Requested Batch:</span>
-                <span className="font-semibold text-brand">Papers {searchResults.length + 1} to {searchResults.length + 10}</span>
+                <span className="font-semibold text-brand">Publications {searchResults.length + 1} to {searchResults.length + 10}</span>
               </div>
             </div>
 

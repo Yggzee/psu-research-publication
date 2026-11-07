@@ -57,6 +57,12 @@ export function LoginScreen() {
       return;
     }
 
+    const digitsOnly = inviteForm.instructorId.replace(/\D/g, "");
+    if (digitsOnly.length !== 5) {
+      setInviteError("Instructor ID must be 5 digits (format: ASIN-00000).");
+      return;
+    }
+
     if (!inviteForm.email.includes("@") || !inviteForm.email.includes(".")) {
       setInviteError("Please enter a valid email address.");
       return;
@@ -69,7 +75,7 @@ export function LoginScreen() {
         lastName: inviteForm.lastName.trim(),
         middleInitial: inviteForm.middleInitial.trim() || undefined,
         email: inviteForm.email.trim(),
-        instructorId: inviteForm.instructorId.trim(),
+        instructorId: `ASIN-${digitsOnly}`,
         scholarUrl: inviteForm.scholarUrl.trim() || undefined,
       });
 
@@ -331,10 +337,10 @@ export function LoginScreen() {
                   <div className="space-y-1">
                     <p className="font-semibold text-slate-800 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 text-blue-600" />
-                      Faculty & Researcher Access
+                      Researcher Access
                     </p>
                     <p className="text-[11px] leading-relaxed text-slate-500">
-                      Researcher accounts are provisioned via administrator invitation. If you are a PSU researcher and have not yet been invited by Sir Rodelio M. Garin, you can ask for an invitation.
+                      Researcher accounts are provisioned by invitation. If you are a PSU researcher and have not yet been invited by Research Coordinator Sir Rodelio M. Garin, you can ask for an invitation.
                     </p>
                   </div>
 
@@ -411,7 +417,7 @@ export function LoginScreen() {
                       <span>Ask for System Invitation</span>
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Submit your credentials to request an invitation from Sir Rodelio M. Garin.
+                      Submit your credentials to request an invitation from Research Coordinator Sir Rodelio M. Garin.
                     </p>
                   </div>
                   <button
@@ -482,15 +488,29 @@ export function LoginScreen() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label htmlFor="reqInstructorId" className="text-xs font-semibold">Instructor / Employee ID *</Label>
-                    <Input
-                      id="reqInstructorId"
-                      value={inviteForm.instructorId}
-                      onChange={(e) => setInviteForm({ ...inviteForm, instructorId: e.target.value })}
-                      placeholder="e.g. INS-2024-001"
-                      className="h-9 text-xs font-mono"
-                      required
-                    />
+                    <Label htmlFor="reqInstructorId" className="text-xs font-semibold">Instructor ID *</Label>
+                    <div className="flex items-center rounded-md border border-gray-200 bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 overflow-hidden h-9">
+                      <span className="px-3 h-full flex items-center bg-slate-100 border-r border-gray-200 text-xs font-mono font-bold text-slate-700 select-none shrink-0">
+                        ASIN-
+                      </span>
+                      <input
+                        id="reqInstructorId"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="\d{5}"
+                        maxLength={5}
+                        value={inviteForm.instructorId}
+                        onChange={(e) =>
+                          setInviteForm({
+                            ...inviteForm,
+                            instructorId: e.target.value.replace(/\D/g, "").slice(0, 5),
+                          })
+                        }
+                        placeholder="00000"
+                        className="w-full h-full px-3 text-xs font-mono text-gray-900 bg-transparent outline-none"
+                        required
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-1">
@@ -543,7 +563,7 @@ export function LoginScreen() {
                 </div>
                 <h4 className="text-base font-bold text-gray-900">Invitation Request Submitted!</h4>
                 <p className="text-xs text-gray-600 leading-relaxed max-w-sm mx-auto">
-                  Thank you! Your request has been forwarded to Campus Research Administrator Sir Rodelio M. Garin. Once approved, you will receive an official invitation link at <strong>{inviteForm.email}</strong> to activate your researcher profile.
+                  Thank you! Your request has been forwarded to Research Coordinator Sir Rodelio M. Garin. Once approved, you will receive an official invitation link at <strong>{inviteForm.email}</strong> to activate your researcher profile.
                 </p>
                 <Button
                   type="button"

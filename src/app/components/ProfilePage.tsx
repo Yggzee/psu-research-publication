@@ -130,8 +130,8 @@ export function ProfilePage() {
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
       {/* 1. Page Header */}
       <PageHeader
-        title="Faculty Profile & Credentials"
-        description="Personal scholarly profile, department affiliation, and Google Scholar index synchronization"
+        title="Researcher Profile & Credentials"
+        description="Personal researcher profile, department affiliation, and Google Scholar index synchronization"
         actions={
           <Button
             size="sm"
@@ -169,7 +169,7 @@ export function ProfilePage() {
                 <div className="flex flex-wrap items-center gap-3.5 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1.5">
                     <Building className="w-3.5 h-3.5 text-brand" />
-                    <span>{currentUser.department || "Faculty Department"}</span>
+                    <span>{currentUser.department || "BSIT"}</span>
                   </span>
                   {currentUser.email && (
                     <span className="flex items-center gap-1.5">
@@ -179,7 +179,7 @@ export function ProfilePage() {
                   )}
                   <span className="flex items-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 text-brand" />
-                    <span className="font-mono">ID: {currentUser.instructorId || currentUser.username || "PSU-FACULTY"}</span>
+                    <span className="font-mono">Instructor ID: {currentUser.instructorId || currentUser.username || "ASIN-00000"}</span>
                   </span>
                 </div>
               </div>

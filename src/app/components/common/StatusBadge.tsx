@@ -36,11 +36,27 @@ export function StatusBadge({
   let defaultLabel = status;
   let dotColor = "bg-muted-foreground";
 
-  // Success role: Approved, verified, active, published, synced
-  if (["approved", "verified", "active", "published", "synced", "delivered"].includes(norm)) {
+  // Success role: Approved, verified, active, published, synced, faculty
+  if (["approved", "verified", "active", "published", "synced", "delivered", "faculty"].includes(norm)) {
     style = "bg-success-soft text-success-foreground border-success-border";
     dotColor = "bg-success";
     defaultLabel = norm.charAt(0).toUpperCase() + norm.slice(1);
+  }
+  // Role badges: Research Coordinator & Researcher
+  else if (norm === "admin") {
+    style = "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+    dotColor = "bg-amber-500";
+    defaultLabel = "Research Coordinator";
+  }
+  else if (norm === "instructor" || norm === "researcher") {
+    style = "bg-brand-soft text-brand border-brand/30";
+    dotColor = "bg-brand";
+    defaultLabel = "Researcher";
+  }
+  else if (norm === "non-faculty" || norm === "non teaching" || norm === "non-teaching") {
+    style = "bg-muted/70 text-muted-foreground border-border";
+    dotColor = "bg-muted-foreground";
+    defaultLabel = "Non-Faculty";
   }
   // Warning role: Pending, in-progress, awaiting
   else if (["pending", "in-progress", "in progress", "awaiting", "expiring"].includes(norm)) {

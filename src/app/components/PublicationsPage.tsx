@@ -269,10 +269,10 @@ export function PublicationsPage() {
   // Batch Auto-Tag
   const handleBatchAutoTag = async () => {
     setIsBatchRunning(true);
-    toast.loading("Running AI Auto-Tagging on selected papers...", { id: "batch-tag" });
+    toast.loading("Running AI Auto-Tagging on selected publications...", { id: "batch-tag" });
     try {
       const res = await apiService.batchClassifySDG();
-      toast.success(`Successfully analyzed and classified ${res.processed} papers!`, { id: "batch-tag" });
+      toast.success(`Successfully analyzed and classified ${res.processed} publications!`, { id: "batch-tag" });
       await loadPublications();
     } catch (err: any) {
       toast.error(`Classification error: ${err.message}`, { id: "batch-tag" });
@@ -357,13 +357,13 @@ export function PublicationsPage() {
               />
             </div>
 
-            {/* Dynamic Instructor / Researcher Filter Dropdown */}
+            {/* Dynamic Researcher Filter Dropdown */}
             <div className="md:col-span-3">
               <Select value={selectedResearcher} onValueChange={setSelectedResearcher}>
                 <SelectTrigger className="h-10 text-xs font-medium">
                   <div className="flex items-center gap-1.5 truncate">
                     <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <SelectValue placeholder="All Researchers / Instructors" />
+                    <SelectValue placeholder="All Researchers" />
                   </div>
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
@@ -382,7 +382,7 @@ export function PublicationsPage() {
                         <div className="flex items-center justify-between w-full gap-2">
                           <span className="truncate">{res.name}</span>
                           <span className="text-[10px] text-muted-foreground ml-2 shrink-0">
-                            {pubCount} {pubCount === 1 ? "paper" : "papers"} • {res.department || "Faculty"}
+                            {pubCount} {pubCount === 1 ? "publication" : "publications"}
                           </span>
                         </div>
                       </SelectItem>
@@ -476,17 +476,17 @@ export function PublicationsPage() {
           </button>
           <span>•</span>
           <span>
-            Showing <strong>{filteredAndSortedPublications.length}</strong> of {allPublications.length} papers
+            Showing <strong>{filteredAndSortedPublications.length}</strong> of {allPublications.length} publications
           </span>
           {selectedResearcher !== "all" && (
             <span className="inline-flex items-center gap-1.5 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/60 px-2.5 py-0.5 rounded-full text-[11px] font-medium">
               <User className="w-3 h-3 text-blue-600" />
               <span>
-                Filtered: {researchersList.find((r) => r.id === selectedResearcher || r.instructorId === selectedResearcher || r.name === selectedResearcher)?.name || "Instructor"}
+                Filtered: {researchersList.find((r) => r.id === selectedResearcher || r.instructorId === selectedResearcher || r.name === selectedResearcher)?.name || "Researcher"}
               </span>
               <button
                 onClick={() => setSelectedResearcher("all")}
-                title="Clear instructor filter"
+                title="Clear researcher filter"
                 className="hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full w-4 h-4 flex items-center justify-center text-[10px]"
               >
                 <X className="w-2.5 h-2.5" />
@@ -735,7 +735,7 @@ export function PublicationsPage() {
       {selectedIds.length > 0 && (
         <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-40 bg-foreground text-background dark:bg-card dark:text-foreground dark:border dark:border-border px-3.5 sm:px-5 py-2 sm:py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 sm:gap-4 animate-in slide-in-from-bottom duration-200 max-w-[calc(100vw-2rem)] flex-wrap justify-center">
           <div className="text-xs font-semibold">
-            <span className="font-bold font-mono text-blue-400">{selectedIds.length}</span> papers selected
+            <span className="font-bold font-mono text-blue-400">{selectedIds.length}</span> publications selected
           </div>
 
           <div className="h-4 w-px bg-border" />

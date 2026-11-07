@@ -35,12 +35,12 @@ const emptyForm = {
   year: String(new Date().getFullYear()),
   abstract: "",
   url: "",
-  status: "In Progress" as ResearchStatus,
+  status: "Published" as ResearchStatus,
   fileName: "",
 };
 
 export function InstructorPublicationsPage() {
-  const user = getCurrentUser() || { name: "Instructor", instructorId: "", role: "instructor" as const };
+  const user = getCurrentUser() || { name: "Researcher", instructorId: "", role: "instructor" as const };
   const [publications, setPublications] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState("mine");
   const [showForm, setShowForm] = useState(false);
@@ -84,7 +84,7 @@ export function InstructorPublicationsPage() {
       id: `manual-${Date.now()}`,
       title: form.title.trim(),
       authors,
-      journal: form.journal.trim() || "Research in progress",
+      journal: form.journal.trim() || "Published Research",
       year: Number(form.year),
       citations: 0,
       abstract: form.abstract.trim(),
@@ -93,7 +93,7 @@ export function InstructorPublicationsPage() {
       ownerName: user.name,
       source: "manual",
       approvalStatus: "approved",
-      researchStatus: form.status,
+      researchStatus: "Published",
       isPublic: false,
       fileName: form.fileName || undefined,
       createdAt: new Date().toISOString(),
@@ -134,7 +134,7 @@ export function InstructorPublicationsPage() {
   };
 
   const tabs = [
-    { id: "mine", label: "My Research", count: ownPublications.length, icon: FileText },
+    { id: "mine", label: "My Published Research", count: ownPublications.length, icon: FileText },
     { id: "public", label: "Institutional Repository", count: publicPublications.length, icon: BookOpen },
   ];
 
@@ -142,8 +142,8 @@ export function InstructorPublicationsPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* 1. Page Header */}
       <PageHeader
-        title="Faculty Research & Publications"
-        description="Manage your research outputs, track citations, and register new scholarly work"
+        title="My Publications"
+        description="Manage your published research, track citations, and add new publications"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -162,19 +162,19 @@ export function InstructorPublicationsPage() {
               className="text-xs h-9 gap-1.5 bg-brand hover:bg-brand/90 text-white shadow-2xs"
             >
               {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-              <span>{showForm ? "Close Form" : "Add Research"}</span>
+              <span>{showForm ? "Close Form" : "Add Publication"}</span>
             </Button>
           </div>
         }
       />
 
-      {/* 2. Collapsible Add Research Form */}
+      {/* 2. Collapsible Add Publication Form */}
       {showForm && (
         <Card className="border-brand/40 shadow-xs">
           <CardContent className="p-6">
             <div className="flex items-center justify-between pb-4 border-b border-border/60 mb-5">
               <div>
-                <h3 className="text-sm font-semibold text-foreground">Register New Scholarly Output</h3>
+                <h3 className="text-sm font-semibold text-foreground">Add Publication</h3>
                 <p className="text-xs text-muted-foreground">
                   Your name ({user.name}) will be automatically registered as lead author.
                 </p>
@@ -191,13 +191,13 @@ export function InstructorPublicationsPage() {
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2 text-xs">
               <div className="space-y-1.5 md:col-span-2">
-                <Label htmlFor="research-title" className="text-xs font-medium">Research Title *</Label>
+                <Label htmlFor="research-title" className="text-xs font-medium">Publication Title *</Label>
                 <Input
                   id="research-title"
                   required
                   value={form.title}
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="Full title of paper or study"
+                  placeholder="Full title of published research"
                   className="h-9 text-xs"
                 />
               </div>
@@ -214,26 +214,10 @@ export function InstructorPublicationsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="research-status" className="text-xs font-medium">Status *</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(status) => setForm({ ...form, status: status as ResearchStatus })}
-                >
-                  <SelectTrigger id="research-status" className="h-9 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Unpublished">Unpublished</SelectItem>
-                    <SelectItem value="Published">Published</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="journal" className="text-xs font-medium">Journal or Venue</Label>
+                <Label htmlFor="journal" className="text-xs font-medium">Journal or Venue *</Label>
                 <Input
                   id="journal"
+                  required
                   value={form.journal}
                   onChange={(e) => setForm({ ...form, journal: e.target.value })}
                   placeholder="e.g. Philippine Journal of Science, IEEE"
@@ -256,7 +240,7 @@ export function InstructorPublicationsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="research-link" className="text-xs font-medium">Research URL / DOI</Label>
+                <Label htmlFor="research-link" className="text-xs font-medium">Publication URL / DOI</Label>
                 <Input
                   id="research-link"
                   type="url"
@@ -267,12 +251,12 @@ export function InstructorPublicationsPage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 md:col-span-2">
                 <Label htmlFor="research-file" className="text-xs font-medium">Document / PDF Filename</Label>
                 <Input
                   id="research-file"
                   type="text"
-                  placeholder="manuscript_draft.pdf"
+                  placeholder="published_paper.pdf"
                   value={form.fileName}
                   onChange={(e) => setForm({ ...form, fileName: e.target.value })}
                   className="h-9 text-xs"
@@ -280,13 +264,13 @@ export function InstructorPublicationsPage() {
               </div>
 
               <div className="space-y-1.5 md:col-span-2">
-                <Label htmlFor="research-abstract" className="text-xs font-medium">Abstract or Summary</Label>
+                <Label htmlFor="research-abstract" className="text-xs font-medium">Abstract</Label>
                 <Textarea
                   id="research-abstract"
                   rows={3}
                   value={form.abstract}
                   onChange={(e) => setForm({ ...form, abstract: e.target.value })}
-                  placeholder="Paste abstract or research objectives here..."
+                  placeholder="Paste publication abstract here..."
                   className="text-xs"
                 />
               </div>
@@ -294,7 +278,7 @@ export function InstructorPublicationsPage() {
               <div className="flex items-center gap-2 md:col-span-2 pt-2">
                 <Button type="submit" size="sm" className="bg-brand hover:bg-brand/90 text-white text-xs gap-1.5">
                   <Upload className="h-3.5 w-3.5" />
-                  <span>Save Research Output</span>
+                  <span>Add Publication</span>
                 </Button>
                 <Button
                   type="button"
@@ -361,7 +345,7 @@ export function InstructorPublicationsPage() {
 
                       <div className="flex items-center gap-2 flex-wrap pt-1 text-xs">
                         <span className="text-muted-foreground text-[11px] truncate max-w-xs">
-                          {publication.journal || "Faculty Portfolio"}
+                          {publication.journal || "Researcher Portfolio"}
                         </span>
 
                         {publication.url && (
@@ -412,9 +396,9 @@ export function InstructorPublicationsPage() {
           {ownPublications.length === 0 && !loading && (
             <EmptyState
               icon={FileText}
-              title="No personal publications recorded"
-              description="Register your papers, articles, or ongoing research projects to track citations and generate reports."
-              actionLabel="Add Research"
+              title="No publications recorded"
+              description="Add your published research to track citations and generate accreditation reports."
+              actionLabel="Add Publication"
               onAction={() => setShowForm(true)}
             />
           )}

@@ -112,9 +112,9 @@ export function VerifyEmailPage() {
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 text-left text-xs text-amber-900 flex items-start gap-2.5">
                   <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-amber-950">Next Step: Administrator Review</p>
+                    <p className="font-semibold text-amber-950">Next Step: Research Coordinator Review</p>
                     <p className="mt-0.5 text-amber-800">
-                      Your registration has been submitted to the Campus Research Administrator for review and admission. You will be able to log in once your account is admitted.
+                      Your verification has been submitted to Research Coordinator Sir Rodelio M. Garin for review and admission. You will be able to log in once your account is admitted.
                     </p>
                   </div>
                 </div>

@@ -98,7 +98,7 @@ export function ResearcherProfile() {
       {/* 1. Page Header with Back Action */}
       <PageHeader
         title={researcher.name}
-        description={`${researcher.department} • Pangasinan State University, Asingan Campus`}
+        description="Pangasinan State University, Asingan Campus"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -150,14 +150,25 @@ export function ResearcherProfile() {
             <div className="space-y-1.5 flex-1 min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl font-bold text-foreground truncate">{researcher.name}</h2>
-                <StatusBadge status={researcher.isFaculty !== false ? "faculty" : "active"} />
+                {(() => {
+                  const isNonFaculty =
+                    researcher.isFaculty === false ||
+                    researcher.department === "Non-Faculty" ||
+                    researcher.department === "Non Teaching";
+                  return (
+                    <StatusBadge
+                      status={isNonFaculty ? "non-faculty" : "faculty"}
+                      label={isNonFaculty ? "Non-Faculty" : `Faculty (${researcher.department || "BSIT"})`}
+                    />
+                  );
+                })()}
+                {((researcher.id || "").toUpperCase() === "PSU-002" ||
+                  (researcher.name || "").toLowerCase().includes("garin")) && (
+                  <StatusBadge status="admin" label="Research Coordinator" />
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <Building className="w-3.5 h-3.5 text-brand" />
-                  <span>{researcher.department}</span>
-                </span>
                 <span className="flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-brand" />
                   <span>Asingan Campus</span>
@@ -173,7 +184,7 @@ export function ResearcherProfile() {
         <StatCard
           label="Total Publications"
           value={researcher.totalPublications || 0}
-          subtitle="Verified campus outputs"
+          subtitle="Verified campus publications"
           icon={FileText}
         />
         <StatCard
@@ -189,7 +200,7 @@ export function ResearcherProfile() {
               ? ((researcher.totalCitations || 0) / researcher.totalPublications).toFixed(1)
               : "0.0"
           }
-          subtitle="Average cites / paper"
+          subtitle="Average cites / publication"
           icon={BarChart3}
         />
       </div>
@@ -199,10 +210,10 @@ export function ResearcherProfile() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
           <div>
             <h3 className="text-sm font-semibold text-foreground">
-              Scholarly Works ({sortedPublications.length})
+              Publications ({sortedPublications.length})
             </h3>
             <p className="text-xs text-muted-foreground">
-              All peer-reviewed articles and research papers attributed to {researcher.name}
+              All published research attributed to {researcher.name}
             </p>
           </div>
 

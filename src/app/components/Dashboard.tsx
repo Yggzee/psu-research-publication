@@ -152,13 +152,13 @@ export function Dashboard() {
         <StatCard
           label="Total Researchers"
           value={dashboardData.totalResearchers}
-          subtitle="Registered faculty"
+          subtitle="Registered researchers"
           icon={Users}
         />
         <StatCard
           label="Total Publications"
           value={dashboardData.totalPublications}
-          subtitle="Approved scholarly papers"
+          subtitle="Approved publications"
           icon={FileText}
         />
         <StatCard
@@ -297,8 +297,8 @@ export function Dashboard() {
         {!hasChartData ? (
           <EmptyState
             icon={AlertCircle}
-            title="No Research Trends Data Yet"
-            description="Scholarly metrics and citation growth will automatically populate here as faculty members add approved publications."
+            title="No Publication Trends Data Yet"
+            description="Publication metrics and citation growth will automatically populate here as researchers add approved publications."
           />
         ) : (
           <div className="space-y-4">
