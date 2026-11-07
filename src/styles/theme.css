@@ -73,71 +73,74 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
+  /* Facebook Dark Mode Surface & Text Palette */
+  --background: #18191a;
+  --foreground: #e4e6eb;
+  --card: #242526;
+  --card-foreground: #e4e6eb;
+  --popover: #242526;
+  --popover-foreground: #e4e6eb;
+  --primary: #2d88ff;
+  --primary-foreground: #ffffff;
+  --secondary: #3a3b3c;
+  --secondary-foreground: #e4e6eb;
+  --muted: #3a3b3c;
+  --muted-foreground: #b0b3b8;
+  --accent: #3a3b3c;
+  --accent-foreground: #e4e6eb;
+  --destructive: #e41e3f;
+  --destructive-foreground: #ffffff;
+  --border: #3e4042;
+  --input: #3e4042;
+  --input-background: #3a3b3c;
+  --switch-background: #4e4f50;
+  --ring: #2d88ff;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --chart-1: #2d88ff;
+  --chart-2: #31a24c;
+  --chart-3: #f7b928;
+  --chart-4: #a855f7;
+  --chart-5: #f02849;
+  --sidebar: #242526;
+  --sidebar-foreground: #e4e6eb;
+  --sidebar-primary: #2d88ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #3a3b3c;
+  --sidebar-accent-foreground: #e4e6eb;
+  --sidebar-border: #3e4042;
+  --sidebar-ring: #2d88ff;
 
-  /* PSU Brand & Semantic Tokens (Dark Mode) */
-  --brand: #2563eb;
-  --brand-soft: rgba(37, 99, 235, 0.15);
+  /* PSU Brand & Semantic Tokens (Facebook-Style Dark Mode) */
+  --brand: #2d88ff;
+  --brand-soft: rgba(45, 136, 255, 0.18);
   --brand-foreground: #ffffff;
-  --brand-border: rgba(37, 99, 235, 0.3);
+  --brand-border: rgba(45, 136, 255, 0.4);
 
-  --success: #10b981;
-  --success-soft: rgba(16, 185, 129, 0.15);
-  --success-foreground: #34d399;
-  --success-border: rgba(16, 185, 129, 0.3);
+  --success: #31a24c;
+  --success-soft: rgba(49, 162, 76, 0.2);
+  --success-foreground: #6ee7b7;
+  --success-border: rgba(49, 162, 76, 0.4);
 
-  --warning: #f59e0b;
-  --warning-soft: rgba(245, 158, 11, 0.15);
-  --warning-foreground: #fbbf24;
-  --warning-border: rgba(245, 158, 11, 0.3);
+  --warning: #f7b928;
+  --warning-soft: rgba(247, 185, 40, 0.2);
+  --warning-foreground: #fde68a;
+  --warning-border: rgba(247, 185, 40, 0.4);
 
-  --danger: #ef4444;
-  --danger-soft: rgba(239, 68, 68, 0.15);
-  --danger-foreground: #f87171;
-  --danger-border: rgba(239, 68, 68, 0.3);
+  --danger: #f02849;
+  --danger-soft: rgba(240, 40, 73, 0.2);
+  --danger-foreground: #fca5a5;
+  --danger-border: rgba(240, 40, 73, 0.4);
 
-  --info: #3b82f6;
-  --info-soft: rgba(59, 130, 246, 0.15);
-  --info-foreground: #60a5fa;
-  --info-border: rgba(59, 130, 246, 0.3);
+  --info: #4599ff;
+  --info-soft: rgba(69, 153, 255, 0.2);
+  --info-foreground: #93c5fd;
+  --info-border: rgba(69, 153, 255, 0.4);
 
-  --ai: #8b5cf6;
-  --ai-soft: rgba(139, 92, 246, 0.15);
-  --ai-foreground: #a78bfa;
-  --ai-border: rgba(139, 92, 246, 0.3);
+  --ai: #a855f7;
+  --ai-soft: rgba(168, 85, 247, 0.2);
+  --ai-foreground: #d8b4fe;
+  --ai-border: rgba(168, 85, 247, 0.4);
 }
 
 @theme inline {

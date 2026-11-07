@@ -1329,7 +1329,7 @@ export function SystemGuidePage() {
                     onClick={() => setCurrentIndex(idx)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
                       isActive
-                        ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold border border-blue-200/80 dark:border-blue-800/60 shadow-2xs"
+                        ? "bg-blue-50 dark:bg-[#263951] text-blue-600 dark:text-[#4599ff] font-semibold border border-blue-200/80 dark:border-[#2d88ff]/40 shadow-2xs"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                     }`}
                   >

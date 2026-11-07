@@ -207,7 +207,7 @@ export function DashboardLayout() {
                     isActive
                       ? item.isAI
                         ? "bg-ai-soft text-ai-foreground font-semibold shadow-2xs border border-ai-border"
-                        : "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold shadow-2xs"
+                        : "bg-blue-50 dark:bg-[#263951] text-blue-600 dark:text-[#4599ff] font-semibold shadow-2xs"
                       : item.isAI
                       ? "text-muted-foreground hover:text-ai hover:bg-ai-soft/50"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -219,7 +219,7 @@ export function DashboardLayout() {
                         isActive
                           ? item.isAI
                             ? "text-ai"
-                            : "text-blue-600 dark:text-blue-400"
+                            : "text-blue-600 dark:text-[#4599ff]"
                           : item.isAI
                           ? "text-ai/70"
                           : "text-muted-foreground"
@@ -285,7 +285,7 @@ export function DashboardLayout() {
                 onClick={() => navigate(item.path)}
                 className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium transition-all cursor-pointer ${
                   isActive
-                    ? "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold"
+                    ? "bg-blue-50 dark:bg-[#263951] text-blue-600 dark:text-[#4599ff] font-semibold"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 }`}
               >
