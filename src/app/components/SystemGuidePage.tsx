@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import {
   HelpCircle,
@@ -22,6 +22,29 @@ import {
   MousePointerClick,
   Eye,
   Compass,
+  Plus,
+  RefreshCw,
+  Save,
+  Hand,
+  Table,
+  LayoutGrid,
+  Copy,
+  Download,
+  Printer,
+  Check,
+  X,
+  Edit3,
+  Trash2,
+  Send,
+  ChevronLeft,
+  ChevronRight,
+  Quote,
+  GraduationCap,
+  Building2,
+  Globe,
+  ExternalLink,
+  KeyRound,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -32,6 +55,7 @@ import { useTheme } from "../utils/themeContext";
 
 interface GuideClickItem {
   label: string;
+  visualReplica: ReactNode;
   explanation: string;
 }
 
@@ -41,147 +65,446 @@ interface GuideCategory {
   title: string;
   subtitle: string;
   icon: React.ComponentType<{ className?: string }>;
-  whatYouSee: string[];
-  purposeSummary: string;
+  narrativeParagraphs: [string, string];
+  simulationSection?: {
+    title: string;
+    subtitle: string;
+    visual: ReactNode;
+    numberExplanation: string[];
+  };
   clickableItems: GuideClickItem[];
 }
 
+/* ============================================================================
+ * SIMULATED VISUAL & GRAPH COMPONENTS (FOR STEP-BY-STEP NUMERICAL WALKTHROUGHS)
+ * ========================================================================== */
+
+function SimulatedPublicCounterGraph() {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3 font-mono text-xs bg-muted/40 border border-border/70 px-4 py-3 rounded-xl">
+        <span className="flex items-center gap-1.5">
+          <BookOpen className="w-4 h-4 text-brand" />
+          <strong className="text-foreground text-sm">48</strong> Publications
+        </span>
+        <span className="text-border">•</span>
+        <span className="flex items-center gap-1.5">
+          <Quote className="w-4 h-4 text-amber-500" />
+          <strong className="text-foreground text-sm">312</strong> Citations
+        </span>
+        <span className="text-border">•</span>
+        <span className="flex items-center gap-1.5">
+          <GraduationCap className="w-4 h-4 text-blue-500" />
+          <strong className="text-foreground text-sm">24</strong> Researchers
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="p-3.5 rounded-xl border border-border/70 bg-card space-y-1">
+          <div className="flex items-center justify-between">
+            <Badge className="bg-amber-500 text-white text-[10px]">#1 Most Cited</Badge>
+            <span className="text-xs font-mono font-bold text-emerald-600">42 Citations</span>
+          </div>
+          <p className="text-xs font-bold text-foreground line-clamp-1 pt-1">
+            Smart Agricultural Water Monitoring in Eastern Pangasinan
+          </p>
+          <p className="text-[11px] text-muted-foreground">Year: 2024 • BSIT Department</p>
+        </div>
+        <div className="p-3.5 rounded-xl border border-border/70 bg-card space-y-1">
+          <div className="flex items-center justify-between">
+            <Badge className="bg-slate-500 text-white text-[10px]">#2 Most Cited</Badge>
+            <span className="text-xs font-mono font-bold text-emerald-600">29 Citations</span>
+          </div>
+          <p className="text-xs font-bold text-foreground line-clamp-1 pt-1">
+            Community Entrepreneurship and Micro-Enterprise Resilience
+          </p>
+          <p className="text-[11px] text-muted-foreground">Year: 2023 • BSBA Department</p>
+        </div>
+        <div className="p-3.5 rounded-xl border border-border/70 bg-card space-y-1">
+          <div className="flex items-center justify-between">
+            <Badge className="bg-amber-700 text-white text-[10px]">#3 Most Cited</Badge>
+            <span className="text-xs font-mono font-bold text-emerald-600">21 Citations</span>
+          </div>
+          <p className="text-xs font-bold text-foreground line-clamp-1 pt-1">
+            Reading Comprehension Strategies in Public Elementary Schools
+          </p>
+          <p className="text-[11px] text-muted-foreground">Year: 2024 • BEE Department</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SimulatedDashboardCharts() {
+  const yearlySample = [
+    { year: "2021", pubs: 6, citations: 28, heightPct: 24 },
+    { year: "2022", pubs: 11, citations: 54, heightPct: 44 },
+    { year: "2023", pubs: 16, citations: 89, heightPct: 64 },
+    { year: "2024", pubs: 22, citations: 141, heightPct: 88 },
+    { year: "2025", pubs: 25, citations: 176, heightPct: 100 },
+  ];
+
+  const deptSample = [
+    { dept: "BSIT", count: 24, pct: 100, color: "bg-blue-600" },
+    { dept: "BSE", count: 18, pct: 75, color: "bg-indigo-600" },
+    { dept: "BSBA", count: 14, pct: 58, color: "bg-emerald-600" },
+    { dept: "BEE", count: 11, pct: 46, color: "bg-amber-500" },
+    { dept: "BTLED", count: 8, pct: 33, color: "bg-purple-600" },
+    { dept: "BIT", count: 5, pct: 21, color: "bg-rose-500" },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {/* Simulated Top 4 KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase">Total Publications</p>
+          <p className="text-2xl font-extrabold text-foreground mt-1">80</p>
+          <p className="text-[11px] text-emerald-600 font-medium mt-0.5">+25 published in 2025</p>
+        </div>
+        <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase">Total Citations</p>
+          <p className="text-2xl font-extrabold text-foreground mt-1">488</p>
+          <p className="text-[11px] text-blue-600 font-medium mt-0.5">Avg. 6.1 citations per work</p>
+        </div>
+        <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase">Researchers</p>
+          <p className="text-2xl font-extrabold text-foreground mt-1">24</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Active across 6 departments</p>
+        </div>
+        <div className="p-3.5 rounded-xl border border-border/70 bg-card">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase">Campus H-Index</p>
+          <p className="text-2xl font-extrabold text-foreground mt-1">12</p>
+          <p className="text-[11px] text-amber-600 font-medium mt-0.5">12 works with 12+ citations</p>
+        </div>
+      </div>
+
+      {/* Simulated Bar & Department Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Yearly Growth Chart */}
+        <div className="p-4 rounded-xl border border-border/70 bg-card space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-foreground">Simulated Annual Publication Growth (2021–2025)</p>
+              <p className="text-[11px] text-muted-foreground">Blue bars = Publications • Amber badge = Citations</p>
+            </div>
+            <BarChart3 className="w-4 h-4 text-brand" />
+          </div>
+          <div className="h-40 flex items-end justify-between gap-3 pt-6 px-2 border-b border-border/60">
+            {yearlySample.map((item) => (
+              <div key={item.year} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                <span className="text-[10px] font-mono font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                  {item.citations}c
+                </span>
+                <div
+                  style={{ height: `${item.heightPct}%` }}
+                  className="w-full max-w-[38px] rounded-t-lg bg-brand flex items-start justify-center pt-1 text-[10px] font-bold text-white shadow-2xs"
+                >
+                  {item.pubs}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between px-2 text-[11px] font-mono text-muted-foreground">
+            {yearlySample.map((item) => (
+              <span key={item.year} className="flex-1 text-center font-semibold">
+                {item.year}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Department Share Chart */}
+        <div className="p-4 rounded-xl border border-border/70 bg-card space-y-3">
+          <div>
+            <p className="text-xs font-bold text-foreground">Simulated Publications by Department</p>
+            <p className="text-[11px] text-muted-foreground">Comparing total published works across programs</p>
+          </div>
+          <div className="space-y-2.5 pt-1">
+            {deptSample.map((d) => (
+              <div key={d.dept} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-foreground">{d.dept}</span>
+                  <span className="font-mono text-muted-foreground">{d.count} publications</span>
+                </div>
+                <div className="w-full h-2.5 rounded-full bg-muted overflow-hidden">
+                  <div className={`h-full rounded-full ${d.color}`} style={{ width: `${d.pct}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SimulatedImpactGraph() {
+  const citationTiers = [
+    { label: "Highly Cited (20+ Citations)", count: 8, pct: 20, color: "bg-emerald-600" },
+    { label: "Moderately Cited (5–19 Citations)", count: 22, pct: 55, color: "bg-blue-600" },
+    { label: "Newly Cited (1–4 Citations)", count: 10, pct: 25, color: "bg-amber-500" },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="p-4 rounded-xl border border-border/70 bg-card space-y-3">
+        <p className="text-xs font-bold text-foreground">Simulated Citation Reach Breakdown (40 Cited Works)</p>
+        <div className="space-y-3">
+          {citationTiers.map((t) => (
+            <div key={t.label} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-medium text-foreground">{t.label}</span>
+                <span className="font-mono font-bold text-foreground">
+                  {t.count} works ({t.pct}%)
+                </span>
+              </div>
+              <div className="w-full h-3 rounded-full bg-muted overflow-hidden">
+                <div className={`h-full rounded-full ${t.color}`} style={{ width: `${t.pct}%` }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-4 rounded-xl border border-border/70 bg-card space-y-2.5">
+        <p className="text-xs font-bold text-foreground">Simulated Department Citation Impact</p>
+        <div className="divide-y divide-border/60 text-xs">
+          <div className="py-2 flex items-center justify-between">
+            <span className="font-semibold">BSIT (Information Technology)</span>
+            <span className="font-mono text-emerald-600 font-bold">24 publications • 198 citations (Avg 8.2)</span>
+          </div>
+          <div className="py-2 flex items-center justify-between">
+            <span className="font-semibold">BSE (Secondary Education)</span>
+            <span className="font-mono text-blue-600 font-bold">18 publications • 117 citations (Avg 6.5)</span>
+          </div>
+          <div className="py-2 flex items-center justify-between">
+            <span className="font-semibold">BSBA (Business Administration)</span>
+            <span className="font-mono text-amber-600 font-bold">14 publications • 84 citations (Avg 6.0)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SimulatedSDGRadarGraph() {
+  const sampleGoals = [
+    { code: "SDG 4", name: "Quality Education", count: 28, pct: 100, color: "bg-red-600" },
+    { code: "SDG 9", name: "Industry, Innovation & Infrastructure", count: 19, pct: 68, color: "bg-orange-500" },
+    { code: "SDG 8", name: "Decent Work & Economic Growth", count: 14, pct: 50, color: "bg-rose-700" },
+    { code: "SDG 3", name: "Good Health & Well-Being", count: 11, pct: 39, color: "bg-emerald-600" },
+    { code: "SDG 13", name: "Climate Action", count: 8, pct: 29, color: "bg-green-700" },
+  ];
+
+  return (
+    <div className="p-4 rounded-xl border border-border/70 bg-card space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-bold text-foreground">Simulated UN Sustainable Development Goal Alignment</p>
+          <p className="text-[11px] text-muted-foreground">Showing how 80 sample campus publications align with global goals</p>
+        </div>
+        <Badge variant="outline" className="text-xs font-mono border-brand/40 text-brand">
+          17 Global Goals
+        </Badge>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
+        {sampleGoals.map((g) => (
+          <div key={g.code} className="p-3 rounded-xl border border-border/70 bg-muted/20 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] font-bold text-white px-2 py-0.5 rounded ${g.color}`}>{g.code}</span>
+              <span className="text-xs font-mono font-bold text-foreground">{g.count} works</span>
+            </div>
+            <p className="text-xs font-semibold text-foreground line-clamp-1">{g.name}</p>
+            <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+              <div className={`h-full rounded-full ${g.color}`} style={{ width: `${g.pct}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================================
+ * 1. GUEST GUIDE CATEGORIES
+ * ========================================================================== */
 const guestGuideCategories: GuideCategory[] = [
   {
-    id: "about-system",
-    number: 1,
-    title: "Welcome to the PSU Asingan Research Portal",
-    subtitle: "What this website is and who it is for",
-    icon: Compass,
-    whatYouSee: [
-      "When you visit the Pangasinan State University — Asingan Campus Research Publication Tracking System, you are looking at the official home for all published research works written by our campus researchers.",
-      "Everything on this public page is open for students, teachers, accreditors, and visitors to read and explore without needing an account.",
-    ],
-    purposeSummary:
-      "This portal gathers all published studies from our campus in one organized place so anyone can discover what our researchers have studied, how many times their work has been cited by other scholars around the world, and how our campus contributes to the United Nations Sustainable Development Goals.",
-    clickableItems: [
-      {
-        label: "Top-Left Summary Counter (Publications • Citations • Researchers)",
-        explanation:
-          "Shows the live total of verified campus publications, the combined number of times those publications have been cited, and the total number of registered researchers on campus.",
-      },
-      {
-        label: "Sign In Button (Top-Right Corner)",
-        explanation:
-          "Takes registered PSU Asingan researchers and the Research Coordinator to the Sign In screen so they can manage their publications.",
-      },
-    ],
-  },
-  {
     id: "public-search",
-    number: 2,
+    number: 1,
     title: "Public Search & Institutional Repository",
-    subtitle: "Finding and reading published works from PSU Asingan",
+    subtitle: "Exploring PSU Asingan's published research works and citation numbers",
     icon: Search,
-    whatYouSee: [
-      "In the center of the page, you will see a large search bar with two search modes right above it: 'PSU Repository (Verified)' and 'Global Academic Search'.",
-      "Below the search bar, you will see filter menus for UN Sustainable Development Goals (SDG), Department, Publication Year, and Sorting order, followed by the 'Most Cited Institutional Works' highlight cards and the complete list of campus publications.",
+    narrativeParagraphs: [
+      "When you open the Pangasinan State University — Asingan Campus Research Portal, you are greeted by the Public Search and Institutional Repository page. At the top left of the header, a live summary bar shows you the exact number of verified Publications, combined global Citations, and registered Researchers on campus. Directly below the university banner sits the main search box along with two search mode buttons—'PSU Repository (Verified)' and 'Global Academic Search'—followed by filter dropdowns for United Nations Sustainable Development Goals (SDG), Department, Publication Year, and Sorting order. This welcoming layout allows students, teachers, accreditors, and visitors to browse our campus's scholarly output without needing to sign in.",
+      "Every section on this page is built to help you discover real research impact in seconds. Below the search controls, the 'Most Cited Institutional Works' showcase highlights the top three campus publications that have earned the highest number of citations from other researchers around the world, followed by the complete paginated catalog of campus studies. Whether you want to read studies written by a specific teacher, check which works support Quality Education or Climate Action, or open the original journal article to read the full text, everything is organized in one clear, open-access directory.",
     ],
-    purposeSummary:
-      "Each part of this page is designed to help you quickly find a specific study—whether you know the title, the researcher's surname, the department, or the community topic it addresses.",
+    simulationSection: {
+      title: "Simulated Public Repository Numbers & Top-Cited Showcase",
+      subtitle: "Example of what the numbers on the Public Search page mean",
+      visual: <SimulatedPublicCounterGraph />,
+      numberExplanation: [
+        "In the simulated counter bar at the top, '48 Publications' means 48 published studies authored by PSU Asingan researchers have been verified and stored in the campus repository.",
+        "'312 Citations' is the combined total of how many times all 48 of those publications have been referenced by other scholars in their own research studies.",
+        "'24 Researchers' tells you that 24 registered PSU Asingan researchers contributed to those 48 publications.",
+        "In the 3 highlight cards below (#1, #2, and #3 Most Cited), a study showing '42 Citations' in 2024 means 42 other published studies worldwide have cited that BSIT study since it was published.",
+      ],
+    },
     clickableItems: [
       {
-        label: "PSU Repository (Verified) Tab",
+        label: "PSU Repository (Verified) Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold shadow-2xs">
+            <Building2 className="w-3.5 h-3.5" />
+            <span>PSU Repository (Verified)</span>
+          </span>
+        ),
         explanation:
-          "Searches only the official, verified publications authored by PSU Asingan researchers.",
+          "Switches the search bar so that it searches only the official, verified publications written by PSU Asingan researchers.",
       },
       {
-        label: "Global Academic Search Tab",
+        label: "Global Academic Search Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-semibold">
+            <Globe className="w-3.5 h-3.5 text-brand" />
+            <span>Global Academic Search</span>
+          </span>
+        ),
         explanation:
-          "Lets you search worldwide academic libraries for broader literature, while automatically highlighting works from Pangasinan State University and the Philippines first.",
+          "Lets you search worldwide academic libraries for any research topic, while automatically placing works from Pangasinan State University and the Philippines at the top of the results.",
       },
       {
-        label: "Filter Dropdowns (SDG Goal, Department, Year, Sort By)",
+        label: "Read Source / Publication Title Link",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-muted/40 text-brand text-xs font-semibold">
+            <span>Read Source</span>
+            <ExternalLink className="w-3 h-3" />
+          </span>
+        ),
         explanation:
-          "Narrows down the list of publications immediately. For example, you can pick 'SDG 4: Quality Education' or a specific year to see only matching publications.",
+          "Clicking a publication's title or its 'Read Source' button opens the original journal page in a new browser tab so you can read the full study.",
       },
       {
-        label: "Publication Title Link or 'Read Source' Button",
+        label: "Sign In Button (Top-Right Header)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <LogIn className="w-3.5 h-3.5" />
+            <span>Sign In</span>
+          </span>
+        ),
         explanation:
-          "Opens the original journal page or full article in a new browser tab so you can read the complete study.",
-      },
-      {
-        label: "Previous / Page Numbers / Next Buttons (Bottom of List)",
-        explanation:
-          "Moves between pages of search results, showing 10 publications at a time.",
+          "Takes PSU Asingan researchers and the Research Coordinator to the Sign In screen so they can access their personal workspace.",
       },
     ],
   },
   {
-    id: "signin-invitation",
-    number: 3,
-    title: "Signing In & Asking for an Invitation",
-    subtitle: "How PSU Asingan researchers get their own account",
+    id: "signin-and-invitation",
+    number: 2,
+    title: "Sign In & Asking for an Invitation",
+    subtitle: "How PSU Asingan researchers sign in or request an account using their ASIN-00000 Instructor ID",
     icon: LogIn,
-    whatYouSee: [
-      "When you click 'Sign In' at the top right, you arrive at the Researcher Access screen. On the left is the Pangasinan State University welcome banner, and on the right is the Sign In form.",
-      "At the bottom of the Sign In form, there is a link that says 'Ask for Invitation' for PSU Asingan researchers who do not have an account yet.",
+    narrativeParagraphs: [
+      "When you click the 'Sign In' button in the top-right corner of the public portal, you are taken to the Researcher Access screen. On the left side of the screen, you will see the Pangasinan State University — Asingan Campus branding, a 'Back to Public Search' link, and the 'Welcome Back' sign-in card where registered researchers enter their Username or Instructor ID and Password. On the right side of the screen is a photograph of the PSU Asingan campus building. This clean two-column screen serves as the secure entrance to the internal research portal.",
+      "Because all campus records must remain accurate and official, researcher accounts are created by invitation only. If you are a PSU Asingan researcher who does not have an account yet, you will see an 'Ask for Invitation' link at the bottom of the sign-in card. Clicking that link opens a request window where you enter your name, email address, and your Instructor ID in the standardized ASIN-00000 format. Once you submit the request, it goes directly to Research Coordinator Sir Rodelio M. Garin, who reviews it and sends an activation link to your email.",
     ],
-    purposeSummary:
-      "To keep campus records accurate, accounts are by invitation only. If you are a PSU Asingan researcher, you can either sign in with your existing credentials or send a quick request to Research Coordinator Sir Rodelio M. Garin.",
     clickableItems: [
       {
-        label: "Back to Public Search Link",
+        label: "Back to Public Search Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-slate-600 bg-slate-100 text-xs font-semibold">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Public Search</span>
+          </span>
+        ),
         explanation:
-          "Returns you to the public search page if you just want to browse publications without signing in.",
+          "Returns you immediately to the public search page if you want to continue browsing campus publications without signing in.",
       },
       {
-        label: "Email or Username & Password Fields + 'Sign In' Button",
+        label: "Ask for Invitation Link",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold">
+            <span>Ask for Invitation</span>
+          </span>
+        ),
         explanation:
-          "Lets registered researchers and the Research Coordinator enter their credentials to open their personal workspace.",
+          "Opens the invitation request form for PSU Asingan researchers who need a new account.",
       },
       {
-        label: "'Ask for Invitation' Link",
+        label: "Locked ASIN-00000 Instructor ID Input",
+        visualReplica: (
+          <div className="inline-flex items-center rounded-md border border-slate-300 overflow-hidden text-xs font-mono">
+            <span className="bg-slate-100 text-slate-700 font-bold px-2.5 py-1 border-r border-slate-300">
+              ASIN-
+            </span>
+            <span className="bg-white text-slate-500 px-2.5 py-1">00000</span>
+          </div>
+        ),
         explanation:
-          "Opens a simple request form where a PSU Asingan researcher can enter their First Name, Last Name, Email Address, and the 5 numbers of their Instructor ID (ASIN-00000). The 'ASIN-' part is already filled in for you—you only type your 5 digits.",
+          "Both Faculty and Non-Faculty researchers use the exact same Instructor ID format (ASIN-00000). The 'ASIN-' prefix is permanently locked so you only need to type your 5 numeric digits.",
       },
       {
-        label: "'Submit Request' Button (Inside Ask for Invitation)",
+        label: "Submit Request Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold">
+            <Send className="w-3.5 h-3.5" />
+            <span>Submit Request</span>
+          </span>
+        ),
         explanation:
-          "Sends your request directly to Research Coordinator Sir Rodelio M. Garin. Once he approves it, you will receive an email with a button to set your password and activate your account.",
+          "Sends your account request to Research Coordinator Sir Rodelio M. Garin for approval.",
       },
     ],
   },
 ];
 
+/* ============================================================================
+ * 2. RESEARCHER GUIDE CATEGORIES
+ * ========================================================================== */
 const researcherGuideCategories: GuideCategory[] = [
   {
     id: "my-publications",
     number: 1,
     title: "My Publications",
-    subtitle: "Your personal home screen for viewing and adding your published research",
+    subtitle: "Your personal portfolio for viewing your published research and adding new publications",
     icon: FileText,
-    whatYouSee: [
-      "As soon as you sign in as a Researcher, you arrive at 'My Publications'. At the top, you see summary cards showing how many published works you have, how many awaiting-approval claims you have submitted, and the total publications across the campus.",
-      "Below the summary cards, you see two tabs—'My Published Research' and 'Institutional Repository'—along with a search bar, a year filter, and your list of publications.",
+    narrativeParagraphs: [
+      "As soon as you sign in as a Researcher, your home screen is the 'My Publications' page. At the top of the workspace, you will see the page header titled 'My Publications' with a prominent blue 'Add Publication' button on the right, followed by summary cards that count how many verified publications you have in your portfolio, how many claimed works are awaiting coordinator approval, and the total number of publications across the entire campus. Directly beneath those summary cards are two navigation tabs: 'My Published Research' and 'Institutional Repository'.",
+      "The purpose of this page is to give you a clean, single place to manage your published scholarly output without clutter. Because this system tracks completed, published research, you only add works that have already been published in a journal or conference. In the first tab ('My Published Research'), you see your own publications along with a status badge showing whether each work is 'Approved' or 'Pending Approval'. Switching to the second tab ('Institutional Repository') lets you browse all verified publications from your fellow PSU Asingan researchers.",
     ],
-    purposeSummary:
-      "This page is your personal academic portfolio. It keeps all of your published research organized in one place and lets you browse what your fellow researchers across the campus have published.",
     clickableItems: [
       {
-        label: "'Add Publication' Button (Top-Right Corner)",
+        label: "Add Publication Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold shadow-2xs">
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Publication</span>
+          </span>
+        ),
         explanation:
-          "Opens a simple form where you can type in the Title, Co-Authors, Journal or Conference Name, Year, and Link of a published study you authored. When you click Save, it is sent to Research Coordinator Sir Rodelio M. Garin for verification.",
+          "Opens the 'Add Publication' form where you can enter the Title, Authors, Journal Name, Publication Year, and Link of a published work. Submitting it sends the record to Research Coordinator Sir Rodelio M. Garin for verification.",
       },
       {
-        label: "Tab 1: 'My Published Research'",
+        label: "My Published Research Tab",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card border border-border text-brand text-xs font-bold shadow-2xs">
+            <FileText className="w-3.5 h-3.5" />
+            <span>My Published Research</span>
+          </span>
+        ),
         explanation:
-          "Shows only the publications that belong to you, along with their approval status ('Approved' or 'Pending Approval').",
+          "Displays only the publications assigned to your researcher profile, including both approved works and those awaiting coordinator approval.",
       },
       {
-        label: "Tab 2: 'Institutional Repository'",
+        label: "Institutional Repository Tab",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted/50 text-muted-foreground text-xs font-semibold">
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Institutional Repository</span>
+          </span>
+        ),
         explanation:
-          "Lets you view all verified publications from every researcher in PSU Asingan without leaving your page.",
-      },
-      {
-        label: "Clicking Any Publication Row or 'View Details'",
-        explanation:
-          "Opens the full details of that publication, including its abstract, citation count, United Nations Sustainable Development Goal tags, and a link to the journal.",
+          "Lets you explore all verified publications across Pangasinan State University — Asingan Campus right from your own workspace.",
       },
     ],
   },
@@ -191,37 +514,43 @@ const researcherGuideCategories: GuideCategory[] = [
     title: "Search",
     subtitle: "Finding your published works online and claiming them into your profile",
     icon: Search,
-    whatYouSee: [
-      "At the top of the Search page is a wide search bar where you can type your surname, a publication title, or 'Pangasinan State University'.",
-      "When results appear below, each card shows the publication's title, authors, publication year, journal name, citation count, and an 'Assign Researcher' bar at the bottom of the card.",
+    narrativeParagraphs: [
+      "When you click 'Search' in the left navigation menu, you open the academic literature search page. At the top is a wide search bar where you can type your surname, the title of your published study, or 'Pangasinan State University'. Below the search bar, matching results are displayed in clean cards, showing 10 publications per page. Each card displays the publication title, authors, publication year, journal name, citation count, geographical badge, and United Nations Sustainable Development Goal tags.",
+      "The main purpose of the Search page for a Researcher is to save you from having to type your publication details manually. When you find a study that you authored in the search results, look at the bottom bar of that result card where it says 'Assign Researcher'. Simply select your name from the dropdown ('Assign to Myself') and click the blue 'Claim & Request Approval' button. Your claim is immediately forwarded to Research Coordinator Sir Rodelio M. Garin, and once approved, the publication appears automatically in your 'My Published Research' portfolio.",
     ],
-    purposeSummary:
-      "Instead of typing your publication details by hand, you can use the Search page to find your already-published studies from online academic libraries and claim them as yours in just two clicks.",
     clickableItems: [
       {
-        label: "Search Bar & 'Search' Button",
+        label: "Search Input & Search Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <Search className="w-3.5 h-3.5" />
+            <span>Search</span>
+          </span>
+        ),
         explanation:
-          "Searches online academic libraries for published studies matching the title, author name, or topic you typed.",
+          "Searches online academic libraries for published studies matching the title, author surname, or topic you typed.",
       },
       {
-        label: "Publication Title Link & 'PDF' Badge",
+        label: "Assign to Myself Dropdown",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-background text-xs font-medium text-foreground">
+            <User className="w-3.5 h-3.5 text-brand" />
+            <span>Assign to Myself (Required)</span>
+          </span>
+        ),
         explanation:
-          "Clicking the title opens the original online source in a new tab; clicking 'PDF' opens the full printable article if available.",
+          "Located at the bottom of every search result card. Selecting your name links the publication to your Instructor ID before you submit your claim.",
       },
       {
-        label: "'Assign Researcher' Dropdown (Bottom of Each Result Card)",
+        label: "Claim & Request Approval Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold shadow-2xs">
+            <Hand className="w-3.5 h-3.5" />
+            <span>Claim & Request Approval</span>
+          </span>
+        ),
         explanation:
-          "Lets you select your own name ('Assign to Myself') before claiming a publication.",
-      },
-      {
-        label: "'Claim & Request Approval' Button",
-        explanation:
-          "Submits the publication under your name and forwards it to Research Coordinator Sir Rodelio M. Garin. Once he approves it, it automatically appears in your 'My Published Research' list.",
-      },
-      {
-        label: "Previous / Page Numbers / Next Buttons",
-        explanation:
-          "Moves through additional pages of search results, 10 publications at a time.",
+          "Submits the selected publication as your own work and sends it to Research Coordinator Sir Rodelio M. Garin for approval.",
       },
     ],
   },
@@ -229,29 +558,51 @@ const researcherGuideCategories: GuideCategory[] = [
     id: "researchers",
     number: 3,
     title: "Researchers",
-    subtitle: "Exploring the directory of PSU Asingan researchers and their profiles",
+    subtitle: "Browsing the campus directory and viewing Faculty (Department) and Non-Faculty badges",
     icon: Users,
-    whatYouSee: [
-      "On the Researchers page, you see a directory of all registered PSU Asingan researchers. Each researcher's card displays their photo, full name, Instructor ID, number of publications, and total citations.",
-      "This is also the only place in the system where you will see each person's classification badge: either 'Faculty (Department)'—such as 'Faculty (BSIT)' or 'Faculty (BSBA)'—or 'Non-Faculty', plus 'Research Coordinator' for Sir Rodelio M. Garin.",
+    narrativeParagraphs: [
+      "Clicking 'Researchers' in the left sidebar opens the complete directory of registered PSU Asingan researchers. At the top of the page, you will see a search bar to look up a colleague by name, a Department filter dropdown, a Sort menu (to order by Most Publications, Most Citations, or Alphabetical), and view buttons to switch between 'All Researchers' and 'By Department'. Below the controls, each researcher is presented in a profile card showing their photo, full name, Instructor ID (ASIN-00000), publication count, and total citations.",
+      "Across the entire system, everyone is referred to simply as a Researcher—except right here on the Researchers page (and when viewing an individual Researcher Profile), which is the dedicated place where you can see whether a colleague is a teaching faculty member or non-teaching staff. Faculty members display a badge showing 'Faculty (Department)'—such as 'Faculty (BSIT)' or 'Faculty (BSBA)'—while non-teaching researchers display 'Non-Faculty', and Sir Rodelio M. Garin displays 'Research Coordinator'.",
     ],
-    purposeSummary:
-      "This page helps you get to know your fellow campus researchers, see which departments are publishing, and explore each colleague's body of work.",
     clickableItems: [
       {
-        label: "Search Bar & Department Filter Dropdown",
+        label: "Classification Badges (Researchers Page Only)",
+        visualReplica: (
+          <div className="inline-flex flex-wrap items-center gap-1.5">
+            <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-500/30 font-semibold">
+              Faculty (BSIT)
+            </Badge>
+            <Badge variant="outline" className="text-[10px] bg-slate-500/10 text-slate-700 border-slate-500/30 font-semibold">
+              Non-Faculty
+            </Badge>
+          </div>
+        ),
         explanation:
-          "Lets you find a colleague by typing their name or filtering by their department (such as BSIT, BSBA, BSE, BEE, BTLED, BIT, or Non-Faculty).",
+          "Shows each researcher's classification and department right on their directory card and profile page.",
       },
       {
-        label: "'All Researchers' vs. 'By Department' View Buttons",
+        label: "All Researchers / By Department View Switch",
+        visualReplica: (
+          <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-muted/40 text-xs">
+            <span className="px-2.5 py-1 rounded-md bg-card text-foreground font-semibold shadow-2xs">
+              All Researchers
+            </span>
+            <span className="px-2.5 py-1 text-muted-foreground">By Department</span>
+          </div>
+        ),
         explanation:
-          "Switches between viewing everyone in a single grid or grouping researchers neatly under their respective departments.",
+          "Switches between viewing all researchers in one combined grid or grouping them under their respective departments.",
       },
       {
         label: "Clicking Any Researcher Card",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-brand/30 bg-brand/5 text-brand text-xs font-semibold">
+            <User className="w-3.5 h-3.5" />
+            <span>View Researcher Profile</span>
+          </span>
+        ),
         explanation:
-          "Opens that researcher's complete profile page, where you can see their biography, academic metrics, citation trends, and every publication they have authored.",
+          "Clicking anywhere on a researcher's card opens their full profile page, where you can view all of their published works and citation numbers.",
       },
     ],
   },
@@ -259,19 +610,33 @@ const researcherGuideCategories: GuideCategory[] = [
     id: "sdg-radar",
     number: 4,
     title: "SDG Radar",
-    subtitle: "Seeing how campus publications support the 17 United Nations Goals",
+    subtitle: "Understanding how campus publications align with the 17 United Nations Goals",
     icon: Target,
-    whatYouSee: [
-      "The SDG Radar page displays a visual radar chart alongside cards for the 17 United Nations Sustainable Development Goals (such as Quality Education, Good Health and Well-being, Climate Action, and Decent Work).",
-      "Each goal card shows how many campus publications contribute to that specific global goal.",
+    narrativeParagraphs: [
+      "The 'SDG Radar' page shows how the published research of Pangasinan State University — Asingan Campus contributes to the 17 United Nations Sustainable Development Goals (SDGs). When you open this page, you see an overall visual radar chart paired with 17 color-coded cards—one for each global goal, such as SDG 3 (Good Health and Well-being), SDG 4 (Quality Education), SDG 8 (Decent Work and Economic Growth), SDG 9 (Industry, Innovation and Infrastructure), and SDG 13 (Climate Action). Each card displays the number of campus publications mapped to that goal.",
+      "Modern university accreditation and institutional evaluations look closely at how campus studies solve real community challenges. Instead of guessing which goals our campus covers, this page gives you a clear visual map of our strengths. When you click on any of the 17 goal cards, the list at the bottom of the page updates to show the exact PSU Asingan publications supporting that goal, along with a plain-English explanation of why each study fits.",
     ],
-    purposeSummary:
-      "Universities are evaluated on how their research helps solve real-world community and global problems. This page shows at a glance which United Nations goals our campus publications support the most.",
+    simulationSection: {
+      title: "Simulated UN SDG Goal Alignment Numbers",
+      subtitle: "How to read the goal cards and progress bars on the SDG Radar page",
+      visual: <SimulatedSDGRadarGraph />,
+      numberExplanation: [
+        "In this simulated example of 80 campus publications, 'SDG 4: Quality Education' shows '28 works' with a full bar—meaning 28 published studies on campus focus on teaching, learning, or curriculum improvement.",
+        "'SDG 9: Industry, Innovation & Infrastructure' shows '19 works', representing technology, engineering, and software studies.",
+        "When you see a goal card with a lower number (such as 'SDG 13: Climate Action' with 8 works), it highlights an opportunity where researchers can focus future studies.",
+      ],
+    },
     clickableItems: [
       {
-        label: "Clicking Any of the 17 SDG Goal Cards",
+        label: "17 UN SDG Goal Cards",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-bold">
+            <Target className="w-3.5 h-3.5" />
+            <span>SDG 4: Quality Education</span>
+          </span>
+        ),
         explanation:
-          "Filters the list below to show the exact campus publications that support that goal, along with a short explanation of why each study matches that goal.",
+          "Click any of the 17 goal cards to filter the publication list below and see every campus study that supports that specific United Nations goal.",
       },
     ],
   },
@@ -279,29 +644,23 @@ const researcherGuideCategories: GuideCategory[] = [
     id: "ask-campus-ai",
     number: 5,
     title: "Ask Campus AI",
-    subtitle: "Your friendly research assistant for instant answers about campus publications",
+    subtitle: "Asking everyday questions in English or Tagalog about campus publications",
     icon: Sparkles,
-    whatYouSee: [
-      "You can open Ask Campus AI either from the left menu ('Ask Campus AI') or by clicking the floating assistant icon in the bottom-right corner of any page.",
-      "You will see a conversation window with ready-made question buttons and a message box at the bottom.",
+    narrativeParagraphs: [
+      "You can open 'Ask Campus AI' either from the left navigation sidebar or by clicking the floating assistant button in the bottom-right corner of any screen. Inside, you will see a clean conversation window with starter question buttons at the top, a chat history list on the side, and a message input box at the bottom. It works just like sending a text message to a knowledgeable colleague who has memorized every publication in the PSU Asingan repository.",
+      "The purpose of Ask Campus AI is to give you instant answers without having to filter tables or count records by hand. You can ask questions in plain English or Tagalog—such as 'How many publications do I have?', 'Which studies on campus talk about agriculture?', or 'Who are the most cited researchers in BSIT?'—and the assistant will immediately reply with accurate numbers and publication titles drawn directly from our campus records.",
     ],
-    purposeSummary:
-      "Instead of manually counting publications or searching through tables, you can ask everyday questions in plain English or Tagalog—such as 'Who has the most citations in BSIT?' or 'Which publications focus on education?'—and get an instant, accurate answer based on our campus records.",
     clickableItems: [
       {
-        label: "Suggested Question Buttons",
+        label: "Ask Campus AI Sidebar Item / Floating Assistant Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ai-soft text-ai font-semibold border border-ai-border text-xs">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Ask Campus AI</span>
+          </span>
+        ),
         explanation:
-          "One-click starter questions you can press to immediately see what the assistant can do.",
-      },
-      {
-        label: "Message Box & Send Button",
-        explanation:
-          "Type any question about PSU Asingan researchers, publications, citations, or departments and press Enter or Send.",
-      },
-      {
-        label: "'New Chat' or 'Clear History' Button",
-        explanation:
-          "Starts a fresh conversation whenever you want to ask about a new topic.",
+          "Opens the AI research assistant so you can ask questions about PSU Asingan publications, citations, and researchers.",
       },
     ],
   },
@@ -309,72 +668,103 @@ const researcherGuideCategories: GuideCategory[] = [
     id: "profile-and-settings",
     number: 6,
     title: "My Profile & Settings",
-    subtitle: "Managing your personal details, password, and screen appearance",
-    icon: User,
-    whatYouSee: [
-      "At the bottom-left of the navigation menu (or by clicking your name in the top-right header), you will find 'My Profile' and 'Settings'.",
-      "'My Profile' displays your photo, name, Instructor ID, department, and Google Scholar link. 'Settings' contains tabs for Appearance & Theme, Security & Password, and Display Preferences.",
+    subtitle: "Updating your researcher profile, Google Scholar link, password, and display theme",
+    icon: Settings,
+    narrativeParagraphs: [
+      "At the bottom of the left navigation sidebar (or by clicking your name and photo in the top-right header), you will find 'My Profile' and 'Settings'. On the 'My Profile' page, you see your researcher card displaying your photo, full name, Instructor ID (ASIN-00000), department, email address, and Google Scholar profile link. You can upload a new profile picture, update your Google Scholar URL, or click 'Sync My Publications' to automatically fetch newly published works from your Google Scholar profile.",
+      "On the 'Settings' page, you will see tabs for 'Appearance & Theme', 'Security & Password', and 'Display Preferences'. In 'Appearance & Theme', you can switch the entire workspace between Light Mode, Dark Mode, or System Default. In 'Security & Password', you can change your sign-in password at any time. In 'Display Preferences', you can choose between 'Compact' and 'Standard' row spacing for tables.",
     ],
-    purposeSummary:
-      "These pages let you keep your researcher information up to date, change your password for security, and adjust how the system looks on your computer or phone.",
     clickableItems: [
       {
-        label: "'Upload Photo' & 'Save Profile' Buttons (My Profile)",
+        label: "Sync My Publications Button (My Profile)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Sync My Publications</span>
+          </span>
+        ),
         explanation:
-          "Lets you update your profile picture, Google Scholar profile link, and contact details.",
+          "Checks your linked Google Scholar profile and retrieves any new publications you have authored.",
       },
       {
-        label: "'Sync My Publications' Button (My Profile)",
+        label: "Light Mode / Dark Mode Switch (Settings & Top Header)",
+        visualReplica: (
+          <div className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-amber-50 text-amber-700 text-xs font-semibold">
+              <Sun className="w-3.5 h-3.5" />
+              <span>Light Mode</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 text-blue-300 text-xs font-semibold">
+              <Moon className="w-3.5 h-3.5" />
+              <span>Dark Mode</span>
+            </span>
+          </div>
+        ),
         explanation:
-          "If you have linked your Google Scholar profile, clicking this button automatically checks for your latest published works.",
+          "Switches the screen appearance between bright daylight colors and a dark theme that is comfortable for low-light reading.",
       },
       {
-        label: "Light Mode / Dark Mode / System Default Cards (Settings -> Appearance)",
+        label: "Update Password Button (Settings -> Security & Password)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <KeyRound className="w-3.5 h-3.5" />
+            <span>Update Password</span>
+          </span>
+        ),
         explanation:
-          "Switches the colors of the entire system between bright daylight mode and dark mode that is gentler on the eyes at night.",
-      },
-      {
-        label: "'Update Password' Button (Settings -> Security & Password)",
-        explanation:
-          "Lets you change your sign-in password anytime.",
-      },
-      {
-        label: "Compact vs. Standard Buttons (Settings -> Display Preferences)",
-        explanation:
-          "Adjusts the spacing of rows in tables depending on whether you prefer seeing more items at once or larger spacing.",
+          "Saves your new sign-in password after verifying your current password.",
       },
     ],
   },
 ];
 
+/* ============================================================================
+ * 3. RESEARCH COORDINATOR (ADMIN) GUIDE CATEGORIES
+ * ========================================================================== */
 const coordinatorGuideCategories: GuideCategory[] = [
   {
     id: "dashboard",
     number: 1,
     title: "Dashboard",
-    subtitle: "Your executive overview of PSU Asingan's entire research performance",
+    subtitle: "Your executive overview of PSU Asingan's publications, citations, and annual growth",
     icon: LayoutDashboard,
-    whatYouSee: [
-      "When you sign in as Research Coordinator, the Dashboard greets you with four top summary cards: Total Publications, Total Citations, Registered Researchers, and Campus H-Index.",
-      "Below the summary cards, you see visual charts showing publication growth year by year, publication counts by department, a list of the most-cited publications on campus, and recent activity.",
+    narrativeParagraphs: [
+      "When you sign in as the Research Coordinator, the Dashboard is your command overview of Pangasinan State University — Asingan Campus. Across the top of the screen, four summary cards display the campus's core numbers at a glance: Total Publications, Total Citations, Registered Researchers, and the Campus H-Index. Directly below those cards, you see interactive charts showing annual publication and citation growth year by year, a horizontal bar breakdown comparing output across departments (BSIT, BSBA, BSE, BEE, BTLED, BIT, and Non-Faculty), and a ranked list of the most-cited publications on campus.",
+      "The purpose of the Dashboard is to give you immediate situational awareness without having to run manual reports. Whether the Campus Executive Director asks for this year's publication count or you want to check which departments have increased their output compared to last year, the visual charts translate raw records into clear trends. Clicking on the summary cards or highlighted publications takes you straight to the underlying directory or record.",
     ],
-    purposeSummary:
-      "The Dashboard gives you an instant snapshot of how the campus is performing as a whole—helping you spot trends, see which departments are active, and jump straight to common tasks.",
+    simulationSection: {
+      title: "Simulated Dashboard Graphs & How to Read the Numbers",
+      subtitle: "Visual walkthrough using sample campus numbers (80 Publications, 488 Citations, 24 Researchers)",
+      visual: <SimulatedDashboardCharts />,
+      numberExplanation: [
+        "Top Summary Cards: '80 Total Publications' and '488 Total Citations' mean that across all 24 registered researchers, their 80 published works have been cited 488 times worldwide (an average of 6.1 citations per publication).",
+        "Campus H-Index (12): An H-Index of 12 means that PSU Asingan has at least 12 published works that have each received 12 or more citations.",
+        "Annual Growth Bar Chart (Left Graph): Each blue bar shows how many publications were produced in that calendar year, while the amber tag above it ('28c', '54c', '176c') shows citations. Rising bars from 6 publications in 2021 up to 25 publications in 2025 show steady institutional growth.",
+        "Department Breakdown (Right Graph): The colored horizontal bars compare total publications by program—for example, BSIT with 24 publications (longest bar), BSE with 18, and BSBA with 14—so you can immediately see each program's share of campus output.",
+      ],
+    },
     clickableItems: [
       {
-        label: "Top Summary Cards (Publications, Citations, Researchers, Impact)",
+        label: "Dashboard Navigation Link (Left Sidebar)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-xs font-semibold">
+            <LayoutDashboard className="w-4 h-4" />
+            <span>Dashboard</span>
+          </span>
+        ),
         explanation:
-          "Displays live campus totals. Clicking on the Researchers or Publications cards takes you directly to those directories.",
+          "Returns you to this executive overview from anywhere in the portal.",
       },
       {
-        label: "Year & Department Filters on Charts",
+        label: "Top Summary Cards (Publications / Researchers)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-border bg-card text-xs font-semibold text-foreground">
+            <FileText className="w-3.5 h-3.5 text-brand" />
+            <span>Total Publications / Researchers</span>
+          </span>
+        ),
         explanation:
-          "Lets you adjust the time range or focus on a specific department to see how their output changed over the years.",
-      },
-      {
-        label: "Top-Cited Publications List",
-        explanation:
-          "Clicking any publication in the highlight list opens its full details.",
+          "Clicking the summary cards jumps directly to the full Publications Repository or the Researchers directory.",
       },
     ],
   },
@@ -382,34 +772,56 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "search",
     number: 2,
     title: "Search",
-    subtitle: "Finding published works online and assigning them directly to researchers",
+    subtitle: "Searching academic libraries and saving publications directly to any registered researcher",
     icon: Search,
-    whatYouSee: [
-      "At the top of the Search page is a wide search bar where you can search by publication title, researcher name, or institution.",
-      "Each result card shows the study's title, authors, year, journal, citation count, geographical badge (Pangasinan State University, Philippines Research, or International Literature), and an 'Assign Researcher' bar at the bottom.",
+    narrativeParagraphs: [
+      "The 'Search' page lets you look up published studies across worldwide academic libraries by typing a researcher's name, a study title, or 'Pangasinan State University'. Below the search box, results appear 10 per page with each study's title, co-authors, publication year, journal name, citation count, geographical priority badge ('Pangasinan State University', 'Philippines Research', or 'International Literature'), and United Nations SDG focus tags.",
+      "As Research Coordinator, you have a direct publishing privilege on this page that regular researchers do not have. At the bottom of every search result card, you will see an 'Assign Researcher' dropdown containing every registered researcher in PSU Asingan along with their Instructor ID (ASIN-00000). Once you select the researcher who authored the study and click the green 'Save to Repository' button, the publication is immediately saved as an approved record in the campus repository.",
     ],
-    purposeSummary:
-      "As Research Coordinator, the Search page lets you look up published studies across academic libraries and save them directly to any registered researcher's profile without needing a separate approval step.",
     clickableItems: [
       {
-        label: "Search Bar & 'Search' Button",
+        label: "Search Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <Search className="w-3.5 h-3.5" />
+            <span>Search</span>
+          </span>
+        ),
         explanation:
-          "Finds published works from online academic libraries matching the words you typed.",
+          "Queries online academic libraries and ranks Pangasinan State University and Philippine studies first.",
       },
       {
-        label: "'Assign Researcher' Dropdown (Bottom of Each Result Card)",
+        label: "Select Registered Researcher Dropdown",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-background text-xs font-medium text-foreground">
+            <User className="w-3.5 h-3.5 text-brand" />
+            <span>-- Select Registered Researcher (Required) --</span>
+          </span>
+        ),
         explanation:
-          "Shows a list of all registered PSU Asingan researchers with their Instructor ID (ASIN-00000). Pick the researcher who authored the study.",
+          "Lets you pick which registered PSU Asingan researcher authored the publication before saving it.",
       },
       {
-        label: "'Save to Repository' Button",
+        label: "Save to Repository Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold shadow-2xs">
+            <Save className="w-3.5 h-3.5" />
+            <span>Save to Repository</span>
+          </span>
+        ),
         explanation:
-          "Immediately saves the publication into the official campus repository under the selected researcher's name.",
+          "Immediately saves the publication into the official repository under the selected researcher's name without needing a separate approval step.",
       },
       {
-        label: "'Scraper Settings / Quota' Button (Top-Right Corner)",
+        label: "Scraper Settings / Quota Button (Top-Right)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-card text-xs font-mono text-muted-foreground">
+            <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+            <span>$5.00 quota</span>
+          </span>
+        ),
         explanation:
-          "Lets you view the remaining monthly search allowance for backup online searches.",
+          "Opens the backup search allowance window where you can check remaining monthly credits or add a backup search key.",
       },
     ],
   },
@@ -417,29 +829,43 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "researchers",
     number: 3,
     title: "Researchers",
-    subtitle: "Viewing all registered campus researchers and their Faculty or Non-Faculty marks",
+    subtitle: "Browsing the campus directory and seeing Faculty (Department) and Non-Faculty badges",
     icon: Users,
-    whatYouSee: [
-      "The Researchers page displays every registered researcher at PSU Asingan. Each card shows the person's photo, name, Instructor ID, publication count, and total citations.",
-      "This page (and each individual's profile) is the dedicated place where you see whether a researcher is marked as 'Faculty (Department)'—for example, 'Faculty (BSIT)'—or 'Non-Faculty', as well as your 'Research Coordinator' badge.",
+    narrativeParagraphs: [
+      "The 'Researchers' page displays the complete directory of all registered researchers at PSU Asingan. At the top, you have a search box, a Department filter dropdown, a Sort selector (Most Publications, Most Citations, or Name), and a view switch between 'All Researchers' and 'By Department'. Every card shows the researcher's profile photo, full name, Instructor ID (ASIN-00000), total publications, and total citations.",
+      "Following our campus terminology standard, this page and the individual Researcher Profile page are the only places where users are distinguished as Faculty or Non-Faculty. Teaching faculty display a badge formatted as 'Faculty (Department)'—such as 'Faculty (BSIT)' or 'Faculty (BSBA)'—while non-teaching staff display 'Non-Faculty', and your own card displays a single clean 'Research Coordinator' badge.",
     ],
-    purposeSummary:
-      "Gives you a clean directory to browse researchers across all programs, compare publication counts, and open any individual researcher's portfolio.",
     clickableItems: [
       {
-        label: "Search Box, Department Dropdown, and Sort Menu",
+        label: "Faculty (Department), Non-Faculty & Research Coordinator Badges",
+        visualReplica: (
+          <div className="inline-flex flex-wrap items-center gap-1.5">
+            <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-500/30 font-semibold">
+              Faculty (BSIT)
+            </Badge>
+            <Badge variant="outline" className="text-[10px] bg-slate-500/10 text-slate-700 border-slate-500/30 font-semibold">
+              Non-Faculty
+            </Badge>
+            <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-500/30 font-semibold">
+              Research Coordinator
+            </Badge>
+          </div>
+        ),
         explanation:
-          "Lets you search by name, filter by department (BSIT, BSBA, BSE, BEE, BTLED, BIT, or Non-Faculty), or sort by Most Publications or Most Citations.",
+          "Displayed on each researcher's card on the Researchers page and on their individual Researcher Profile.",
       },
       {
-        label: "'All Researchers' vs. 'By Department' Toggle",
+        label: "All Researchers / By Department Switch",
+        visualReplica: (
+          <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-muted/40 text-xs">
+            <span className="px-2.5 py-1 rounded-md bg-card text-foreground font-semibold shadow-2xs">
+              All Researchers
+            </span>
+            <span className="px-2.5 py-1 text-muted-foreground">By Department</span>
+          </div>
+        ),
         explanation:
-          "Switches between a single grid of cards and a grouped view organized by department.",
-      },
-      {
-        label: "Clicking Any Researcher Card",
-        explanation:
-          "Opens that researcher's profile page showing all of their publications, co-authors, and citation history.",
+          "Toggles between a unified grid of all researchers and department-by-department sections showing each program's researcher and publication counts.",
       },
     ],
   },
@@ -447,39 +873,51 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "publications",
     number: 4,
     title: "Publications",
-    subtitle: "Inspecting, sorting, and managing all verified publications in the campus repository",
+    subtitle: "Managing the master catalog of verified campus publications, citations, and APA exports",
     icon: FileText,
-    whatYouSee: [
-      "The Publications page shows the complete master list of verified campus publications. You can view them as a compact Table or as visual Cards.",
-      "Above the list, you have a search box, an 'All Researchers' filter, an 'All Years' filter, and a Sort dropdown.",
+    narrativeParagraphs: [
+      "The 'Publications' page is the master catalog of every verified publication in the PSU Asingan repository. At the top right of the header, you can switch between 'Table' view (a dense spreadsheet layout) and 'Cards' view, trigger 'Auto-Tag SDGs', or click 'Refresh'. Below the header sits the filter ribbon with a search box, an 'All Researchers' dropdown showing how many publications each researcher has, an 'All Years' dropdown, and a Sort dropdown.",
+      "Every column header in the Table view—Publication Title, Registered Researcher, Authors, Journal / Index, Year, Citations, and UN SDG Goal—is clickable so you can sort the entire catalog in ascending or descending order. You can also check the boxes on the left side of any rows to bring up a floating bottom bar that copies formatted APA citations to your clipboard, or click anywhere on a publication row to open the side inspector drawer where you can edit its details or view citing works.",
     ],
-    purposeSummary:
-      "This is your master catalog of every published work on campus. You can filter by researcher or year, copy formatted citations, automatically tag United Nations goals, or click any publication to inspect and edit its details.",
     clickableItems: [
       {
-        label: "'Table' and 'Cards' View Switch (Top-Right Corner)",
+        label: "Table / Cards View Switch",
+        visualReplica: (
+          <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-muted/40 text-xs">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-card text-foreground font-semibold shadow-2xs">
+              <Table className="w-3.5 h-3.5" />
+              <span>Table</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-muted-foreground">
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Cards</span>
+            </span>
+          </div>
+        ),
         explanation:
-          "Switches the display between a spreadsheet-style table and a two-column card layout.",
+          "Switches the publications list between a multi-column table and a two-column card grid.",
       },
       {
-        label: "'Auto-Tag SDGs' Button (Top-Right Corner)",
+        label: "Auto-Tag SDGs Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-purple-300 bg-purple-50 text-purple-700 text-xs font-semibold">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Auto-Tag SDGs</span>
+          </span>
+        ),
         explanation:
-          "Automatically reads any untagged publications and assigns the matching United Nations Sustainable Development Goals to them.",
+          "Automatically analyzes any untagged publications in the repository and assigns their matching United Nations Sustainable Development Goals.",
       },
       {
-        label: "Column Headers (Publication Title, Registered Researcher, Authors, Year, Citations, UN SDG Goal)",
+        label: "Copy APA Citations Button (Batch Dock)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-semibold">
+            <Copy className="w-3.5 h-3.5" />
+            <span>Copy APA Citations</span>
+          </span>
+        ),
         explanation:
-          "Click any column title in Table view to sort the entire list alphabetically, by year, or by highest citations.",
-      },
-      {
-        label: "Checkboxes & Floating Action Bar ('Copy APA Citations')",
-        explanation:
-          "Check the box next to one or more publications to open a bottom bar that copies ready-to-paste APA citations to your clipboard.",
-      },
-      {
-        label: "Clicking Any Publication Row or Card",
-        explanation:
-          "Opens a side panel where you can read the abstract, view citing studies, edit the publication's details, or remove a duplicate entry.",
+          "Appears at the bottom of the screen when you check one or more publications, copying ready-to-paste APA references to your clipboard.",
       },
     ],
   },
@@ -487,23 +925,32 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "impact-analysis",
     number: 5,
     title: "Impact Analysis",
-    subtitle: "Understanding citation growth, department reach, and research influence",
+    subtitle: "Measuring citation velocity, department reach, and scholarly influence",
     icon: TrendingUp,
-    whatYouSee: [
-      "The Impact Analysis page presents visual charts tracking how many citations campus publications receive over time, how impact is distributed across departments, and which publications have gained the strongest academic reach.",
+    narrativeParagraphs: [
+      "The 'Impact Analysis' page goes deeper than raw publication counts to examine how frequently PSU Asingan's published studies are cited by other researchers worldwide. On this screen, you see citation distribution tiers (Highly Cited, Moderately Cited, and Newly Cited works), multi-year citation trend curves, average citations per publication across departments, and a leaderboard of the most influential studies on campus.",
+      "This page helps you evaluate the scholarly reach of each academic program during university reviews and research planning. For example, even if two departments have a similar number of publications, Impact Analysis reveals which department's studies are gaining stronger international readership and citations, helping you identify best practices such as publishing in open-access and internationally indexed journals.",
     ],
-    purposeSummary:
-      "Helps the Research Coordinator measure not just how many studies were published, but how widely those studies are being read and cited by other researchers.",
+    simulationSection: {
+      title: "Simulated Impact Analysis Graphs & Number Walkthrough",
+      subtitle: "How to interpret Citation Reach Tiers and Department Citation Averages",
+      visual: <SimulatedImpactGraph />,
+      numberExplanation: [
+        "Citation Reach Breakdown (Left Panel): Out of 40 sample cited works, '8 works (20%)' are in the Highly Cited tier (20 or more citations each), '22 works (55%)' are in the Moderately Cited tier (5 to 19 citations), and '10 works (25%)' have 1 to 4 citations.",
+        "Department Citation Impact (Right Panel): Comparing '24 publications • 198 citations (Avg 8.2)' for BSIT against '18 publications • 117 citations (Avg 6.5)' for BSE tells you that on average, every BSIT publication earns 8.2 citations while every BSE publication earns 6.5 citations.",
+      ],
+    },
     clickableItems: [
       {
-        label: "Department & Timeframe Filters",
+        label: "Impact Analysis Navigation Item",
+        visualReplica: (
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 text-xs font-semibold">
+            <TrendingUp className="w-4 h-4" />
+            <span>Impact Analysis</span>
+          </span>
+        ),
         explanation:
-          "Updates the charts to focus on a specific program or multi-year window.",
-      },
-      {
-        label: "Interactive Chart Bars & Publication Links",
-        explanation:
-          "Hovering over chart points shows exact numbers for that year or department, and clicking highlighted publications opens their full record.",
+          "Opens the citation analytics and department impact comparison charts.",
       },
     ],
   },
@@ -511,18 +958,32 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "sdg-radar",
     number: 6,
     title: "SDG Radar",
-    subtitle: "Tracking campus alignment with the 17 United Nations Sustainable Development Goals",
+    subtitle: "Mapping campus research output across the 17 United Nations Sustainable Development Goals",
     icon: Target,
-    whatYouSee: [
-      "Shows an overall campus radar chart and 17 cards representing each United Nations Sustainable Development Goal, along with the count of PSU Asingan publications supporting each goal.",
+    narrativeParagraphs: [
+      "The 'SDG Radar' page visualizes how PSU Asingan's research portfolio supports the 17 United Nations Sustainable Development Goals. At the top is a radar chart showing the campus's overall coverage footprint, paired with 17 interactive goal cards—from SDG 1 (No Poverty) to SDG 17 (Partnerships for the Goals)—each displaying the exact number of campus publications aligned with that goal.",
+      "Accrediting bodies and university rankings require clear evidence of how campus research addresses sustainable development. By clicking any of the 17 goal cards on this page, you can immediately inspect the list of PSU Asingan publications supporting that goal along with the rationale for each classification, making it effortless to prepare SDG evidence portfolios.",
     ],
-    purposeSummary:
-      "Makes it easy to see our campus's strongest community impact areas and identify goals where future research can be encouraged.",
+    simulationSection: {
+      title: "Simulated UN SDG Coverage Map",
+      subtitle: "How to read the publication counts on each United Nations Goal card",
+      visual: <SimulatedSDGRadarGraph />,
+      numberExplanation: [
+        "In this simulated chart, 'SDG 4: Quality Education' has 28 works (the highest bar), showing that instructional and educational research is the campus's strongest area.",
+        "'SDG 9: Industry, Innovation & Infrastructure' has 19 works and 'SDG 8: Decent Work & Economic Growth' has 14 works, reflecting strong contributions from computing, technology, and business researchers.",
+      ],
+    },
     clickableItems: [
       {
-        label: "17 UN SDG Goal Cards",
+        label: "SDG Goal Card Filter",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold">
+            <Target className="w-3.5 h-3.5" />
+            <span>SDG 3: Good Health & Well-Being</span>
+          </span>
+        ),
         explanation:
-          "Click any goal card to view the exact campus publications classified under that goal.",
+          "Clicking any of the 17 goal cards filters the table below to display only the campus publications aligned with that goal.",
       },
     ],
   },
@@ -530,28 +991,34 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "reports",
     number: 7,
     title: "Reports",
-    subtitle: "Generating official Excel spreadsheets and printable reports for accreditation",
+    subtitle: "Exporting official Excel spreadsheets and printable PDF reports for CHED and AACCUP accreditation",
     icon: FileBarChart,
-    whatYouSee: [
-      "The Reports page displays filter controls (Year Range, Department, and Report Type) above a clean preview table of publications and researcher outputs.",
+    narrativeParagraphs: [
+      "The 'Reports' page is built specifically to eliminate hours of manual spreadsheet formatting before CHED, AACCUP, or university-wide evaluations. At the top of the screen, you will see filter selectors for Department (All Departments, BSIT, BSBA, BSE, BEE, BTLED, BIT, or Non-Faculty) and Publication Year range, alongside two primary action buttons: 'Export Excel' and 'Print / Save PDF'. Below the controls is a live preview table of the exact records that will be included in your exported document.",
+      "Whenever you change the department or year filter, the summary counts and preview table update immediately. Clicking 'Export Excel' generates a clean, multi-column Excel workbook (.xlsx) organized with publication titles, authors, journals, years, citations, and assigned researchers. Clicking 'Print / Save PDF' formats the report with official Pangasinan State University headers ready for printing or saving as a PDF.",
     ],
-    purposeSummary:
-      "Saves hours of manual paperwork during CHED, AACCUP, or university-wide evaluations by turning campus records into ready-to-submit spreadsheets and printable reports.",
     clickableItems: [
       {
-        label: "Department & Year Filter Menus",
+        label: "Export Excel Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold shadow-2xs">
+            <Download className="w-3.5 h-3.5" />
+            <span>Export Excel (.xlsx)</span>
+          </span>
+        ),
         explanation:
-          "Lets you choose whether to include the entire campus or only a specific department and year range in your report.",
+          "Downloads a formatted Microsoft Excel spreadsheet containing all publications matching your selected filters.",
       },
       {
-        label: "'Export Excel' Button",
+        label: "Print / Save PDF Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-semibold">
+            <Printer className="w-3.5 h-3.5 text-brand" />
+            <span>Print / Save PDF</span>
+          </span>
+        ),
         explanation:
-          "Downloads a neatly formatted Excel file (.xlsx) containing the filtered publications and researcher details.",
-      },
-      {
-        label: "'Print / Save PDF' Button",
-        explanation:
-          "Opens a clean, printer-ready version of the report that you can print on paper or save as a PDF document.",
+          "Opens the print-ready institutional report view so you can print on paper or save as an official PDF.",
       },
     ],
   },
@@ -559,18 +1026,23 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "ask-campus-ai",
     number: 8,
     title: "Ask Campus AI",
-    subtitle: "Asking plain-language questions about campus research statistics",
+    subtitle: "Using the conversational research assistant for instant campus summaries",
     icon: Sparkles,
-    whatYouSee: [
-      "A conversation page (also accessible via the bottom-right assistant icon) where you can ask questions about campus publications, citations, and researchers.",
+    narrativeParagraphs: [
+      "Accessible from the left sidebar under 'Ask Campus AI' or via the floating assistant button at the bottom right of the screen, Ask Campus AI provides a conversational interface connected to the campus repository. You will see suggested starter prompts, a sidebar of your previous chat sessions, and a message box where you can type any question in English or Tagalog.",
+      "During meetings or planning sessions, you can ask questions like 'Summarize our campus publications in 2024 by department' or 'Which researchers have the highest citations?' and receive a structured, accurate response in seconds without leaving your workflow.",
     ],
-    purposeSummary:
-      "Gives you quick answers and summaries during meetings or accreditation reviews without having to filter multiple tables manually.",
     clickableItems: [
       {
-        label: "Suggested Prompts & Question Box",
+        label: "Ask Campus AI Navigation Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-ai-soft text-ai font-semibold border border-ai-border text-xs">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Ask Campus AI</span>
+          </span>
+        ),
         explanation:
-          "Click a suggested question or type your own question in English or Tagalog to get an immediate summary.",
+          "Opens the full-page AI chat workspace and conversation history.",
       },
     ],
   },
@@ -578,39 +1050,77 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "admin-console",
     number: 9,
     title: "Admin Console",
-    subtitle: "Your command center for approvals, researcher accounts, and invitations",
+    subtitle: "Approving publication claims, managing researchers, and sending ASIN-00000 invitations",
     icon: Shield,
-    whatYouSee: [
-      "At the top of the Admin Console is your Research Coordinator profile card (Sir Rodelio M. Garin) with a single 'Research Coordinator' badge and a 'Sync My Publications' button.",
-      "Below that are four summary counters—Total Researchers, Invitation Requests, Pending Activations, and Pending Claims—followed by four management tabs: 'Pending Claims', 'Researchers', 'Invite Researcher', and 'Invitation Requests'.",
+    narrativeParagraphs: [
+      "The 'Admin Console' is your exclusive management center as Research Coordinator. At the top of the page sits your coordinator profile card (Sir Rodelio M. Garin) displaying a single 'Research Coordinator' badge and a 'Sync My Publications' button, followed by four live summary counters: Total Researchers, Invitation Requests, Pending Activations, and Pending Claims. Beneath those counters are four management tabs: 'Pending Claims', 'Researchers', 'Invite Researcher', and 'Invitation Requests'.",
+      "Every administrative workflow is organized cleanly across those four tabs. In 'Pending Claims', you review publications claimed or submitted by researchers and click 'Approve' or 'Reject'. In 'Researchers', you can sync any researcher's Google Scholar publications, edit their details, or remove an account. In 'Invite Researcher', you invite new researchers using the locked 'ASIN-' prefix + 5-digit Instructor ID (ASIN-00000) and select whether they are Faculty (with their department) or Non-Faculty. In 'Invitation Requests', you can approve requests sent from the login page with one click.",
     ],
-    purposeSummary:
-      "Everything related to managing people and approving publications happens here. You control who is invited to the system and which claimed publications become part of the official repository.",
     clickableItems: [
       {
-        label: "'Sync My Publications' Button (Coordinator Card)",
+        label: "Sync My Publications Button (Coordinator Card)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Sync My Publications</span>
+          </span>
+        ),
         explanation:
-          "Checks your linked Google Scholar profile and updates your own published works in one click.",
+          "Updates your own Google Scholar publications in the campus repository with one click.",
       },
       {
-        label: "Tab 1: 'Pending Claims' (Approve / Reject Buttons)",
+        label: "Approve & Reject Buttons (Tab 1: Pending Claims)",
+        visualReplica: (
+          <div className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold">
+              <Check className="w-3.5 h-3.5" />
+              <span>Approve</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold">
+              <X className="w-3.5 h-3.5" />
+              <span>Reject</span>
+            </span>
+          </div>
+        ),
         explanation:
-          "Shows publications that researchers have claimed or added. Clicking 'Approve' publishes the record to the official repository; clicking 'Reject' declines it.",
+          "Approves a researcher's claimed or added publication so it appears in the official repository, or rejects it if inaccurate.",
       },
       {
-        label: "Tab 2: 'Researchers' (Sync Scholar, Edit, and Delete Buttons)",
+        label: "Sync, Edit, and Delete Icons (Tab 2: Researchers)",
+        visualReplica: (
+          <div className="inline-flex items-center gap-1.5">
+            <span className="p-1.5 rounded-lg border border-border bg-card text-brand">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </span>
+            <span className="p-1.5 rounded-lg border border-border bg-card text-foreground">
+              <Edit3 className="w-3.5 h-3.5" />
+            </span>
+            <span className="p-1.5 rounded-lg border border-border bg-card text-red-600">
+              <Trash2 className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        ),
         explanation:
-          "Lists all registered researchers. You can click the refresh icon to sync a researcher's Google Scholar publications, the pencil icon to edit their name, department, or Instructor ID, or the trash icon to remove an account.",
+          "In the Researchers table, these buttons let you sync a researcher's Google Scholar works, edit their account details, or remove their record.",
       },
       {
-        label: "Tab 3: 'Invite Researcher' Form & 'Send Invitation' Button",
+        label: "Locked ASIN-00000 Input & Send Invitation Button (Tab 3: Invite Researcher)",
+        visualReplica: (
+          <div className="inline-flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center rounded-md border border-border overflow-hidden text-xs font-mono">
+              <span className="bg-muted text-foreground font-bold px-2 py-1 border-r border-border">
+                ASIN-
+              </span>
+              <span className="bg-background text-muted-foreground px-2 py-1">00000</span>
+            </div>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand text-white text-xs font-semibold">
+              <Send className="w-3 h-3" />
+              <span>Send Invitation</span>
+            </span>
+          </div>
+        ),
         explanation:
-          "Lets you invite a new researcher by entering the 5 digits of their Instructor ID (with 'ASIN-' locked in place as ASIN-00000), their name, email, and whether they are Faculty (with their department) or Non-Faculty. Clicking 'Send Invitation' emails them an activation link.",
-      },
-      {
-        label: "Tab 4: 'Invitation Requests' ('Approve & Pre-Fill' / 'Decline' Buttons)",
-        explanation:
-          "Shows requests sent by researchers who clicked 'Ask for Invitation' on the sign-in screen. Clicking 'Approve & Pre-Fill' automatically copies their details into the Invite Researcher form so you can send their official invitation in seconds.",
+          "Type the 5 digits of the researcher's Instructor ID (ASIN-00000), fill in their name, email, and classification, and click 'Send Invitation' to email their activation link.",
       },
     ],
   },
@@ -618,28 +1128,40 @@ const coordinatorGuideCategories: GuideCategory[] = [
     id: "profile-and-settings",
     number: 10,
     title: "My Profile & Settings",
-    subtitle: "Personalizing your account, theme, password, and cloud backup",
+    subtitle: "Managing your coordinator profile, appearance theme, password, and cloud database backup",
     icon: Settings,
-    whatYouSee: [
-      "Accessible from the bottom-left sidebar menu, 'My Profile' shows your coordinator details and Google Scholar link, while 'Settings' provides tabs for Appearance & Theme, Security & Password, Display Preferences, and System & Cloud Storage.",
+    narrativeParagraphs: [
+      "At the bottom left of the sidebar, 'My Profile' and 'Settings' allow you to manage your personal coordinator account and system-wide display preferences. In 'My Profile', you can update your photo, contact email, and Google Scholar link. In 'Settings', you have four tabs: 'Appearance & Theme', 'Security & Password', 'Display Preferences', and 'System & Cloud Storage'.",
+      "The 'System & Cloud Storage' tab shows the live connection status of the portal's Turso Cloud storage, ensuring that all researcher accounts, invitations, publications, and citations are permanently backed up and never lost even when the cloud server restarts.",
     ],
-    purposeSummary:
-      "Lets you update your personal profile, switch between Light and Dark mode, change your password, and verify that campus records are safely backed up.",
     clickableItems: [
       {
-        label: "Appearance Cards (Light Mode, Dark Mode, System Default)",
+        label: "Appearance Mode Cards (Light / Dark / System)",
+        visualReplica: (
+          <div className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-amber-50 text-amber-700 text-xs font-semibold">
+              <Sun className="w-3.5 h-3.5" />
+              <span>Light Mode</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-700 bg-slate-800 text-blue-300 text-xs font-semibold">
+              <Moon className="w-3.5 h-3.5" />
+              <span>Dark Mode</span>
+            </span>
+          </div>
+        ),
         explanation:
-          "Changes the visual theme of the system immediately.",
+          "Switches the interface theme between Light Mode, Dark Mode, and System Default.",
       },
       {
-        label: "'Update Password' Button (Security & Password Tab)",
+        label: "Sync Local Tables to Turso Cloud Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Sync Local Tables to Turso Cloud</span>
+          </span>
+        ),
         explanation:
-          "Updates your Research Coordinator sign-in password.",
-      },
-      {
-        label: "'Sync Local Tables to Turso Cloud' Button (System & Cloud Storage Tab)",
-        explanation:
-          "Manually triggers an immediate backup of all researcher accounts and publications to cloud storage.",
+          "Triggers an immediate manual backup of all local records to persistent cloud storage.",
       },
     ],
   },
@@ -651,26 +1173,31 @@ export function SystemGuidePage() {
   const loggedIn = isAuthenticated() && Boolean(currentUser);
   const { theme, setTheme, resolvedTheme } = useTheme();
 
-  // Determine the user's natural role view
-  const defaultRoleView: "guest" | "researcher" | "coordinator" = !loggedIn
+  // Strictly show ONLY the guide corresponding to the user's current role (no role switcher)
+  const roleView: "guest" | "researcher" | "coordinator" = !loggedIn
     ? "guest"
     : currentUser?.role === "admin"
     ? "coordinator"
     : "researcher";
 
-  // Allow the Research Coordinator to preview what Researchers or Guests see if desired;
-  // Researchers only see the Researcher guide, and Guests only see the Guest guide.
-  const [adminPreviewRole, setAdminPreviewRole] = useState<"coordinator" | "researcher" | "guest">("coordinator");
-
-  const activeRoleView =
-    defaultRoleView === "coordinator" ? adminPreviewRole : defaultRoleView;
-
   const categories =
-    activeRoleView === "coordinator"
+    roleView === "coordinator"
       ? coordinatorGuideCategories
-      : activeRoleView === "researcher"
+      : roleView === "researcher"
       ? researcherGuideCategories
       : guestGuideCategories;
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Ensure index stays in bounds and scroll to top on page change
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentIndex]);
+
+  const activeCategory = categories[currentIndex] || categories[0];
+  const prevCategory = currentIndex > 0 ? categories[currentIndex - 1] : null;
+  const nextCategory = currentIndex < categories.length - 1 ? categories[currentIndex + 1] : null;
+  const ActiveIcon = activeCategory.icon;
 
   const cycleTheme = () => {
     if (theme === "light") setTheme("dark");
@@ -678,37 +1205,42 @@ export function SystemGuidePage() {
     else setTheme("light");
   };
 
-  const scrollToSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
-      {/* ---------------------------------------------------- */}
-      {/* TOP INSTITUTIONAL HEADER (KEPT CONSISTENT)           */}
-      {/* ---------------------------------------------------- */}
-      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+    <div className="min-h-screen w-full bg-background text-foreground flex flex-col font-sans">
+      {/* ==================================================== */}
+      {/* FULL-WIDTH INSTITUTIONAL TOP HEADER                  */}
+      {/* ==================================================== */}
+      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur">
+        <div className="w-full px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           {/* Left: PSU Brand */}
           <div
-            onClick={() => navigate(loggedIn ? "/dashboard" : "/")}
+            onClick={() =>
+              navigate(
+                !loggedIn
+                  ? "/"
+                  : currentUser?.role === "admin"
+                  ? "/dashboard"
+                  : "/dashboard/publications"
+              )
+            }
             className="flex items-center gap-3 cursor-pointer group"
           >
             <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-bold text-foreground tracking-tight group-hover:text-brand transition-colors">
-                  PSU Asingan Research Portal
+                  Research Portal • PSU Asingan Campus
                 </h1>
                 <Badge variant="outline" className="text-[10px] font-semibold border-brand/40 text-brand bg-brand/5">
-                  About & Visual Guide
+                  {roleView === "coordinator"
+                    ? "Research Coordinator Guide"
+                    : roleView === "researcher"
+                    ? "Researcher Guide"
+                    : "Visitor & New Researcher Guide"}
                 </Badge>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Pangasinan State University — Asingan Campus
+                Step-by-Step Visual Walkthrough — Page {currentIndex + 1} of {categories.length}
               </p>
             </div>
           </div>
@@ -769,206 +1301,297 @@ export function SystemGuidePage() {
         </div>
       </header>
 
-      {/* ---------------------------------------------------- */}
-      {/* HERO BANNER                                          */}
-      {/* ---------------------------------------------------- */}
-      <section className="border-b border-border/60 bg-gradient-to-b from-blue-50/70 via-background to-background dark:from-blue-950/20 dark:via-background dark:to-background py-8 sm:py-10 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 border border-brand/20 text-brand text-xs font-semibold">
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>
-              {activeRoleView === "coordinator"
-                ? "Research Coordinator Edition (Complete System Walkthrough)"
-                : activeRoleView === "researcher"
-                ? "Researcher Edition (Your Personal Workspace Guide)"
-                : "Public Visitor & New Researcher Guide"}
-            </span>
-          </div>
-
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div className="space-y-2 max-w-3xl">
-              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-                How to Use the PSU Asingan Research Portal
-              </h2>
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Welcome! This guide walks you through every screen, section, and clickable button in plain, everyday language—so you always know what you are looking at and what happens when you click any link.
+      {/* ==================================================== */}
+      {/* FULL-WIDTH EDGE-TO-EDGE WORKSPACE LAYOUT             */}
+      {/* ==================================================== */}
+      <div className="flex-1 w-full flex flex-col lg:flex-row">
+        {/* Left Topic Sidebar (Mirrors Workspace Navigation) */}
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border/70 bg-card/60 p-4 flex flex-col justify-between">
+          <div className="space-y-3">
+            <div className="px-2 py-1">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-brand" />
+                <span>Guide Chapters ({categories.length} Pages)</span>
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Click any page below or use the Next / Previous buttons.
               </p>
             </div>
 
-            {/* Coordinator-Only Preview Switcher */}
-            {defaultRoleView === "coordinator" && (
-              <div className="flex flex-col gap-1.5 shrink-0">
-                <span className="text-[11px] font-semibold text-muted-foreground">
-                  Coordinator View Switcher:
-                </span>
-                <div className="inline-flex rounded-xl border border-border/80 bg-card p-1 shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => setAdminPreviewRole("coordinator")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      adminPreviewRole === "coordinator"
-                        ? "bg-brand text-white shadow-2xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Coordinator Guide
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdminPreviewRole("researcher")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      adminPreviewRole === "researcher"
-                        ? "bg-brand text-white shadow-2xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Researcher Guide
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAdminPreviewRole("guest")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                      adminPreviewRole === "guest"
-                        ? "bg-brand text-white shadow-2xs"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Guest Guide
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ---------------------------------------------------- */}
-      {/* MAIN CONTENT: TABLE OF CONTENTS + NARRATIVE CARDS    */}
-      {/* ---------------------------------------------------- */}
-      <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 flex-1">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Sticky Table of Contents */}
-          <aside className="lg:col-span-4 lg:sticky lg:top-24">
-            <Card className="border-border/70 shadow-xs">
-              <CardHeader className="pb-3 border-b border-border/60">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 text-brand" />
-                  <span>Topics in This Guide ({categories.length})</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-2.5 space-y-1">
-                {categories.map((cat) => (
+            <nav className="space-y-1">
+              {categories.map((cat, idx) => {
+                const Icon = cat.icon;
+                const isActive = idx === currentIndex;
+                return (
                   <button
                     key={cat.id}
                     type="button"
-                    onClick={() => scrollToSection(cat.id)}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer group"
+                    onClick={() => setCurrentIndex(idx)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                      isActive
+                        ? "bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 font-semibold border border-blue-200/80 dark:border-blue-800/60 shadow-2xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
                   >
-                    <span className="w-6 h-6 rounded-lg bg-brand/10 text-brand font-bold text-[11px] flex items-center justify-center shrink-0 group-hover:bg-brand group-hover:text-white transition-colors">
+                    <span
+                      className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${
+                        isActive
+                          ? "bg-brand text-white"
+                          : "bg-muted text-muted-foreground"
+                      }`}
+                    >
                       {cat.number}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-foreground truncate">{cat.title}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{cat.subtitle}</p>
+                      <p className="text-xs sm:text-sm truncate">{cat.title}</p>
                     </div>
+                    <Icon
+                      className={`w-4 h-4 shrink-0 ${
+                        isActive ? "text-brand" : "text-muted-foreground/60"
+                      }`}
+                    />
                   </button>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Progress Indicator Box at Bottom of Sidebar */}
+          <div className="hidden lg:block mt-6 p-3.5 rounded-xl bg-muted/30 border border-border/60 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-foreground">Reading Progress</span>
+              <span className="font-mono font-bold text-brand">
+                Page {currentIndex + 1} / {categories.length}
+              </span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full bg-brand transition-all duration-300"
+                style={{ width: `${((currentIndex + 1) / categories.length) * 100}%` }}
+              />
+            </div>
+          </div>
+        </aside>
+
+        {/* Right Full-Width Single-Page Content Area */}
+        <main className="flex-1 min-w-0 p-5 sm:p-8 lg:p-10 flex flex-col justify-between space-y-8">
+          <div className="space-y-8">
+            {/* Page Title Banner */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/70">
+              <div className="flex items-start sm:items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-brand text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <ActiveIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-brand/10 text-brand border border-brand/20 text-[11px] font-bold">
+                      Page {activeCategory.number} of {categories.length}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground font-medium">
+                      • Interactive System Guide
+                    </span>
+                  </div>
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight mt-1">
+                    {activeCategory.title}
+                  </h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+                    {activeCategory.subtitle}
+                  </p>
+                </div>
+              </div>
+
+              {/* Top Quick Prev / Next Controls */}
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!prevCategory}
+                  onClick={() => prevCategory && setCurrentIndex(currentIndex - 1)}
+                  className="h-9 px-3 text-xs gap-1"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>Previous</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  disabled={!nextCategory}
+                  onClick={() => nextCategory && setCurrentIndex(currentIndex + 1)}
+                  className="h-9 px-3.5 text-xs gap-1 bg-brand hover:bg-brand/90 text-white font-semibold"
+                >
+                  <span>Next Page</span>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Section 1: Detailed 2-Paragraph Narrative */}
+            <Card className="border-border/70 shadow-2xs">
+              <CardHeader className="pb-3 border-b border-border/60 bg-muted/20">
+                <CardTitle className="text-xs sm:text-sm font-bold uppercase tracking-wider text-brand flex items-center gap-2">
+                  <Eye className="w-4 h-4" />
+                  <span>What You See on This Page & What Each Part Is For</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 sm:p-7 space-y-4 text-sm sm:text-[15px] text-foreground/90 leading-relaxed">
+                <p>{activeCategory.narrativeParagraphs[0]}</p>
+                <p>{activeCategory.narrativeParagraphs[1]}</p>
+              </CardContent>
+            </Card>
+
+            {/* Section 2: Interactive Graph / Numbers Simulation (When Applicable) */}
+            {activeCategory.simulationSection && (
+              <Card className="border-brand/30 bg-brand/[0.02] shadow-2xs">
+                <CardHeader className="pb-3 border-b border-border/60 bg-brand/5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <CardTitle className="text-xs sm:text-sm font-bold uppercase tracking-wider text-brand flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4" />
+                        <span>{activeCategory.simulationSection.title}</span>
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {activeCategory.simulationSection.subtitle}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] font-semibold bg-background border-brand/30 text-brand">
+                      Simulated Sample Data Preview
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-5 sm:p-7 space-y-6">
+                  {/* Visual Graph Preview */}
+                  {activeCategory.simulationSection.visual}
+
+                  {/* Step-by-Step Numerical Explanation */}
+                  <div className="p-4 sm:p-5 rounded-xl bg-card border border-border/80 space-y-2.5">
+                    <p className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                      <HelpCircle className="w-4 h-4 text-brand" />
+                      <span>How to Read These Sample Numbers:</span>
+                    </p>
+                    <ul className="space-y-2 text-xs sm:text-sm text-foreground/90 leading-relaxed">
+                      {activeCategory.simulationSection.numberExplanation.map((point, idx) => (
+                        <li key={idx} className="flex items-start gap-2.5">
+                          <span className="w-5 h-5 rounded-full bg-brand/10 text-brand font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                            {idx + 1}
+                          </span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Section 3: Exact Workspace Buttons & Clickable Links */}
+            <Card className="border-border/70 shadow-2xs">
+              <CardHeader className="pb-3 border-b border-border/60 bg-muted/20">
+                <CardTitle className="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                  <MousePointerClick className="w-4 h-4" />
+                  <span>Workspace Buttons & Clickable Links on This Page</span>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Each item below shows the exact button or badge you will see in the workspace along with what happens when you click it.
+                </p>
+              </CardHeader>
+              <CardContent className="p-0 divide-y divide-border/60">
+                {activeCategory.clickableItems.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-muted/20 transition-colors"
+                  >
+                    {/* Left: Exact Workspace Button / Badge Visual Replica */}
+                    <div className="md:w-72 lg:w-80 shrink-0 space-y-1.5">
+                      <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>{item.label}</span>
+                      </p>
+                      <div className="pt-1">{item.visualReplica}</div>
+                    </div>
+
+                    {/* Right: Plain-Language Explanation */}
+                    <div className="flex-1 text-xs sm:text-sm text-foreground/90 leading-relaxed md:border-l md:border-border/60 md:pl-6">
+                      {item.explanation}
+                    </div>
+                  </div>
                 ))}
               </CardContent>
             </Card>
-          </aside>
-
-          {/* Right Narrative Sections */}
-          <div className="lg:col-span-8 space-y-8">
-            {categories.map((cat) => {
-              const IconComponent = cat.icon;
-              return (
-                <section
-                  key={cat.id}
-                  id={cat.id}
-                  className="scroll-mt-24"
-                >
-                  <Card className="border-border/70 shadow-xs overflow-hidden">
-                    {/* Category Header */}
-                    <div className="bg-muted/30 border-b border-border/60 px-5 sm:px-6 py-4 flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-brand text-white flex items-center justify-center shrink-0 shadow-2xs">
-                        <IconComponent className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-brand">
-                            Section {cat.number}
-                          </span>
-                        </div>
-                        <h3 className="text-base sm:text-lg font-bold text-foreground leading-snug">
-                          {cat.title}
-                        </h3>
-                        <p className="text-xs text-muted-foreground">{cat.subtitle}</p>
-                      </div>
-                    </div>
-
-                    <CardContent className="p-5 sm:p-6 space-y-6">
-                      {/* Part 1: What Do You See & Purpose */}
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand">
-                          <Eye className="w-4 h-4" />
-                          <span>What You See on This Page & Its Purpose</span>
-                        </div>
-
-                        <div className="space-y-2.5 text-xs sm:text-sm text-foreground/90 leading-relaxed bg-muted/20 p-4 rounded-xl border border-border/50">
-                          {cat.whatYouSee.map((paragraph, idx) => (
-                            <p key={idx}>{paragraph}</p>
-                          ))}
-                          <p className="pt-1 font-medium text-foreground border-t border-border/50 mt-2">
-                            <strong className="text-brand">Why this matters: </strong>
-                            {cat.purposeSummary}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Part 2: Every Clickable Link & Button Explained */}
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                          <MousePointerClick className="w-4 h-4" />
-                          <span>What Every Clickable Button & Link Does</span>
-                        </div>
-
-                        <div className="divide-y divide-border/60 rounded-xl border border-border/70 bg-card overflow-hidden">
-                          {cat.clickableItems.map((item, idx) => (
-                            <div key={idx} className="p-3.5 sm:p-4 space-y-1 hover:bg-muted/20 transition-colors">
-                              <div className="flex items-start gap-2">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                                <p className="text-xs sm:text-sm font-bold text-foreground">
-                                  {item.label}
-                                </p>
-                              </div>
-                              <p className="text-xs text-muted-foreground leading-relaxed pl-6">
-                                {item.explanation}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </section>
-              );
-            })}
           </div>
-        </div>
-      </main>
 
-      {/* ---------------------------------------------------- */}
-      {/* FOOTER                                               */}
-      {/* ---------------------------------------------------- */}
-      <footer className="border-t border-border/60 bg-muted/20 py-6 px-4 sm:px-6 mt-12 text-center text-xs text-muted-foreground space-y-1">
-        <p className="font-semibold text-foreground">
-          Pangasinan State University — Asingan Campus Research Publication Tracking System
-        </p>
-        <p className="text-[11px]">
-          Need additional assistance? Contact Research Coordinator Sir Rodelio M. Garin.
-        </p>
-      </footer>
+          {/* ==================================================== */}
+          {/* BOTTOM PAGINATION BAR (PREVIOUS PAGE / NEXT PAGE)    */}
+          {/* ==================================================== */}
+          <div className="pt-6 border-t border-border/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {prevCategory ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCurrentIndex(currentIndex - 1)}
+                className="w-full sm:w-auto h-11 px-5 text-xs sm:text-sm font-semibold gap-2 justify-start"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <div className="text-left">
+                  <span className="block text-[10px] text-muted-foreground uppercase">
+                    Previous Page ({prevCategory.number} of {categories.length})
+                  </span>
+                  <span>{prevCategory.title}</span>
+                </div>
+              </Button>
+            ) : (
+              <div />
+            )}
+
+            <div className="text-xs font-mono text-muted-foreground">
+              Page {currentIndex + 1} of {categories.length}
+            </div>
+
+            {nextCategory ? (
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => setCurrentIndex(currentIndex + 1)}
+                className="w-full sm:w-auto h-11 px-6 text-xs sm:text-sm font-semibold bg-brand hover:bg-brand/90 text-white gap-2 justify-end shadow-sm"
+              >
+                <div className="text-right">
+                  <span className="block text-[10px] text-white/80 uppercase">
+                    Next Page ({nextCategory.number} of {categories.length})
+                  </span>
+                  <span>{nextCategory.title}</span>
+                </div>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="default"
+                onClick={() =>
+                  navigate(
+                    !loggedIn
+                      ? "/"
+                      : currentUser?.role === "admin"
+                      ? "/dashboard"
+                      : "/dashboard/publications"
+                  )
+                }
+                className="w-full sm:w-auto h-11 px-6 text-xs sm:text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>
+                  Finish Guide & Return to{" "}
+                  {!loggedIn
+                    ? "Public Search"
+                    : currentUser?.role === "admin"
+                    ? "Dashboard"
+                    : "My Publications"}
+                </span>
+              </Button>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
-

@@ -247,22 +247,33 @@ export function PublicRepositoryPortal() {
       <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           
-          {/* TOP-LEFT REPOSITORY METRICS COUNTER */}
-          <div className="flex items-center gap-3 font-mono text-[11px] bg-muted/40 border border-border/60 px-3 py-1.5 rounded-lg">
-            <span className="flex items-center gap-1.5" title="Verified Publications">
-              <BookOpen className="w-3.5 h-3.5 text-brand" />
-              <strong className="text-foreground">{repoStats.totalPublications}</strong> Publications
-            </span>
-            <span className="text-border">•</span>
-            <span className="flex items-center gap-1.5" title="Total Global Citations">
-              <Quote className="w-3.5 h-3.5 text-amber-500" />
-              <strong className="text-foreground">{repoStats.totalCitations}</strong> Citations
-            </span>
-            <span className="text-border">•</span>
-            <span className="flex items-center gap-1.5" title="Registered Researchers">
-              <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-              <strong className="text-foreground">{repoStats.totalResearchers}</strong> Researchers
-            </span>
+          {/* TOP-LEFT REPOSITORY METRICS COUNTER + SMALL ? GUIDE BUTTON */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 font-mono text-[11px] bg-muted/40 border border-border/60 px-3 py-1.5 rounded-lg">
+              <span className="flex items-center gap-1.5" title="Verified Publications">
+                <BookOpen className="w-3.5 h-3.5 text-brand" />
+                <strong className="text-foreground">{repoStats.totalPublications}</strong> Publications
+              </span>
+              <span className="text-border">•</span>
+              <span className="flex items-center gap-1.5" title="Total Global Citations">
+                <Quote className="w-3.5 h-3.5 text-amber-500" />
+                <strong className="text-foreground">{repoStats.totalCitations}</strong> Citations
+              </span>
+              <span className="text-border">•</span>
+              <span className="flex items-center gap-1.5" title="Registered Researchers">
+                <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
+                <strong className="text-foreground">{repoStats.totalResearchers}</strong> Researchers
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/guide")}
+              title="About & System Guide"
+              aria-label="Open About and System Guide"
+              className="w-6 h-6 rounded-full border border-border/80 bg-muted/50 hover:bg-brand hover:text-white hover:border-brand text-muted-foreground transition-all flex items-center justify-center shrink-0 cursor-pointer"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* TOP-RIGHT SIGN IN / DASHBOARD BUTTON */}
@@ -999,17 +1010,6 @@ export function PublicRepositoryPortal() {
           Researchers and the Research Coordinator may sign in using the top-right portal button to access research analytics and management tools.
         </p>
       </footer>
-
-      {/* Single Bottom-Left Question Mark (?) Guide Button */}
-      <button
-        type="button"
-        onClick={() => navigate("/guide")}
-        title="About & System Visual Guide"
-        aria-label="Open About and System Visual Guide"
-        className="fixed bottom-5 left-5 z-40 w-10 h-10 rounded-full bg-brand text-white shadow-lg hover:bg-brand/90 hover:scale-105 transition-all flex items-center justify-center cursor-pointer ring-2 ring-background"
-      >
-        <HelpCircle className="w-5 h-5" />
-      </button>
     </div>
   );
 }

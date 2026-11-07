@@ -246,18 +246,27 @@ export function DashboardLayout() {
     <div className="min-h-screen bg-gray-50 dark:bg-background text-foreground transition-colors duration-200">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white dark:bg-card border-r border-border/70 flex-col z-20">
-        {/* Logo */}
-        <div className="p-5 border-b border-border/70">
+        {/* Logo + Small ? Guide Button */}
+        <div className="p-5 border-b border-border/70 flex items-center justify-between gap-2">
           <div
-            className="flex items-center gap-3 cursor-pointer"
+            className="flex items-center gap-3 cursor-pointer min-w-0"
             onClick={() => navigate(currentUser.role === "admin" ? "/dashboard" : "/dashboard/publications")}
           >
-            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain" />
-            <div>
-              <h2 className="text-sm font-bold text-foreground tracking-tight">Research Portal</h2>
-              <p className="text-[11px] text-muted-foreground">PSU Asingan Campus</p>
+            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-foreground tracking-tight truncate">Research Portal</h2>
+              <p className="text-[11px] text-muted-foreground truncate">PSU Asingan Campus</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate("/guide")}
+            title="About & System Guide"
+            aria-label="Open About and System Guide"
+            className="w-6 h-6 rounded-full border border-border/80 bg-muted/50 hover:bg-brand hover:text-white hover:border-brand text-muted-foreground transition-all flex items-center justify-center shrink-0 cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* Categorized Navigation */}
@@ -286,8 +295,8 @@ export function DashboardLayout() {
             );
           })}
 
-          <div className="pt-2 mt-1 border-t border-border/60 flex items-center justify-between pl-11 pr-2 min-h-[36px]">
-            <span className="text-[11px] text-muted-foreground truncate max-w-[95px]" title={currentUser.name}>
+          <div className="pt-2 mt-1 border-t border-border/60 flex items-center justify-between px-2">
+            <span className="text-[11px] text-muted-foreground truncate max-w-[110px]" title={currentUser.name}>
               {currentUser.role === "admin" ? "Research Coordinator" : currentUser.instructorId || "Researcher"}
             </span>
             <Button
@@ -612,17 +621,6 @@ export function DashboardLayout() {
 
       {/* Global Command Palette (Ctrl+K) */}
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} />
-
-      {/* Single Bottom-Left Question Mark (?) Guide Button */}
-      <button
-        type="button"
-        onClick={() => navigate("/guide")}
-        title="About & System Visual Guide"
-        aria-label="Open About and System Visual Guide"
-        className="fixed bottom-20 lg:bottom-3.5 left-3.5 z-40 w-9 h-9 rounded-full bg-brand text-white shadow-lg hover:bg-brand/90 hover:scale-105 transition-all flex items-center justify-center cursor-pointer ring-2 ring-background"
-      >
-        <HelpCircle className="w-4 h-4" />
-      </button>
 
       {/* Floating Ask Campus AI Mascot Bubble (Persistent Help Widget) */}
       <FloatingAskAIBubble />

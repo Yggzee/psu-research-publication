@@ -237,16 +237,27 @@ export function LoginScreen() {
             </Button>
           </div>
 
-          {/* Branding */}
+          {/* Branding + Small ? Guide Button */}
           <div className="flex items-center gap-3 mb-6">
             <img 
               src={psuLogo} 
               alt="PSU Logo" 
               className="w-14 h-14 object-contain shrink-0"
             />
-            <div>
-              <h2 className="text-2xl text-gray-900 font-bold leading-tight">Research Publication</h2>
-              <p className="text-sm font-medium text-blue-700">Monitoring System • PSU Asingan Campus</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl text-gray-900 font-bold leading-tight">Research Portal</h2>
+                <button
+                  type="button"
+                  onClick={() => navigate("/guide")}
+                  title="About & System Guide"
+                  aria-label="Open About and System Guide"
+                  className="w-6 h-6 rounded-full border border-slate-300 bg-white hover:bg-blue-600 hover:text-white hover:border-blue-600 text-slate-500 transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <p className="text-sm font-medium text-blue-700">PSU Asingan Campus</p>
             </div>
           </div>
 
@@ -589,17 +600,6 @@ export function LoginScreen() {
           </div>
         </div>
       )}
-
-      {/* Single Bottom-Left Question Mark (?) Guide Button */}
-      <button
-        type="button"
-        onClick={() => navigate("/guide")}
-        title="About & System Visual Guide"
-        aria-label="Open About and System Visual Guide"
-        className="fixed bottom-5 left-5 z-40 w-10 h-10 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 hover:scale-105 transition-all flex items-center justify-center cursor-pointer ring-2 ring-white"
-      >
-        <HelpCircle className="w-5 h-5" />
-      </button>
     </div>
   );
 }
