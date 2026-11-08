@@ -242,7 +242,7 @@ export function LoginScreen() {
             <img 
               src={psuLogo} 
               alt="PSU Logo" 
-              className="w-14 h-14 object-contain shrink-0"
+              className="w-14 h-14 object-contain rounded-full shrink-0"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">

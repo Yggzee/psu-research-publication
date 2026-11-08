@@ -34,7 +34,7 @@ export function SplashScreen() {
             <img 
               src={psuLogo} 
               alt="PSU Logo" 
-              className="w-24 h-24 object-contain"
+              className="w-24 h-24 object-contain rounded-full"
             />
           </div>
         </motion.div>

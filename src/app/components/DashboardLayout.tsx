@@ -252,7 +252,7 @@ export function DashboardLayout() {
             className="flex items-center gap-3 cursor-pointer min-w-0"
             onClick={() => navigate(currentUser.role === "admin" ? "/dashboard" : "/dashboard/publications")}
           >
-            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain shrink-0" />
+            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain rounded-full shrink-0" />
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-foreground tracking-tight truncate">Research Portal</h2>
               <p className="text-[11px] text-muted-foreground truncate">PSU Asingan Campus</p>
@@ -332,7 +332,7 @@ export function DashboardLayout() {
                   setMobileMenuOpen(false);
                 }}
               >
-                <img src={psuLogo} alt="PSU Logo" className="w-9 h-9 object-contain" />
+                <img src={psuLogo} alt="PSU Logo" className="w-9 h-9 object-contain rounded-full" />
                 <div>
                   <h2 className="text-sm font-bold text-foreground">Research Portal</h2>
                   <p className="text-[11px] text-muted-foreground">PSU Asingan</p>
