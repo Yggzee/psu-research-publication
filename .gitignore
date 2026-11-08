@@ -60,3 +60,4 @@ logs/
 data/*.db-shm
 data/*.db-wal
 web-checks/
+manuscript/
