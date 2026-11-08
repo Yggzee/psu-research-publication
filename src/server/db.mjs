@@ -390,10 +390,27 @@ export function initDatabase() {
 // Call on import to guarantee schema existence
 initDatabase();
 
+// Guard startup rehydration with a strict timeout so slow cloud networks never freeze HTTP requests
+const TURSO_SYNC_TIMEOUT_MS = 6000;
+
+const tursoSyncWithTimeout = async () => {
+  const syncTask = (async () => {
+    await initTursoSchema();
+    await rehydrateFromTurso(db, originalPrepare);
+  })();
+
+  const timeoutTask = new Promise((resolve) => {
+    setTimeout(() => {
+      console.warn(`[Turso Sync] Startup sync exceeded ${TURSO_SYNC_TIMEOUT_MS}ms timeout. Continuing with local SQLite cache to keep web service responsive.`);
+      resolve();
+    }, TURSO_SYNC_TIMEOUT_MS);
+  });
+
+  await Promise.race([syncTask, timeoutTask]);
+};
+
 export const dbReadyPromise = isTursoConfigured
-  ? initTursoSchema()
-      .then(() => rehydrateFromTurso(db, originalPrepare))
-      .catch((err) => {
-        console.warn('[Turso Startup Error]:', err.message);
-      })
+  ? tursoSyncWithTimeout().catch((err) => {
+      console.warn('[Turso Startup Error]:', err.message);
+    })
   : Promise.resolve();

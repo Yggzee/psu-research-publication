@@ -1,9 +1,8 @@
-import { handleApiRequest } from './apiHandler.mjs';
-
 /**
  * Vite Plugin that intercepts /api requests in the dev server
  * and handles them with the SQLite database.
  * No separate server process needed during development!
+ * Dynamically imports handleApiRequest so vite build remains 100% database-free.
  */
 export function sqliteApiPlugin() {
   return {
@@ -12,6 +11,7 @@ export function sqliteApiPlugin() {
       server.middlewares.use(async (req, res, next) => {
         if (req.url && (req.url.startsWith('/api/') || req.url === '/api')) {
           try {
+            const { handleApiRequest } = await import('./apiHandler.mjs');
             await handleApiRequest(req, res);
           } catch (err) {
             console.error('[Vite SQLite API Error]:', err);

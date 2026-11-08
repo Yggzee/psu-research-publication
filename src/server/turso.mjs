@@ -245,15 +245,16 @@ export async function initTursoSchema() {
     );`
   ];
 
-  for (const sql of tableSchemas) {
-    try {
-      await tursoClient.execute(sql);
-    } catch (err) {
-      console.warn('[Turso Schema Warning]:', err.message);
-    }
-  }
+  // Execute table creations concurrently
+  await Promise.allSettled(
+    tableSchemas.map((sql) =>
+      tursoClient.execute(sql).catch((err) => {
+        console.warn('[Turso Schema Warning]:', err.message);
+      })
+    )
+  );
 
-  // Run idempotent column migrations on Turso for pre-existing tables
+  // Run idempotent column migrations on Turso concurrently for pre-existing tables
   const columnMigrations = [
     `ALTER TABLE users ADD COLUMN middle_initial TEXT`,
     `ALTER TABLE users ADD COLUMN scholar_url TEXT`,
@@ -289,13 +290,13 @@ export async function initTursoSchema() {
     `ALTER TABLE citing_papers ADD COLUMN doi_issn TEXT`,
   ];
 
-  for (const migrationSql of columnMigrations) {
-    try {
-      await tursoClient.execute(migrationSql);
-    } catch {
-      // Column already exists on Turso — ignore
-    }
-  }
+  await Promise.allSettled(
+    columnMigrations.map((migrationSql) =>
+      tursoClient.execute(migrationSql).catch(() => {
+        // Column already exists on Turso — ignore
+      })
+    )
+  );
 
   console.log('[Turso] Cloud schema initialized.');
 }

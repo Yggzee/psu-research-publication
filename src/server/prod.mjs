@@ -36,6 +36,14 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = decodeURIComponent(parsedUrl.pathname);
 
+  // Fast health check endpoint for Render container health probes
+  if (pathname === '/healthz' || pathname === '/health' || pathname === '/ping' || pathname === '/api/health') {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json; charset=UTF-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.end(JSON.stringify({ status: 'ok', uptime: process.uptime() }));
+  }
+
   // 1. Route API requests to API handler
   if (pathname.startsWith('/api/') || pathname === '/api') {
     return handleApiRequest(req, res);
