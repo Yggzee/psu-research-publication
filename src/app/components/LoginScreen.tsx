@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router";
 import { motion } from "motion/react";
-import { Mail, Lock, User, CheckCircle2, AlertCircle, ArrowLeft, Loader2, Send, X, HelpCircle } from "lucide-react";
+import { Mail, Lock, User, CheckCircle2, AlertCircle, ArrowLeft, Loader2, Send, X, HelpCircle, Sun, Moon } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -10,10 +10,13 @@ import psuLogo from "../assets/psu-logo.png";
 import psuBuilding from "../assets/psu_newbuilding.jpg";
 import { setCurrentUser, getCurrentUser, getManagedResearchers } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
+import { useTheme } from "../utils/themeContext";
 
 export function LoginScreen() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { resolvedTheme, setTheme } = useTheme();
+  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
   const [searchParams] = useSearchParams();
   const redirectParam = searchParams.get("redirect") || (location.state as any)?.from;
 
@@ -214,26 +217,48 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-background text-foreground transition-colors duration-200">
       {/* Left Side - Forms */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-slate-50 overflow-y-auto min-h-screen">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-slate-50 dark:bg-background overflow-y-auto min-h-screen transition-colors duration-200">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5 }}
           className="w-full max-w-lg my-auto py-6"
         >
-          {/* Navigation back to Public Search (Single back button) */}
-          <div className="mb-4">
+          {/* Navigation back to Public Search + Theme Toggle */}
+          <div className="mb-4 flex items-center justify-between">
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => navigate("/")}
-              className="gap-1.5 text-xs font-semibold text-slate-600 hover:text-blue-700 hover:bg-blue-50 px-2.5 h-8 -ml-2"
+              className="gap-1.5 text-xs font-semibold text-muted-foreground hover:text-brand hover:bg-brand/10 px-2.5 h-8 -ml-2"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Public Search</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleTheme}
+              title={resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              aria-label={resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              className="h-8 px-2.5 gap-1.5 text-xs font-medium bg-card border-border/80 text-muted-foreground hover:text-foreground"
+            >
+              {resolvedTheme === "dark" ? (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Dark</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Light</span>
+                </>
+              )}
             </Button>
           </div>
 
@@ -246,37 +271,37 @@ export function LoginScreen() {
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-2xl text-gray-900 font-bold leading-tight">Research Portal</h2>
+                <h2 className="text-2xl text-foreground font-bold leading-tight">Research Portal</h2>
                 <button
                   type="button"
                   onClick={() => navigate("/guide")}
                   title="About & System Guide"
                   aria-label="Open About and System Guide"
-                  className="w-6 h-6 rounded-full border border-slate-300 bg-white hover:bg-blue-600 hover:text-white hover:border-blue-600 text-slate-500 transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
+                  className="w-6 h-6 rounded-full border border-border bg-card hover:bg-brand hover:text-white hover:border-brand text-muted-foreground transition-all flex items-center justify-center shrink-0 cursor-pointer shadow-2xs"
                 >
                   <HelpCircle className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <p className="text-sm font-medium text-blue-700">PSU Asingan Campus</p>
+              <p className="text-sm font-medium text-brand">PSU Asingan Campus</p>
             </div>
           </div>
 
           {/* MAIN SIGN IN CARD */}
-          <Card className="shadow-lg border-gray-200 bg-white">
+          <Card className="shadow-lg border-border bg-card">
             <CardHeader className="pb-4">
-              <CardTitle className="text-2xl font-bold text-gray-900">Welcome Back</CardTitle>
-              <CardDescription className="text-sm">
-                Sign in to monitor publications, claim scholarly papers, and analyze campus research.
+              <CardTitle className="text-2xl font-bold text-foreground">Welcome Back</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">
+                Sign in to monitor publications, claim scholarly publications, and analyze campus research.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {/* Status Alert if account is pending */}
               {loginStatusAlert && (
-                <div className="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 text-xs text-amber-900">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="mb-4 p-3.5 bg-warning-soft border border-warning-border rounded-lg flex items-start gap-3 text-xs text-warning-foreground">
+                  <AlertCircle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-semibold text-amber-950">Account Status Notice</p>
-                    <p className="mt-0.5 text-amber-800 leading-relaxed">{loginStatusAlert.message}</p>
+                    <p className="font-semibold">Account Status Notice</p>
+                    <p className="mt-0.5 opacity-90 leading-relaxed">{loginStatusAlert.message}</p>
                   </div>
                 </div>
               )}
@@ -284,13 +309,13 @@ export function LoginScreen() {
               <form onSubmit={handleLogin} className="space-y-4">
                 {/* Email / Username Field */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-sm font-medium">Username / Instructor ID</Label>
+                  <Label htmlFor="email" className="text-sm font-medium text-foreground">Username / Instructor ID</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="email"
                       type="text"
-                      placeholder="e.g. INS-2024-001 or username"
+                      placeholder="e.g. ASIN-00001 or username"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="h-11 pl-10 text-sm"
@@ -302,10 +327,10 @@ export function LoginScreen() {
                 {/* Password Field */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+                    <Label htmlFor="password" className="text-sm font-medium text-foreground">Password</Label>
                   </div>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                       id="password"
                       type="password"
@@ -319,7 +344,7 @@ export function LoginScreen() {
                 </div>
 
                 {loginError && (
-                  <p className="text-xs text-red-600 font-medium bg-red-50 p-2.5 rounded border border-red-200" role="alert">
+                  <p className="text-xs text-danger-foreground font-medium bg-danger-soft p-2.5 rounded border border-danger-border" role="alert">
                     {loginError}
                   </p>
                 )}
@@ -329,7 +354,7 @@ export function LoginScreen() {
                   type="submit"
                   disabled={isLoading}
                   size="lg"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-sm font-semibold h-11"
+                  className="w-full bg-brand hover:bg-brand/90 text-white text-sm font-semibold h-11"
                 >
                   {isLoading ? (
                     <>
@@ -343,14 +368,14 @@ export function LoginScreen() {
               </form>
 
               {/* Researcher Onboarding & Invitation Request */}
-              <div className="mt-6 pt-4 border-t border-gray-100 space-y-3">
-                <div className="text-left bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 text-xs text-slate-600 space-y-2.5">
+              <div className="mt-6 pt-4 border-t border-border/70 space-y-3">
+                <div className="text-left bg-muted/50 border border-border rounded-xl p-3.5 text-xs text-muted-foreground space-y-2.5">
                   <div className="space-y-1">
-                    <p className="font-semibold text-slate-800 flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-blue-600" />
+                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-brand" />
                       Researcher Access
                     </p>
-                    <p className="text-[11px] leading-relaxed text-slate-500">
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
                       Researcher accounts are provisioned by invitation. If you are a PSU researcher and have not yet been invited by Research Coordinator Sir Rodelio M. Garin, you can ask for an invitation.
                     </p>
                   </div>
@@ -364,15 +389,15 @@ export function LoginScreen() {
                       setInviteError("");
                       setShowInviteModal(true);
                     }}
-                    className="w-full gap-2 text-xs font-semibold border-blue-200 text-blue-700 hover:bg-blue-50/80 bg-white h-9 shadow-2xs"
+                    className="w-full gap-2 text-xs font-semibold border-brand/40 text-brand hover:bg-brand/10 bg-card h-9 shadow-2xs"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>Ask for Invitation</span>
                   </Button>
                 </div>
 
-                <p className="text-[11px] text-center text-gray-400">
-                  Default administrator: <span className="font-mono font-medium text-gray-600">admin / admin</span>
+                <p className="text-[11px] text-center text-muted-foreground">
+                  Default administrator: <span className="font-mono font-medium text-foreground">admin / admin</span>
                 </p>
               </div>
             </CardContent>
@@ -390,7 +415,7 @@ export function LoginScreen() {
           backgroundImage: `url(${psuBuilding})`,
         }}
       >
-        <div className="absolute inset-0 bg-blue-900/65 flex items-center justify-center p-12">
+        <div className="absolute inset-0 bg-blue-900/65 dark:bg-slate-950/75 flex items-center justify-center p-12">
           <div className="text-white text-center max-w-lg space-y-4">
             <h1 className="text-4xl font-extrabold tracking-tight">
               Empowering Research Excellence
@@ -417,31 +442,31 @@ export function LoginScreen() {
       {/* ASK FOR INVITATION MODAL                                              */}
       {/* ===================================================================== */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-card text-foreground rounded-2xl shadow-xl border border-border max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
             {!inviteSubmitted ? (
               <>
-                <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                <div className="flex items-start justify-between gap-3 border-b border-border/70 pb-3">
                   <div>
-                    <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-                      <Send className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                      <Send className="w-4 h-4 text-brand" />
                       <span>Ask for System Invitation</span>
                     </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       Submit your credentials to request an invitation from Research Coordinator Sir Rodelio M. Garin.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowInviteModal(false)}
-                    className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                    className="text-muted-foreground hover:text-foreground p-1 rounded-lg"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
                 {inviteError && (
-                  <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg border border-red-200">
+                  <p className="text-xs text-danger-foreground bg-danger-soft p-2.5 rounded-lg border border-danger-border">
                     {inviteError}
                   </p>
                 )}
@@ -449,7 +474,7 @@ export function LoginScreen() {
                 <form onSubmit={handleRequestInvite} className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <Label htmlFor="reqFirstName" className="text-xs font-semibold">First Name *</Label>
+                      <Label htmlFor="reqFirstName" className="text-xs font-semibold text-foreground">First Name *</Label>
                       <Input
                         id="reqFirstName"
                         value={inviteForm.firstName}
@@ -461,7 +486,7 @@ export function LoginScreen() {
                     </div>
 
                     <div className="space-y-1">
-                      <Label htmlFor="reqLastName" className="text-xs font-semibold">Last Name *</Label>
+                      <Label htmlFor="reqLastName" className="text-xs font-semibold text-foreground">Last Name *</Label>
                       <Input
                         id="reqLastName"
                         value={inviteForm.lastName}
@@ -474,7 +499,7 @@ export function LoginScreen() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label htmlFor="reqMiddleInitial" className="text-xs font-semibold">Middle Initial</Label>
+                    <Label htmlFor="reqMiddleInitial" className="text-xs font-semibold text-foreground">Middle Initial</Label>
                     <Input
                       id="reqMiddleInitial"
                       value={inviteForm.middleInitial}
@@ -486,7 +511,7 @@ export function LoginScreen() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label htmlFor="reqEmail" className="text-xs font-semibold">Email Address *</Label>
+                    <Label htmlFor="reqEmail" className="text-xs font-semibold text-foreground">Email Address *</Label>
                     <Input
                       id="reqEmail"
                       type="email"
@@ -499,9 +524,9 @@ export function LoginScreen() {
                   </div>
 
                   <div className="space-y-1">
-                    <Label htmlFor="reqInstructorId" className="text-xs font-semibold">Instructor ID *</Label>
-                    <div className="flex items-center rounded-md border border-gray-200 bg-white focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 overflow-hidden h-9">
-                      <span className="px-3 h-full flex items-center bg-slate-100 border-r border-gray-200 text-xs font-mono font-bold text-slate-700 select-none shrink-0">
+                    <Label htmlFor="reqInstructorId" className="text-xs font-semibold text-foreground">Instructor ID *</Label>
+                    <div className="flex items-center rounded-md border border-border bg-input-background focus-within:ring-2 focus-within:ring-brand/25 focus-within:border-brand overflow-hidden h-9">
+                      <span className="px-3 h-full flex items-center bg-muted border-r border-border text-xs font-mono font-bold text-foreground select-none shrink-0">
                         ASIN-
                       </span>
                       <input
@@ -518,14 +543,14 @@ export function LoginScreen() {
                           })
                         }
                         placeholder="00000"
-                        className="w-full h-full px-3 text-xs font-mono text-gray-900 bg-transparent outline-none"
+                        className="w-full h-full px-3 text-xs font-mono text-foreground placeholder:text-muted-foreground bg-transparent outline-none"
                         required
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <Label htmlFor="reqScholarUrl" className="text-xs font-semibold">Google Scholar Link (If available)</Label>
+                    <Label htmlFor="reqScholarUrl" className="text-xs font-semibold text-foreground">Google Scholar Link (If available)</Label>
                     <Input
                       id="reqScholarUrl"
                       type="url"
@@ -536,7 +561,7 @@ export function LoginScreen() {
                     />
                   </div>
 
-                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
+                  <div className="pt-2 flex items-center justify-end gap-2 border-t border-border/70">
                     <Button
                       type="button"
                       variant="ghost"
@@ -550,7 +575,7 @@ export function LoginScreen() {
                       type="submit"
                       disabled={isSubmittingInvite}
                       size="sm"
-                      className="h-9 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5"
+                      className="h-9 text-xs font-semibold bg-brand hover:bg-brand/90 text-white gap-1.5"
                     >
                       {isSubmittingInvite ? (
                         <>
@@ -569,12 +594,12 @@ export function LoginScreen() {
               </>
             ) : (
               <div className="text-center py-4 space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
                   <CheckCircle2 className="w-6 h-6" />
                 </div>
-                <h4 className="text-base font-bold text-gray-900">Invitation Request Submitted!</h4>
-                <p className="text-xs text-gray-600 leading-relaxed max-w-sm mx-auto">
-                  Thank you! Your request has been forwarded to Research Coordinator Sir Rodelio M. Garin. Once approved, you will receive an official invitation link at <strong>{inviteForm.email}</strong> to activate your researcher profile.
+                <h4 className="text-base font-bold text-foreground">Invitation Request Submitted!</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-sm mx-auto">
+                  Thank you! Your request has been forwarded to Research Coordinator Sir Rodelio M. Garin. Once approved, you will receive an official invitation link at <strong className="text-foreground">{inviteForm.email}</strong> to activate your researcher profile.
                 </p>
                 <Button
                   type="button"
@@ -591,7 +616,7 @@ export function LoginScreen() {
                       scholarUrl: "",
                     });
                   }}
-                  className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white px-5 mt-2"
+                  className="h-9 text-xs bg-brand hover:bg-brand/90 text-white px-5 mt-2"
                 >
                   Done
                 </Button>

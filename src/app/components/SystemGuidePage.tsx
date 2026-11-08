@@ -386,6 +386,17 @@ const guestGuideCategories: GuideCategory[] = [
           "Clicking a publication's title or its 'Read Source' button opens the original journal page in a new browser tab so you can read the full study.",
       },
       {
+        label: "Theme Toggle Button (Light / Dark Mode)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-card text-xs font-medium text-foreground">
+            <Moon className="w-3.5 h-3.5 text-blue-400" />
+            <span>Dark</span>
+          </span>
+        ),
+        explanation:
+          "Toggles between Facebook-style Dark Mode and crisp Light Mode across the public portal and internal pages.",
+      },
+      {
         label: "Sign In Button (Top-Right Header)",
         visualReplica: (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
@@ -412,7 +423,7 @@ const guestGuideCategories: GuideCategory[] = [
       {
         label: "Back to Public Search Button",
         visualReplica: (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-slate-600 bg-slate-100 text-xs font-semibold">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-muted-foreground bg-muted text-xs font-semibold">
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Public Search</span>
           </span>
@@ -421,9 +432,20 @@ const guestGuideCategories: GuideCategory[] = [
           "Returns you immediately to the public search page if you want to continue browsing campus publications without signing in.",
       },
       {
+        label: "Theme Toggle Button (Light / Dark Mode)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-card text-xs font-medium text-foreground">
+            <Sun className="w-3.5 h-3.5 text-amber-500" />
+            <span>Light</span>
+          </span>
+        ),
+        explanation:
+          "Switches the Sign In screen and invitation modals between Light Mode and Facebook-style Dark Mode.",
+      },
+      {
         label: "Ask for Invitation Link",
         visualReplica: (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-brand/10 text-brand border border-brand/20 text-xs font-semibold">
             <span>Ask for Invitation</span>
           </span>
         ),
@@ -433,11 +455,11 @@ const guestGuideCategories: GuideCategory[] = [
       {
         label: "Locked ASIN-00000 Instructor ID Input",
         visualReplica: (
-          <div className="inline-flex items-center rounded-md border border-slate-300 overflow-hidden text-xs font-mono">
-            <span className="bg-slate-100 text-slate-700 font-bold px-2.5 py-1 border-r border-slate-300">
+          <div className="inline-flex items-center rounded-md border border-border overflow-hidden text-xs font-mono">
+            <span className="bg-muted text-foreground font-bold px-2.5 py-1 border-r border-border">
               ASIN-
             </span>
-            <span className="bg-white text-slate-500 px-2.5 py-1">00000</span>
+            <span className="bg-card text-muted-foreground px-2.5 py-1">00000</span>
           </div>
         ),
         explanation:
@@ -572,7 +594,7 @@ const researcherGuideCategories: GuideCategory[] = [
             <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-500/30 font-semibold">
               Faculty (BSIT)
             </Badge>
-            <Badge variant="outline" className="text-[10px] bg-slate-500/10 text-slate-700 border-slate-500/30 font-semibold">
+            <Badge variant="outline" className="text-[10px] bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/30 font-semibold">
               Non-Faculty
             </Badge>
           </div>
@@ -843,7 +865,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
             <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 border-blue-500/30 font-semibold">
               Faculty (BSIT)
             </Badge>
-            <Badge variant="outline" className="text-[10px] bg-slate-500/10 text-slate-700 border-slate-500/30 font-semibold">
+            <Badge variant="outline" className="text-[10px] bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/30 font-semibold">
               Non-Faculty
             </Badge>
             <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-700 border-amber-500/30 font-semibold">
@@ -1225,7 +1247,7 @@ export function SystemGuidePage() {
             }
             className="flex items-center gap-3 cursor-pointer group"
           >
-            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain" />
+            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain rounded-full" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-bold text-foreground tracking-tight group-hover:text-brand transition-colors">

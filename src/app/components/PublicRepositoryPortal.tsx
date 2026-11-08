@@ -24,6 +24,8 @@ import {
   ChevronRight,
   RefreshCw,
   HelpCircle,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
@@ -31,6 +33,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { getCurrentUser, isAuthenticated } from "../utils/researchStore";
 import { apiService, type ScholarSearchResult } from "../services/api.service";
+import { useTheme } from "../utils/themeContext";
 import { toast } from "sonner";
 
 const SDG_LIST = [
@@ -57,6 +60,8 @@ export function PublicRepositoryPortal() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
   const loggedIn = isAuthenticated();
+  const { resolvedTheme, setTheme } = useTheme();
+  const toggleTheme = () => setTheme(resolvedTheme === "dark" ? "light" : "dark");
 
   // Search Mode: "repository" (PSU Institutional Repository) vs "global" (Live Academic Scraper)
   const [searchMode, setSearchMode] = useState<"repository" | "global">("repository");
@@ -276,8 +281,30 @@ export function PublicRepositoryPortal() {
             </button>
           </div>
 
-          {/* TOP-RIGHT SIGN IN / DASHBOARD BUTTON */}
-          <div className="flex items-center gap-3">
+          {/* TOP-RIGHT THEME TOGGLE + SIGN IN / DASHBOARD BUTTON */}
+          <div className="flex items-center gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleTheme}
+              title={resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              aria-label={resolvedTheme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              className="h-8 px-2.5 gap-1.5 text-xs font-medium bg-card border-border/80 text-muted-foreground hover:text-foreground"
+            >
+              {resolvedTheme === "dark" ? (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-blue-400" />
+                  <span className="hidden sm:inline">Dark</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="hidden sm:inline">Light</span>
+                </>
+              )}
+            </Button>
+
             {loggedIn && currentUser ? (
               <Button
                 variant="outline"
@@ -390,7 +417,7 @@ export function PublicRepositoryPortal() {
                   value={selectedDept}
                   onChange={(e) => setSelectedDept(e.target.value)}
                   aria-label="Filter researches by department"
-                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card border border-border/80 text-foreground"
+                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground"
                 >
                   <option value="all">All Departments</option>
                   <option value="BSIT">BSIT (Information Technology)</option>
@@ -403,7 +430,7 @@ export function PublicRepositoryPortal() {
                   value={selectedSdg}
                   onChange={(e) => setSelectedSdg(e.target.value)}
                   aria-label="Filter researches by UN Sustainable Development Goal"
-                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card border border-border/80 text-foreground max-w-[180px] truncate"
+                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground max-w-[180px] truncate"
                 >
                   <option value="all">All UN SDG Goals</option>
                   {SDG_LIST.map((sdg) => (
@@ -418,7 +445,7 @@ export function PublicRepositoryPortal() {
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
                   aria-label="Sort research publications order"
-                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card border border-border/80 text-foreground"
+                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground"
                 >
                   <option value="citations">Highest Citations</option>
                   <option value="recent">Most Recent Year</option>
