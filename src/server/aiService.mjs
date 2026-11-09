@@ -15,7 +15,9 @@ if (fs.existsSync(rootEnvPath) && typeof process.loadEnvFile === 'function') {
 const GEMINI_MODELS = [
   'gemini-3.5-flash-lite',
   'gemini-3.5-flash',
+  'gemini-flash-lite-latest',
   'gemini-flash-latest',
+  'gemini-3.8-flash',
 ];
 
 function getApiKey() {
@@ -174,8 +176,35 @@ function routeQuestion(q, publications = []) {
   const s = q.toLowerCase().trim();
 
   // 1. Casual Greetings
-  if (/^(hi|hello|hey|good\s*(morning|afternoon|evening)|greetings)[\s!.,?]*$/i.test(s)) {
+  if (/^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings|kumusta|magandang\s*(araw|umaga|hapon|gabi))([\s!.,?]+(there|bot|ai|assistant|campus\s*ai)?)?[\s!.,?]*$/i.test(s)) {
     return 'greeting';
+  }
+
+  // System Overview / About the platform
+  if (/\b(what is this (system|website|portal|project|app|tool|platform)|what does this (system|website|portal|app) do|explain (this|the) (system|portal|project|website)|about (this|the) (system|portal|website)|what is psu research|tell me about (this|the) system)\b/i.test(s)) {
+    return 'system_overview';
+  }
+
+  // How to Claim / Add / Submit Publication
+  if (/\b(how (do|can) (i|we) (claim|add|submit|register|upload|import)|how to (claim|add|submit|register|upload|import)|claim (my|a|our)?\s*publication|add (my|a|our)?\s*publication|how does claiming work)\b/i.test(s)) {
+    return 'how_to_claim';
+  }
+
+  // Specific Researcher Inquiries / Profiles
+  const whoIsMatch = s.match(/\b(?:who is|tell me about|profile of|background of|about)\s+([a-z\s.'-]+)/i);
+  if (whoIsMatch) {
+    const rawTarget = whoIsMatch[1].replace(/\b(sir|dr|prof|ma'am|mr|ms|mrs)\b/gi, '').trim();
+    if (rawTarget.length >= 3 && !['this system', 'the system', 'campus ai', 'the portal', 'psu', 'psu asingan'].includes(rawTarget.toLowerCase())) {
+      return { route: 'researcher_profile', targetName: rawTarget };
+    }
+  }
+
+  const researcherQueryMatch = s.match(/\b(?:research(?:es)?|publications?|papers?|works?)\s+(?:of|by|for)\s+([a-z\s.'-]+)/i);
+  if (researcherQueryMatch) {
+    const rawTarget = researcherQueryMatch[1].replace(/\b(sir|dr|prof|ma'am|mr|ms|mrs)\b/gi, '').trim();
+    if (rawTarget.length >= 3 && !['this system', 'the system', 'campus ai', 'the portal', 'psu', 'psu asingan'].includes(rawTarget.toLowerCase())) {
+      return { route: 'researcher_profile', targetName: rawTarget };
+    }
   }
 
   // 2. Profile / Current User Queries
@@ -272,7 +301,86 @@ function handleRoutedQuestion(routeInfo, publications, meta) {
 
   switch (route) {
     case 'greeting':
-      return "Hello! I'm Campus AI for PSU Asingan. How can I help you today? You can ask me about our faculty researchers, publications, or how the system works.";
+      return "Hello! I am Campus AI for PSU Asingan. How can I help you today? You can ask me about our campus researchers, publications, JC3 points, or how the system works.";
+
+    case 'system_overview':
+      return `Welcome to the PSU Asingan Research Publication Tracking System!
+
+This platform is the official institutional repository and research intelligence portal for Pangasinan State University - Asingan Campus. Key capabilities include:
+
+1. Institutional Repository: Centralized tracking of published research authored by university researchers across all academic departments.
+2. Global Academic Search: Multi-engine scholarly search across Google Scholar, CrossRef, and OpenAlex with automated campus-priority ranking and duplicate prevention.
+3. Publication Claiming: 3-step workflow for researchers to claim publications using their Instructor ID (ASIN-00000) for Research Coordinator verification.
+4. UN SDG & CHED Impact Matrix: Automated classification across all 17 UN Sustainable Development Goals and Philippine CHED national priority disciplines.
+5. JC3 / KRA II Evaluator: Real-time DBM-CHED Joint Circular No. 3 (JC3) points and authorship contribution calculations.
+6. Accreditation & SUC Reports: Export-ready reports for CHED audits, SUC Leveling, and AACCUP accreditation cycles.
+7. Campus AI Assistant: Instant campus research insights and intelligent publication analysis.`;
+
+    case 'how_to_claim':
+      return `How to Claim Your Publication in 3 Easy Steps:
+
+1. Search for Your Work:
+   • Go to "Global Academic Search" (/search) or "Public Search" on the homepage.
+   • Search by your name (e.g., "Rodelio Garin" or "MJU Quibilan") or the publication title.
+
+2. Click "Claim Publication":
+   • On the search result card, click the "Claim" button.
+   • Enter your Instructor ID in the standard format (ASIN-00000). The prefix ASIN- is locked; enter your 5 assigned numeric digits.
+   • Specify your authorship role (e.g., Lead Author, Co-Author, or Corresponding Author).
+
+3. Research Coordinator Review:
+   • Your submission is sent to Research Coordinator Sir Rodelio M. Garin for institutional review.
+   • Once approved, it appears in your Researcher Profile and is factored into campus accreditation metrics and JC3 points.`;
+
+    case 'researcher_profile': {
+      const target = (routeInfo.targetName || '').toLowerCase().trim();
+      const targetClean = target.replace(/[^a-z0-9]/g, '');
+      const targetTokens = target.split(/\s+/).filter(t => t.length >= 3);
+
+      const matchingPubs = (publications || []).filter(p => {
+        const authStr = (Array.isArray(p.authors) ? p.authors.join(' ') : (p.authors || '')).toLowerCase();
+        const ownerStr = (p.owner_name || '').toLowerCase();
+        const combined = `${authStr} ${ownerStr}`;
+        if (targetTokens.length > 0 && targetTokens.every(t => combined.includes(t))) return true;
+        return combined.replace(/[^a-z0-9]/g, '').includes(targetClean);
+      });
+
+      const matchedResearcherName = (meta.researchersList || []).find(r => {
+        const rNorm = r.toLowerCase();
+        return targetTokens.length > 0 && targetTokens.every(t => rNorm.includes(t));
+      });
+
+      const displayName = matchedResearcherName
+        ? matchedResearcherName.split('(')[0].trim()
+        : (matchingPubs[0]?.owner_name || (routeInfo.targetName ? routeInfo.targetName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Researcher'));
+
+      if (matchingPubs.length === 0) {
+        return `I could not locate published records specifically registered under "${displayName}" in the verified campus repository yet.
+
+If you are looking for their research:
+1. Search their name in "Global Academic Search" (/search) to retrieve records from Google Scholar, CrossRef, or OpenAlex.
+2. If they are a university researcher, they can claim their publications using their Instructor ID (ASIN-00000).`;
+      }
+
+      const totalCitations = matchingPubs.reduce((sum, p) => sum + (Number(p.citations) || 0), 0);
+      const topPubs = [...matchingPubs].sort((a, b) => (Number(b.citations) || 0) - (Number(a.citations) || 0)).slice(0, 4);
+
+      const pubLines = topPubs.map((p, idx) => {
+        const authorsStr = Array.isArray(p.authors) ? p.authors.join(', ') : p.authors;
+        return `[Ref ${idx + 1}] "${p.title}" (${p.year})\n  • Authors: ${authorsStr}\n  • Citations: ${p.citations || 0} | JC3 Base: ${p.jc3_points || 10.0} pts`;
+      }).join('\n\n');
+
+      return `Researcher Profile: ${displayName}
+
+• Campus Affiliation: Pangasinan State University - Asingan Campus
+• Indexed Publications: ${matchingPubs.length} research paper${matchingPubs.length > 1 ? 's' : ''} on record
+• Total Citations: ${totalCitations} citation${totalCitations !== 1 ? 's' : ''}
+
+Key Publications on Record:
+${pubLines}
+
+You can view full details or evaluate JC3 point sharing for any of these papers in the Research Inspector Drawer.`;
+    }
 
     case 'specific_paper_points': {
       const p = matchedPaper;
@@ -777,10 +885,34 @@ How may I assist you with our system or research repository today?`,
   // Agent 1: code-only router for fast, 100% accurate, specific answers
   const route = routeQuestion(trimmedQ, publications || []);
   if (route !== 'paper') {
-    const matchedPaper = typeof route === 'object' && route.paper ? route.paper : null;
+    let citedPapers = [];
+    if (typeof route === 'object' && route.paper) {
+      citedPapers = [route.paper];
+    } else if (typeof route === 'object' && route.route === 'researcher_profile') {
+      const target = (route.targetName || '').toLowerCase().trim();
+      const targetClean = target.replace(/[^a-z0-9]/g, '');
+      const targetTokens = target.split(/\s+/).filter(t => t.length >= 3);
+      const matchingPubs = (publications || []).filter(p => {
+        const authStr = (Array.isArray(p.authors) ? p.authors.join(' ') : (p.authors || '')).toLowerCase();
+        const ownerStr = (p.owner_name || '').toLowerCase();
+        const combined = `${authStr} ${ownerStr}`;
+        if (targetTokens.length > 0 && targetTokens.every(t => combined.includes(t))) return true;
+        return combined.replace(/[^a-z0-9]/g, '').includes(targetClean);
+      }).slice(0, 4);
+
+      citedPapers = matchingPubs.map((p, idx) => ({
+        id: p.id,
+        refId: idx + 1,
+        title: p.title,
+        authors: Array.isArray(p.authors) ? p.authors.join(', ') : p.authors,
+        year: p.year,
+        journal: p.journal || 'PSU Archive',
+      }));
+    }
+
     return {
       answer: handleRoutedQuestion(route, publications || [], systemMetadata),
-      citedPapers: matchedPaper ? [matchedPaper] : [],
+      citedPapers,
       source: 'database',
     };
   }
@@ -900,73 +1032,97 @@ USER QUESTION: "${trimmedQ}"`;
       source: getLastProvider(),
     };
   } catch (err) {
-    console.warn('[askCampusIntelligence] Gemini failed, using local synthesis:', err.message);
+    console.warn('[askCampusIntelligence] LLM offline or unconfigured, using zero-key Local RAG engine:', err.message);
 
     const qLower = trimmedQ.toLowerCase();
-    const notice = '(Note: the AI service is temporarily unavailable, so this is a basic automated answer.)';
 
-    // Counts / researcher listing from real system metadata
-    if (/\b(how many|count|number of|total)\b/.test(qLower) || /\b(researchers?|faculty|authors?)\b/.test(qLower) && /\b(who|list|registered|currently)\b/.test(qLower)) {
+    // 1. Counts / researcher listing from real system metadata
+    if (/\b(how many|count|number of|total)\b/.test(qLower) || (/\b(researchers?|faculty|authors?)\b/.test(qLower) && /\b(who|list|registered|currently)\b/.test(qLower))) {
       const list = systemMetadata.researchersList || [];
       return {
-        answer: `Total Approved Publications: ${systemMetadata.totalPublications || publications.length}\nTotal Registered Researchers: ${systemMetadata.totalResearchers ?? list.length}\nTotal Citations: ${systemMetadata.totalCitations || 0}${list.length ? '\nRegistered Researchers: ' + list.join('; ') : ''}\n\n${notice}`,
+        answer: `Total Approved Publications: ${systemMetadata.totalPublications || publications.length}\nTotal Registered Researchers: ${systemMetadata.totalResearchers ?? list.length}\nTotal Citations: ${systemMetadata.totalCitations || 0}${list.length ? '\nRegistered Researchers: ' + list.join('; ') : ''}`,
         citedPapers: [],
-        source: 'heuristic',
+        source: 'local-rag',
       };
     }
 
-    // Check if question asks about what is going on in system
+    // 2. Check if question asks about what is going on in system
     if (qLower.includes('going on') || qLower.includes('system status') || qLower.includes('overview of system')) {
       return {
-        answer: `Current Status of the PSU Asingan Research Publication Tracking System:\n\n• Total Publications on File: ${publications.length} verified research papers.\n• Faculty Researchers: Registered faculty members actively tracking academic outputs.\n• Primary Research Pillars: Leading contributions in SDG 4 (Quality Education: STEM and mathematics pedagogy), SDG 9 (Industry & Innovation), SDG 8 (Decent Work), and SDG 3 (Good Health & Well-being).\n• Institutional Readiness: SUC Leveling, AACCUP accreditation, and DBM-CHED JC3 evaluation metrics are actively monitored with automated citation tracking and KRA II point calculations.`,
+        answer: `Current Status of the PSU Asingan Research Publication Tracking System:\n\n• Total Publications on File: ${publications.length} verified research papers.\n• University Researchers: Registered researchers actively tracking academic outputs.\n• Primary Research Pillars: Leading contributions in SDG 4 (Quality Education: STEM and mathematics pedagogy), SDG 9 (Industry & Innovation), SDG 8 (Decent Work), and SDG 3 (Good Health & Well-being).\n• Institutional Readiness: SUC Leveling, AACCUP accreditation, and DBM-CHED JC3 evaluation metrics are actively monitored with automated citation tracking and KRA II point calculations.`,
         citedPapers: [],
-        source: 'heuristic',
+        source: 'local-rag',
       };
     }
 
-    // Check if question asks what a feature does
+    // 3. Check if question asks what a feature does
     if (qLower.includes('what does this do') || qLower.includes('what does the') || qLower.includes('how does')) {
       return {
-        answer: `System Features Guide:\n\n1. Google Scholar Search & Auto-Caching: Enables searching published literature, automatically caching records locally in SQLite, and preventing duplicate imports through title normalization.\n2. UN SDG Impact Matrix: Utilizes AI to categorize campus publications across all 17 United Nations Sustainable Development Goals and Philippine CHED priorities.\n3. Research Inspector Drawer: Evaluates citation trends, JC3 Points (KRA II), and verifies academic journal indexing.\n4. Dynamic Researcher Directory: Tracks individual faculty outputs, citation sums, and co-authorship records.`,
+        answer: `System Features Guide:\n\n1. Global Academic Search: Multi-engine scholarly search across Google Scholar, CrossRef, and OpenAlex with automated campus-priority ranking and duplicate prevention.\n2. UN SDG Impact Matrix: Automatically categorizes campus publications across all 17 United Nations Sustainable Development Goals and Philippine CHED priorities.\n3. Research Inspector Drawer: Evaluates citation trends, JC3 Points (KRA II), and verifies academic journal indexing.\n4. Dynamic Researcher Directory: Tracks individual researcher outputs, citation sums, and co-authorship records.`,
         citedPapers: [],
-        source: 'heuristic',
+        source: 'local-rag',
       };
     }
 
-    // Local fallback: keyword-score papers against the question
-    const stop = new Set(['the', 'what', 'does', 'about', 'talk', 'study', 'this', 'that', 'with', 'from', 'using', 'and', 'for', 'are', 'how', 'who', 'research', 'paper']);
+    // 4. Local RAG Retrieval & Synthesis
+    const stop = new Set(['the', 'what', 'does', 'about', 'talk', 'study', 'this', 'that', 'with', 'from', 'using', 'and', 'for', 'are', 'how', 'who', 'which', 'research', 'paper', 'papers', 'tell', 'explain', 'summary', 'summarize', 'there', 'their', 'can', 'you']);
     const words = qLower.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !stop.has(w));
-    const scored = publications
-      .map(p => {
-        const hay = `${p.title || ''} ${p.abstract || ''}`.toLowerCase();
-        return { p, score: words.filter(w => hay.includes(w)).length };
-      })
-      .filter(s => s.score >= Math.max(1, Math.ceil(words.length / 3)))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
 
-    if (scored.length === 0) {
+    const scored = (publications || [])
+      .map(p => {
+        const titleStr = (p.title || '').toLowerCase();
+        const authStr = (Array.isArray(p.authors) ? p.authors.join(' ') : (p.authors || '')).toLowerCase();
+        const absStr = (p.abstract || '').toLowerCase();
+        const sdgStr = (typeof p.sdg_tags === 'string' ? p.sdg_tags : JSON.stringify(p.sdg_tags || '')).toLowerCase();
+
+        let score = 0;
+        for (const w of words) {
+          if (titleStr.includes(w)) score += 4;
+          if (authStr.includes(w)) score += 3;
+          if (sdgStr.includes(w)) score += 2;
+          if (absStr.includes(w)) score += 1;
+        }
+        return { p, score };
+      })
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+
+    if (scored.length > 0) {
+      const fallbackCited = scored.map(({ p }, i) => ({
+        id: p.id,
+        refId: i + 1,
+        title: p.title,
+        authors: Array.isArray(p.authors) ? p.authors.join(', ') : p.authors,
+        year: p.year,
+        journal: p.journal || 'PSU Archive',
+      }));
+
+      const lines = scored.map(({ p }, i) => {
+        const auths = Array.isArray(p.authors) ? p.authors.join(', ') : p.authors;
+        const abs = p.abstract ? `\n   Focus: ${p.abstract.slice(0, 220)}...` : '';
+        return `[Ref ${i + 1}] "${p.title}" (${p.year})\n   • Authors: ${auths}\n   • Journal: ${p.journal || 'PSU Archive'} | Citations: ${p.citations || 0} | JC3: ${p.jc3_points || 10.0} pts${abs}`;
+      });
+
       return {
-        answer: `I couldn't find a matching publication for that question, and the AI service is temporarily unavailable. Please try again shortly or rephrase using keywords from the paper's title.\n\n${notice}`,
-        citedPapers: [],
-        source: 'heuristic',
+        answer: `Based on the PSU Asingan academic repository, here are the most relevant publications matching your query:\n\n${lines.join('\n\n')}\n\nYou can inspect full citation metrics, co-authorship shares, and JC3 points for any of these papers in the Research Inspector Drawer.`,
+        citedPapers: fallbackCited,
+        source: 'local-rag',
       };
     }
 
-    const fallbackCited = scored.map(({ p }, i) => ({
-      id: p.id,
-      refId: i + 1,
-      title: p.title,
-      authors: p.authors,
-      year: p.year,
-      journal: p.journal || 'PSU Archive',
-    }));
-
-    const lines = scored.map(({ p }, i) => `[Ref ${i + 1}] "${p.title}" (${p.year}) by ${Array.isArray(p.authors) ? p.authors.join(', ') : p.authors}${p.abstract ? '\nAbstract: ' + p.abstract.slice(0, 300) : ''}`);
+    // 5. Broad Conceptual / Topic Query with zero direct matches
     return {
-      answer: `Closest matching publications:\n\n${lines.join('\n\n')}\n\n${notice}`,
-      citedPapers: fallbackCited,
-      source: 'heuristic',
+      answer: `While there are no specific publications strictly matching "${trimmedQ}" in the PSU Asingan repository at this time, our campus actively conducts research across several key domains:
+
+• Educational Innovation & Pedagogy (SDG 4): Mathematics education, modular instruction, and assistive learning technologies.
+• Agricultural Sciences & Food Systems (SDG 2): Crop yield optimization, rice farming technology, and regional agricultural sustainability.
+• Applied Computing & Information Systems (SDG 9): Mobile learning applications, educational tools, and institutional automation.
+• Community Development & Socio-Economics (SDG 8): Tracer studies, workforce readiness, and micro-enterprise growth.
+
+To discover or index related literature, you can use "Global Academic Search" (/search) to query Google Scholar, CrossRef, and OpenAlex, or claim relevant publications using your Instructor ID (ASIN-00000).`,
+      citedPapers: [],
+      source: 'local-rag',
     };
   }
 }

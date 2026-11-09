@@ -51,7 +51,7 @@ const SPECIFIC_SUGGESTIONS: SpecificPrompt[] = [
     category: "System Activity",
     badge: "Repository Status",
     badgeColor: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
-    statement: "How many research publications and faculty profiles are currently tracked in our system?",
+    statement: "How many research publications and researcher profiles are currently tracked in our system?",
   },
   {
     id: "sys-dedup",
@@ -606,7 +606,7 @@ export function FloatingAskAIBubble() {
                           Strict Scope & Supported Topics:
                         </p>
                         <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
-                          <li><strong>System Activity:</strong> Real-time repository metrics, active faculty, recent imports</li>
+                          <li><strong>System Activity:</strong> Real-time repository metrics, active researchers, recent imports</li>
                           <li><strong>System Features:</strong> Google Scholar claiming, deduplication guard, SDG matrix</li>
                           <li><strong>Research Purposes:</strong> Academic clusters, institutional impact, SDG alignment</li>
                           <li><strong>Specific Research:</strong> Paper summaries, methodology, authors, citations</li>
@@ -722,7 +722,7 @@ export function FloatingAskAIBubble() {
                 <div className="px-3 py-1.5 bg-muted/10 border-t border-border/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[10px]">
                   <span className="text-muted-foreground shrink-0">Quick ask:</span>
                   <button
-                    onClick={() => handleSendMessage("How many research publications and faculty profiles are currently tracked in our system?")}
+                    onClick={() => handleSendMessage("How many research publications and researcher profiles are currently tracked in our system?")}
                     className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
                   >
                     System Status

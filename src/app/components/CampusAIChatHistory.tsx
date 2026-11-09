@@ -606,11 +606,11 @@ ${session.messages
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   <button
-                    onClick={() => handleNewQuestionInBubble("How many research publications and faculty profiles are currently tracked in our system?")}
+                    onClick={() => handleNewQuestionInBubble("How many research publications and researcher profiles are currently tracked in our system?")}
                     className="p-2.5 rounded-xl border border-border/60 bg-card hover:bg-muted/40 hover:border-emerald-500/40 text-left text-xs transition-colors flex items-center justify-between group"
                   >
                     <span className="text-foreground group-hover:text-emerald-600">
-                      How many research publications and faculty profiles are tracked?
+                      How many research publications and researcher profiles are tracked?
                     </span>
                     <ArrowRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-emerald-600 shrink-0" />
                   </button>

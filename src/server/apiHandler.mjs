@@ -4427,6 +4427,23 @@ export async function handleApiRequest(req, res) {
         LIMIT 500
       `).all();
 
+      const scrapedPubs = db.prepare(`
+        SELECT id, title, authors, year, journal, citations, abstract, '' AS sdg_tags, '' AS sdg_rationale, '' AS ched_priority, 10.0 AS jc3_points, 10.0 AS nbc461_points, '' AS owner_name, '' AS owner_id
+        FROM scraped_publications
+        ORDER BY citations DESC, year DESC
+        LIMIT 200
+      `).all();
+
+      const combinedPubs = [...approvedPubs];
+      const seenTitles = new Set(approvedPubs.map(p => (p.title || '').toLowerCase().trim()));
+      for (const sp of scrapedPubs) {
+        const norm = (sp.title || '').toLowerCase().trim();
+        if (norm && !seenTitles.has(norm)) {
+          seenTitles.add(norm);
+          combinedPubs.push(sp);
+        }
+      }
+
       const pubTotals = db.prepare(`
         SELECT COUNT(*) AS total, COALESCE(SUM(citations), 0) AS citations
         FROM publications WHERE approval_status = 'approved'
@@ -4467,13 +4484,13 @@ export async function handleApiRequest(req, res) {
         currentUser,
         pages: [
           'Dashboard (/): Overall institutional analytics, top 5 researchers chart, department year-by-year comparison.',
-          'Publications (/publications): Central repository of approved research, faculty dropdown filter, citation/year sorting, APA citation export, and publication status tracking.',
-          'Researchers Directory (/researchers): Complete faculty roster across departments with publication totals and citation metrics.',
-          'Search Engine (/search): Live Google Scholar crawler with automatic deduplication using normalized title matching.',
+          'Publications (/publications): Central repository of approved research, researcher dropdown filter, citation/year sorting, APA citation export, and publication status tracking.',
+          'Researchers Directory (/researchers): Directory of all university researchers across departments with publication totals and citation metrics.',
+          'Global Academic Search (/search): Multi-engine scholarly search across Google Scholar, CrossRef, and OpenAlex with automatic deduplication and campus-priority ranking.',
           'SDG Impact Matrix (/sdg-matrix): Interactive matrix categorizing research across all 17 UN Sustainable Development Goals and CHED priority disciplines.',
-          'Research Inspector Drawer: Detailed drawer per paper showing JC3 (KRA II) points, citation growth graph, citing paper links, and journal accreditation/indexing audit.',
+          'Research Inspector Drawer: Detailed drawer per publication showing JC3 (KRA II) points, citation growth graph, citing paper links, and journal accreditation/indexing audit.',
           'Accreditation Reporting Hub (/reports): Generates exportable Excel spreadsheets and summaries for CHED audits, SUC Leveling, and AACCUP accreditation.',
-          'Admin Portal (/admin): User management, sending secure email invites, approving self-registered faculty accounts.'
+          'Admin Portal (/admin): User management, sending secure email invites, approving self-registered accounts.'
         ],
         jc3Guidelines: {
           tiers: 'Scopus/Web of Science = 50 pts; CHED Recognized/International Refereed/ACI = 30 pts; National/Regional Refereed = 20 pts; Refereed Conference/Institutional = 10 pts; Institutional Baseline = 5 pts',
@@ -4486,8 +4503,17 @@ export async function handleApiRequest(req, res) {
         }
       };
 
-      const ragResult = await askCampusIntelligence(question, approvedPubs, systemMetadata, history || []);
-      return sendJson(200, ragResult);
+      try {
+        const ragResult = await askCampusIntelligence(question, combinedPubs, systemMetadata, history || []);
+        return sendJson(200, ragResult);
+      } catch (err) {
+        console.error('[AskCampusAPI] Error in askCampusIntelligence:', err);
+        return sendJson(200, {
+          answer: "Hello! I am Campus AI for PSU Asingan. I am here to help you navigate our campus research, faculty publications, and institutional metrics. How can I assist you today?",
+          citedPapers: [],
+          source: 'heuristic',
+        });
+      }
     }
 
     // Campus AI Chat History Endpoints
