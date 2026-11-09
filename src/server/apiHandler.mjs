@@ -44,6 +44,34 @@ import {
 export { matchesResearcher };
 
 /**
+ * Automatically recalculate publication counts and citation sums for all researchers
+ * using strict verification, ensuring honest, deduplicated metrics across the platform.
+ */
+export function recalculateAllResearcherStats(dbInstance) {
+  if (!dbInstance) return;
+  try {
+    const researchers = dbInstance.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
+    const allApproved = dbInstance.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
+
+    for (const r of researchers) {
+      const matching = allApproved.filter((p) => matchesResearcher(p, r));
+      const pubCount = matching.length;
+      const citCount = matching.reduce((sum, p) => sum + (p.citations || 0), 0);
+      if (r.total_publications !== pubCount || r.total_citations !== citCount) {
+        dbInstance.prepare(`
+          UPDATE researchers
+          SET total_publications = ?, total_citations = ?
+          WHERE id = ?
+        `).run(pubCount, citCount, r.id);
+        console.log(`[Citation Audit] Recalibrated ${r.name} (${r.instructor_id}): ${r.total_publications} -> ${pubCount} pubs, ${r.total_citations} -> ${citCount} citations.`);
+      }
+    }
+  } catch (err) {
+    console.warn('[Citation Audit Error]:', err.message);
+  }
+}
+
+/**
  * Synchronize publication count and citation sum for a researcher
  */
 export function updateResearcherStats(dbInstance, researcherId) {

@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso, executeBatchOnTurso } from './turso.mjs';
+import { matchesResearcher } from './authHelper.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -385,6 +386,34 @@ export function initDatabase() {
     );
     console.log('[Database] Default admin user initialized (admin / admin).');
   }
+  // Call on startup audit to recalibrate any inflated citation counts
+  auditAndSyncResearcherCitations();
+}
+
+/**
+ * Recalculate publication counts and citation sums for all researchers using strict attribution
+ */
+export function auditAndSyncResearcherCitations() {
+  try {
+    const researchers = db.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
+    const allApproved = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
+
+    for (const r of researchers) {
+      const matching = allApproved.filter((p) => matchesResearcher(p, r));
+      const pubCount = matching.length;
+      const citCount = matching.reduce((sum, p) => sum + (p.citations || 0), 0);
+      if (r.total_publications !== pubCount || r.total_citations !== citCount) {
+        db.prepare(`
+          UPDATE researchers
+          SET total_publications = ?, total_citations = ?
+          WHERE id = ?
+        `).run(pubCount, citCount, r.id);
+        console.log(`[Citation Audit] Recalibrated ${r.name} (${r.instructor_id}): ${r.total_publications} -> ${pubCount} pubs, ${r.total_citations} -> ${citCount} citations.`);
+      }
+    }
+  } catch (err) {
+    console.warn('[Citation Audit Error]:', err.message);
+  }
 }
 
 // Call on import to guarantee schema existence
@@ -397,6 +426,7 @@ const tursoSyncWithTimeout = async () => {
   const syncTask = (async () => {
     await initTursoSchema();
     await rehydrateFromTurso(db, originalPrepare);
+    auditAndSyncResearcherCitations();
   })();
 
   const timeoutTask = new Promise((resolve) => {

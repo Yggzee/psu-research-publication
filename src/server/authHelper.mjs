@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
 
 /**
- * Check if a publication belongs to a researcher (by instructorId, user id, full name, or surname/initial in authors)
+ * Check if a publication belongs to a researcher with high-precision verification:
+ * 1. Strict explicit ownership by ID (instructor_id, researcher id, or user_id).
+ * 2. If unassigned or admin-managed, requires tokenized full-name or verified initials
+ *    matching (never matching solely on surname or loose single-letter substrings).
  */
 export function matchesResearcher(p, r) {
   if (!r || !p) return false;
@@ -10,6 +13,7 @@ export function matchesResearcher(p, r) {
   const rId = (r.id || '').trim().toLowerCase();
   const rUserId = (r.user_id || r.userId || '').trim().toLowerCase();
 
+  // 1. Strict Explicit Ownership Match
   // If the publication has an explicit researcher owner_id assigned (not generic 'admin'/'instructor'),
   // strictly tie the publication to that assigned researcher.
   if (pOwnerId && pOwnerId !== 'admin' && pOwnerId !== 'instructor') {
@@ -20,14 +24,33 @@ export function matchesResearcher(p, r) {
     );
   }
 
-  const rName = (r.name || '').trim().toLowerCase();
-  const rFirst = (r.first_name || r.firstName || '').trim().toLowerCase();
-  const rLast = (r.last_name || r.lastName || '').trim().toLowerCase();
-  const pOwnerName = (p.owner_name || p.ownerName || '').trim().toLowerCase();
+  // Normalize researcher names for token-level matching
+  const rName = (r.name || '').trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+  const rFirst = (r.first_name || r.firstName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rLast = (r.last_name || r.lastName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rMiddle = (r.middle_initial || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  if (pOwnerName) {
-    if (pOwnerName === rName) return true;
-    if (rLast && rLast.length >= 3 && pOwnerName.includes(rLast)) return true;
+  if (!rLast || rLast.length < 2) return false;
+
+  const pOwnerName = (p.owner_name || p.ownerName || '').trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+
+  // Exact full name match on owner_name
+  if (pOwnerName && pOwnerName === rName) {
+    return true;
+  }
+
+  // If pOwnerName is present and doesn't match full name, ensure it doesn't belong to a different person
+  if (pOwnerName && pOwnerName !== 'admin' && pOwnerName !== 'instructor') {
+    const ownerTokens = pOwnerName.split(' ').filter(Boolean);
+    if (ownerTokens.includes(rLast)) {
+      if (rFirst && ownerTokens.includes(rFirst)) return true;
+      if (rFirst && ownerTokens.some((t) => t.length > 2 && t !== rFirst && !rName.includes(t))) {
+        // Explicitly belongs to someone else (e.g., "Maria Moreno" vs "Julius Moreno")
+        return false;
+      }
+    } else {
+      return false;
+    }
   }
 
   let authors = [];
@@ -38,13 +61,45 @@ export function matchesResearcher(p, r) {
   }
 
   for (const a of authors) {
-    const aLower = (typeof a === 'string' ? a : (a?.name || '')).trim().toLowerCase();
-    if (!aLower) continue;
-    if (aLower === rName || aLower.includes(rName) || rName.includes(aLower)) return true;
-    if (rLast && rLast.length >= 3 && aLower.includes(rLast)) {
-      const firstInitial = rFirst[0];
-      if (!firstInitial || aLower.includes(firstInitial) || aLower.replace(/[^a-z]/g, '') === rLast) {
-        return true;
+    const raw = (typeof a === 'string' ? a : (a?.name || '')).trim().toLowerCase();
+    if (!raw) continue;
+    const clean = raw.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!clean) continue;
+
+    // 1. Exact full-name match
+    if (clean === rName) return true;
+
+    const tokens = clean.split(' ').filter(Boolean);
+    // Must contain the exact last name token as a distinct word boundary
+    if (!tokens.includes(rLast)) continue;
+
+    // Check if full first name matches as a token (e.g. "Julius" in "Julius Moreno" or "Moreno, Julius")
+    if (rFirst && tokens.includes(rFirst)) {
+      return true;
+    }
+
+    // Check academic initial formats: "J. O. Moreno" or "Moreno, J. O."
+    if (rFirst) {
+      const fInit = rFirst[0];
+      const otherTokens = tokens.filter((t) => t !== rLast);
+
+      // Reject conflicting full first names (e.g. "Juan Moreno", "Jorge Moreno" must NEVER match "Julius")
+      const hasConflictingFirstName = otherTokens.some((t) => t.length > 2 && t !== rFirst && !rName.includes(t));
+      if (hasConflictingFirstName) {
+        continue;
+      }
+
+      // Check initials match
+      const matchedFirstInit = otherTokens.some((t) => t === fInit || t.startsWith(fInit));
+      if (matchedFirstInit) {
+        if (rMiddle) {
+          // If researcher has a middle initial, verify it matches
+          const matchedMiddle = otherTokens.some((t) => t === rMiddle || t === `${fInit}${rMiddle}` || t.endsWith(rMiddle));
+          if (matchedMiddle) return true;
+        } else if (otherTokens.length === 1 && otherTokens[0] === fInit) {
+          // Single initial e.g. "Moreno, J." when researcher has no middle initial recorded
+          return true;
+        }
       }
     }
   }
