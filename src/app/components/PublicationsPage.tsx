@@ -344,7 +344,7 @@ export function PublicationsPage() {
 
       {/* Filter Ribbon Card */}
       <Card className="border-border/60 shadow-xs">
-        <CardContent className="p-4">
+        <CardContent className="p-3.5 sm:p-4 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
             {/* Search */}
             <div className="md:col-span-4 relative">
@@ -353,7 +353,7 @@ export function PublicationsPage() {
                 placeholder="Search publications by title, author, or journal venue..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-10 text-xs"
+                className="pl-9 h-9 sm:h-10 text-xs"
               />
             </div>
 

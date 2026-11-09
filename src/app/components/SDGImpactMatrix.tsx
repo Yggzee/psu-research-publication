@@ -403,8 +403,8 @@ export function SDGImpactMatrix() {
               </div>
 
               {/* Quick jump */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] text-muted-foreground mr-1">Active:</span>
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 scroll-smooth max-w-full">
+                <span className="text-[11px] text-muted-foreground mr-1 shrink-0">Active:</span>
                 {sdgsWithPapers.map((g) => {
                   const color = SDG_COLORS[g.sdg] || "#0038A8";
                   const isSelected =
@@ -418,7 +418,7 @@ export function SDGImpactMatrix() {
                         setSelectedSDG(g.fullLabel);
                         setActiveTab("evidence");
                       }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-all border ${
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-all border shrink-0 cursor-pointer ${
                         isSelected
                           ? "bg-foreground text-background border-foreground shadow-2xs"
                           : "bg-muted/40 hover:bg-muted text-foreground border-border/60"

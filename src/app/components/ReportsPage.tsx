@@ -480,7 +480,7 @@ export function ReportsPage() {
                             ) : (
                                 <>
                                     <Download className="h-4 w-4 mr-2" />
-                                    <span>Export {selectedResearchersObjects.length} Faculty Excel Reports (.zip)</span>
+                                    <span>Export {selectedResearchersObjects.length} Researcher Excel Reports (.zip)</span>
                                 </>
                             )}
                         </Button>
@@ -500,7 +500,7 @@ export function ReportsPage() {
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <StatCard
-                            label="Total Faculty"
+                            label="Total Researchers"
                             value={totalResearchers}
                             subtitle="Active researchers"
                             icon={Users}
@@ -518,9 +518,9 @@ export function ReportsPage() {
                             icon={TrendingUp}
                         />
                         <StatCard
-                            label="Mean Faculty Output"
+                            label="Mean Researcher Output"
                             value={(totalPublications / safeResearchers).toFixed(1)}
-                            subtitle="Papers / researcher"
+                            subtitle="Publications / researcher"
                             icon={Award}
                         />
                     </div>
@@ -535,13 +535,13 @@ export function ReportsPage() {
                         <CardContent>
                             <div className="divide-y divide-border/60 text-xs">
                                 <div className="flex items-center justify-between py-3">
-                                    <span className="text-muted-foreground font-medium">Average Citations per Faculty Member</span>
+                                    <span className="text-muted-foreground font-medium">Average Citations per Researcher</span>
                                     <span className="text-foreground font-bold font-mono text-sm">
                                         {(totalCitations / safeResearchers).toFixed(1)}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between py-3">
-                                    <span className="text-muted-foreground font-medium">Average Publications per Faculty Member</span>
+                                    <span className="text-muted-foreground font-medium">Average Publications per Researcher</span>
                                     <span className="text-foreground font-bold font-mono text-sm">
                                         {(totalPublications / safeResearchers).toFixed(1)}
                                     </span>
@@ -562,7 +562,7 @@ export function ReportsPage() {
             {selectedReport === "researcher" && (
                 <Card className="border-border/60 shadow-xs overflow-hidden">
                     <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-semibold">Faculty Researcher Output Roster</CardTitle>
+                        <CardTitle className="text-sm font-semibold">Researcher Productivity Directory</CardTitle>
                         <CardDescription className="text-xs">
                             Individual publication and citation counts tracked in database
                         </CardDescription>

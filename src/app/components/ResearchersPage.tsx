@@ -146,8 +146,42 @@ export function ResearchersPage() {
               )}
             </div>
 
-            {/* Filter and Mode Controls */}
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Mobile Touch-Friendly Swipeable Department Pills */}
+            <div className="flex sm:hidden items-center gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-1 px-1 scroll-smooth">
+              <button
+                type="button"
+                onClick={() => setSelectedDepartment("all")}
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                  selectedDepartment === "all"
+                    ? "bg-brand text-white font-semibold shadow-2xs"
+                    : "bg-muted/70 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All ({researchers.length})
+              </button>
+              {departments.map((dept) => {
+                const isSelected = selectedDepartment === dept;
+                const label = dept === "Non-Faculty" || dept === "Non Teaching" ? "Non-Faculty" : dept;
+                const count = researchers.filter((r) => r.department === dept).length;
+                return (
+                  <button
+                    key={dept}
+                    type="button"
+                    onClick={() => setSelectedDepartment(dept)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                      isSelected
+                        ? "bg-brand text-white font-semibold shadow-2xs"
+                        : "bg-muted/70 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Desktop Filter and Mode Controls */}
+            <div className="hidden sm:flex items-center gap-2 flex-wrap">
               {/* Department Dropdown */}
               <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
                 <SelectTrigger className="h-8 text-xs w-40">

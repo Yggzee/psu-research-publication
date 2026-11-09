@@ -253,21 +253,24 @@ export function PublicRepositoryPortal() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           
           {/* TOP-LEFT REPOSITORY METRICS COUNTER + SMALL ? GUIDE BUTTON */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-3 font-mono text-[11px] bg-muted/40 border border-border/60 px-3 py-1.5 rounded-lg">
-              <span className="flex items-center gap-1.5" title="Verified Publications">
-                <BookOpen className="w-3.5 h-3.5 text-brand" />
-                <strong className="text-foreground">{repoStats.totalPublications}</strong> Publications
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 font-mono text-[10px] sm:text-[11px] bg-muted/40 border border-border/60 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg overflow-x-auto no-scrollbar shrink">
+              <span className="flex items-center gap-1" title="Verified Publications">
+                <BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand shrink-0" />
+                <strong className="text-foreground">{repoStats.totalPublications}</strong>
+                <span className="hidden sm:inline"> Publications</span>
               </span>
               <span className="text-border">•</span>
-              <span className="flex items-center gap-1.5" title="Total Global Citations">
-                <Quote className="w-3.5 h-3.5 text-amber-500" />
-                <strong className="text-foreground">{repoStats.totalCitations}</strong> Citations
+              <span className="flex items-center gap-1" title="Total Global Citations">
+                <Quote className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 shrink-0" />
+                <strong className="text-foreground">{repoStats.totalCitations}</strong>
+                <span className="hidden sm:inline"> Citations</span>
               </span>
-              <span className="text-border">•</span>
-              <span className="flex items-center gap-1.5" title="Registered Researchers">
-                <GraduationCap className="w-3.5 h-3.5 text-blue-500" />
-                <strong className="text-foreground">{repoStats.totalResearchers}</strong> Researchers
+              <span className="text-border hidden sm:inline">•</span>
+              <span className="hidden sm:flex items-center gap-1" title="Registered Researchers">
+                <GraduationCap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-500 shrink-0" />
+                <strong className="text-foreground">{repoStats.totalResearchers}</strong>
+                <span className="hidden sm:inline"> Researchers</span>
               </span>
             </div>
             <button
@@ -344,18 +347,18 @@ export function PublicRepositoryPortal() {
           </p>
 
           {/* SEARCH MODE SWITCHER TOGGLE */}
-          <div className="inline-flex p-1 rounded-xl bg-muted/80 border border-border/80 shadow-2xs">
+          <div className="inline-flex flex-col sm:flex-row p-1 rounded-xl bg-muted/80 border border-border/80 shadow-2xs max-w-full">
             <button
               type="button"
               onClick={() => setSearchMode("repository")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center justify-center sm:justify-start gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all w-full sm:w-auto ${
                 searchMode === "repository"
                   ? "bg-background text-brand shadow-2xs border border-border/50"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Building2 className="w-3.5 h-3.5" />
-              <span>PSU Institutional Repository</span>
+              <Building2 className="w-3.5 h-3.5 shrink-0" />
+              <span><span className="hidden sm:inline">PSU Institutional </span>Repository</span>
               <Badge variant="secondary" className="text-[10px] h-4 px-1.5 font-mono">
                 {repoStats.totalPublications}
               </Badge>
@@ -364,14 +367,14 @@ export function PublicRepositoryPortal() {
             <button
               type="button"
               onClick={() => setSearchMode("global")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center justify-center sm:justify-start gap-2 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold transition-all w-full sm:w-auto ${
                 searchMode === "global"
                   ? "bg-background text-brand shadow-2xs border border-border/50"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              <Globe className="w-3.5 h-3.5" />
-              <span>Global Academic Search</span>
+              <Globe className="w-3.5 h-3.5 shrink-0" />
+              <span><span className="hidden sm:inline">Global </span>Academic Search</span>
               {isScraperLockedForPublic ? (
                 <Badge variant="outline" className="text-[9px] h-4 px-1 text-amber-600 border-amber-400">
                   Power Save

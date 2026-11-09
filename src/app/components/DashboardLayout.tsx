@@ -526,8 +526,8 @@ export function DashboardLayout() {
               }`}
             >
               <FileText className="w-5 h-5" />
-              <span className="text-[10px] mt-0.5">
-                {currentUser.role === "instructor" ? "My Work" : "Papers"}
+              <span className="text-[10px] mt-0.5 truncate max-w-[62px] text-center">
+                {currentUser.role === "instructor" ? "My Work" : "Publications"}
               </span>
               {location.pathname.startsWith("/dashboard/publications") && (
                 <span className="w-1 h-1 rounded-full bg-brand mt-0.5" />

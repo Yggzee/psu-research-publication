@@ -931,19 +931,19 @@ export function AdminPage() {
             title="Researchers"
             description="Active researchers officially recognized in the PSU Asingan tracking system"
             action={
-              <div className="flex items-center gap-2">
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:flex-initial">
                   <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-muted-foreground" />
                   <Input
                     value={rosterSearch}
                     onChange={(e) => setRosterSearch(e.target.value)}
                     placeholder="Search researchers..."
-                    className="pl-8 h-8 text-xs w-40 sm:w-56 bg-card"
+                    className="pl-8 h-8 text-xs w-full sm:w-56 bg-card"
                   />
                 </div>
 
                 <Select value={rosterDeptFilter} onValueChange={setRosterDeptFilter}>
-                  <SelectTrigger className="h-8 text-xs w-32">
+                  <SelectTrigger className="h-8 text-xs w-full sm:w-36">
                     <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
@@ -958,6 +958,40 @@ export function AdminPage() {
               </div>
             }
           >
+            {/* Mobile Touch-Friendly Swipeable Department Pills */}
+            <div className="flex sm:hidden items-center gap-1.5 overflow-x-auto no-scrollbar py-1 -mx-1 px-1 mb-3 scroll-smooth">
+              <button
+                type="button"
+                onClick={() => setRosterDeptFilter("all")}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                  rosterDeptFilter === "all"
+                    ? "bg-brand text-white font-semibold shadow-2xs"
+                    : "bg-muted/70 text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                All ({researchers.length})
+              </button>
+              {DEPARTMENTS.map((dept) => {
+                const isSelected = rosterDeptFilter === dept;
+                const label = dept === "Non-Faculty" ? "Non-Faculty" : dept;
+                const count = researchers.filter((r) => r.department === dept).length;
+                return (
+                  <button
+                    key={dept}
+                    type="button"
+                    onClick={() => setRosterDeptFilter(dept)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all shrink-0 cursor-pointer ${
+                      isSelected
+                        ? "bg-brand text-white font-semibold shadow-2xs"
+                        : "bg-muted/70 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
             {filteredResearchers.length === 0 ? (
               <EmptyState
                 icon={Users}
