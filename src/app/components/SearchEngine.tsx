@@ -26,6 +26,8 @@ import {
   Tag,
   Building2,
   Globe,
+  MapPin,
+  Clock,
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
@@ -37,37 +39,51 @@ import { apiService, type ScholarSearchResult, type ApifyTokenUsage } from "../s
 import { ApifyTokenManager } from "./ApifyTokenManager";
 import { toast } from "sonner";
 import { PageHeader, StatusBadge, Notice, SectionCard, EmptyState } from "./common";
+import { useAdminSearchStore } from "../utils/adminSearchStore";
 
 export function SearchEngine() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<ScholarSearchResult[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [storeState, searchStore] = useAdminSearchStore();
+  const {
+    searchQuery: storedQuery,
+    searchResults,
+    hasSearched,
+    isSearching,
+    isLoadingMore,
+    searchSource,
+    sourceLabel,
+    cacheNotice,
+    requiresApify,
+    captchaDetected,
+    currentPage,
+    totalAvailable,
+    hasMore,
+    lastUsedToken,
+    sessionTokensUsed,
+    assignedResearcherMap,
+  } = storeState;
+
+  const [searchQuery, setSearchQuery] = useState(storedQuery || "");
+
+  // Sync local input with store state when returning to tab
+  useEffect(() => {
+    if (storedQuery && !searchQuery) {
+      setSearchQuery(storedQuery);
+    }
+  }, [storedQuery]);
+
   const [facultyCount, setFacultyCount] = useState(0);
   const [claimedIds, setClaimedIds] = useState<string[]>([]);
-  const [cacheNotice, setCacheNotice] = useState<string | null>(null);
-  const [isFromCache, setIsFromCache] = useState(false);
-  const [requiresApify, setRequiresApify] = useState(false);
-  const [captchaDetected, setCaptchaDetected] = useState(false);
-  const [searchSource, setSearchSource] = useState<"cache" | "direct" | "apify" | "none" | null>(null);
-  const [sourceLabel, setSourceLabel] = useState<string>("");
   const [showTokenManager, setShowTokenManager] = useState(false);
   const [facultyNames, setFacultyNames] = useState<string[]>([]);
   const [registeredResearchers, setRegisteredResearchers] = useState<ManagedResearcher[]>([]);
-  const [assignedResearcherMap, setAssignedResearcherMap] = useState<Record<string, string>>({});
   const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
   const [tokenUsage, setTokenUsage] = useState<ApifyTokenUsage | null>(null);
   const [isLoadingTokenUsage, setIsLoadingTokenUsage] = useState(false);
   const [savedPublications, setSavedPublications] = useState<any[]>([]);
 
   // 10-paper pagination and Scraper Token feedback state
-  const [currentPage, setCurrentPage] = useState(0);
-  const [totalAvailable, setTotalAvailable] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [showMoreConfirmModal, setShowMoreConfirmModal] = useState(false);
   const [skipConfirmThisSession, setSkipConfirmThisSession] = useState(false);
-  const [lastUsedToken, setLastUsedToken] = useState<boolean | null>(null);
   const resultsTopRef = useRef<HTMLDivElement>(null);
 
   const currentUser = getCurrentUser() || { name: "Researcher", instructorId: "", role: "instructor" as const };
@@ -169,50 +185,8 @@ export function SearchEngine() {
     const q = queryToSearch.trim();
     if (!q) return;
 
-    setSearchQuery(q);
-    setIsSearching(true);
-    setHasSearched(true);
-    setCacheNotice(null);
-    setRequiresApify(false);
-    setCaptchaDetected(false);
-    setSearchSource(null);
-    setCurrentPage(0);
-    setHasMore(false);
-    setSearchResults([]);
-
-    const finalQuery = q;
-
     try {
-      const response = await apiService.searchGoogleScholar(finalQuery, { page: 0 });
-
-      if (response.publicScraperDisabled) {
-        toast.error(response.message || "Global academic live search is currently restricted.");
-        setCacheNotice(response.message || "Global academic live search is restricted.");
-        setSearchResults([]);
-        return;
-      }
-
-      if (response.requiresApify) {
-        setRequiresApify(true);
-        setCaptchaDetected(true);
-        setSearchSource("none");
-        setSearchResults([]);
-        return;
-      }
-
-      setSearchResults(response.results);
-      setIsFromCache(Boolean(response.fromCache));
-      setSearchSource(response.searchSource || "direct");
-      setSourceLabel(response.sourceLabel || "");
-      setHasMore(Boolean(response.hasMore ?? (response.results.length >= 5)));
-      setTotalAvailable(response.totalAvailable || response.results.length);
-      setCurrentPage(0);
-      setLastUsedToken(Boolean(response.usedToken));
-
-      if (response.fromCache) {
-        setCacheNotice("Retrieved from local database cache (instant response, 0 credits used).");
-      }
-
+      await searchStore.executeSearch(q);
       // Refresh token limits in background
       apiService.getActiveTokenUsage().then((res) => {
         if (res?.tokenUsage) setTokenUsage(res.tokenUsage);
@@ -220,8 +194,6 @@ export function SearchEngine() {
     } catch (err: any) {
       console.error("Search error:", err);
       toast.error(err.message || "Search failed. Check your network or Apify connection.");
-    } finally {
-      setIsSearching(false);
     }
   };
 
@@ -235,41 +207,18 @@ export function SearchEngine() {
 
   const goToPage = async (targetPage: number) => {
     if (targetPage < 0 || isLoadingMore || isSearching) return;
-    setIsLoadingMore(true);
     setShowMoreConfirmModal(false);
 
     try {
-      const response = await apiService.searchGoogleScholar(searchQuery, { page: targetPage });
-
-      if (response.requiresApify) {
-        setRequiresApify(true);
-        setCaptchaDetected(true);
-        toast.error("Academic index challenged direct requests. Connect an Apify token to bypass.");
-        setShowTokenManager(true);
-        return;
-      }
-
-      setSearchResults(response.results || []);
-      setCurrentPage(targetPage);
-      setHasMore(Boolean(response.hasMore));
-      if (response.totalAvailable) setTotalAvailable(response.totalAvailable);
-      setSearchSource(response.searchSource || "direct");
-      setSourceLabel(response.sourceLabel || "");
-      setLastUsedToken(Boolean(response.usedToken));
-
-      // Smooth scroll back to top of search results container
+      await searchStore.goToPage(targetPage);
       resultsTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-      if (response.usedToken) {
-        apiService.getActiveTokenUsage().then((res) => {
-          if (res?.tokenUsage) setTokenUsage(res.tokenUsage);
-        });
-      }
+      apiService.getActiveTokenUsage().then((res) => {
+        if (res?.tokenUsage) setTokenUsage(res.tokenUsage);
+      });
     } catch (err: any) {
       console.error("Pagination error:", err);
       toast.error(err.message || "Failed to load page. Check connection.");
-    } finally {
-      setIsLoadingMore(false);
     }
   };
 
@@ -446,7 +395,10 @@ export function SearchEngine() {
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                    searchStore.clearSearch();
+                  }}
                   aria-label="Clear search query"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
                 >
@@ -510,22 +462,8 @@ export function SearchEngine() {
           <div className="flex items-center gap-2">
             {searchSource && (
               <span className="font-medium text-foreground flex items-center gap-1.5 text-[11px] bg-muted/60 px-2.5 py-1 rounded-full border border-border/60">
-                {searchSource === "direct" ? (
-                  <>
-                    <Zap className="w-3.5 h-3.5 text-warning" />
-                    <span>Live Academic Index (0 tokens used)</span>
-                  </>
-                ) : searchSource === "apify" ? (
-                  <>
-                    <Shield className="w-3.5 h-3.5 text-brand" />
-                    <span>Backup Scraper Token Failover</span>
-                  </>
-                ) : (
-                  <>
-                    <Database className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span>Local Database Cache</span>
-                  </>
-                )}
+                <Zap className="w-3.5 h-3.5 text-warning" />
+                <span>Current Session Token used: {sessionTokensUsed}</span>
               </span>
             )}
           </div>
@@ -599,61 +537,7 @@ export function SearchEngine() {
                             <span>PDF</span>
                           </a>
                         )}
-
-                        {/* 3-Tier Geo Badge */}
-                        {isPSU ? (
-                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-semibold gap-1">
-                            <Building2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                            <span>Pangasinan State University</span>
-                          </Badge>
-                        ) : result.geo_tier === "philippines" ? (
-                          <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 font-semibold gap-1">
-                            <span>Philippines Research</span>
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground border-border/80 font-normal gap-1">
-                            <Globe className="w-3 h-3" />
-                            <span>International Literature</span>
-                          </Badge>
-                        )}
-
-                        {isSaved && (
-                          <StatusBadge
-                            status="approved"
-                            label={
-                              assignedOwnerName
-                                ? `In Repository • Assigned to ${assignedOwnerName}`
-                                : "In Repository"
-                            }
-                          />
-                        )}
-                        {!isSaved && isClaimed && (
-                          <StatusBadge
-                            status="pending"
-                            label={`Pending Approval (Research Coordinator) • Assigned to ${assignedOwnerName || currentUser.name}`}
-                          />
-                        )}
                       </div>
-
-                      {/* SDG Focus Track Badges */}
-                      {Array.isArray(result.sdg_tags) && result.sdg_tags.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                            SDG Focus:
-                          </span>
-                          {result.sdg_tags.map((tag) => (
-                            <Badge
-                              key={tag}
-                              variant="secondary"
-                              className="text-[10px] h-5 px-2 bg-brand/10 text-brand border border-brand/20 font-medium flex items-center gap-1"
-                              title={result.sdg_rationale || undefined}
-                            >
-                              <Tag className="w-2.5 h-2.5 text-brand" />
-                              <span>{tag}</span>
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
 
                       <p className="text-xs text-muted-foreground">
                         Authors: <span className="text-foreground">{result.authors.join(", ")}</span>
@@ -676,19 +560,43 @@ export function SearchEngine() {
                       )}
                     </div>
 
-                    {result.citedByLink && (
-                      <div className="shrink-0 self-start">
+                    {/* Top Right: Institutional / Regional / Global Logo Badge + Cited-by Link */}
+                    <div className="flex items-center gap-2 shrink-0 self-start">
+                      {isPSU ? (
+                        <span
+                          title="Pangasinan State University"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 shrink-0 shadow-2xs"
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                        </span>
+                      ) : result.geo_tier === "philippines" ? (
+                        <span
+                          title="Philippines Research"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0 shadow-2xs"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                        </span>
+                      ) : (
+                        <span
+                          title="International Literature"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30 shrink-0 shadow-2xs"
+                        >
+                          <Globe className="w-3.5 h-3.5" />
+                        </span>
+                      )}
+
+                      {result.citedByLink && (
                         <a
                           href={result.citedByLink}
                           target="_blank"
                           rel="noreferrer"
-                          className="h-8 px-2.5 rounded-lg border border-border/70 hover:bg-muted/50 text-xs text-muted-foreground inline-flex items-center gap-1 transition-colors"
+                          className="h-7 px-2.5 rounded-lg border border-border/70 hover:bg-muted/50 text-xs text-muted-foreground inline-flex items-center gap-1 transition-colors"
                         >
                           <Quote className="w-3 h-3 text-brand" />
                           <span>Cited by {result.citations}</span>
                         </a>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   {/* Researcher Assignment & Save / Claim Bar */}
@@ -703,12 +611,7 @@ export function SearchEngine() {
                         {!isInstructor ? (
                           <select
                             value={selectedResearcherId}
-                            onChange={(e) =>
-                              setAssignedResearcherMap((prev) => ({
-                                ...prev,
-                                [result.id]: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => searchStore.setAssignedResearcher(result.id, e.target.value)}
                             aria-label="Assign publication to a registered researcher"
                             className="h-8 px-2.5 rounded-lg border border-border/80 bg-background text-xs text-foreground flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-brand/40"
                           >
@@ -726,12 +629,7 @@ export function SearchEngine() {
                         ) : (
                           <select
                             value={selectedResearcherId}
-                            onChange={(e) =>
-                              setAssignedResearcherMap((prev) => ({
-                                ...prev,
-                                [result.id]: e.target.value,
-                              }))
-                            }
+                            onChange={(e) => searchStore.setAssignedResearcher(result.id, e.target.value)}
                             aria-label="Assign publication to yourself"
                             className="h-8 px-2.5 rounded-lg border border-border/80 bg-background text-xs text-foreground flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-brand/40"
                           >
@@ -796,6 +694,26 @@ export function SearchEngine() {
                           </Button>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Saved Tag in Bottom Right Corner */}
+                  {isSaved && (
+                    <div className="pt-2.5 mt-1 border-t border-border/50 flex items-center justify-end">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold shadow-2xs">
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Saved</span>
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Pending Approval in Bottom Right Corner */}
+                  {!isSaved && isClaimed && (
+                    <div className="pt-2.5 mt-1 border-t border-border/50 flex items-center justify-end">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold shadow-2xs">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                        <span>Pending Approval</span>
+                      </span>
                     </div>
                   )}
                 </div>

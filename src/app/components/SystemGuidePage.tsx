@@ -797,8 +797,8 @@ const coordinatorGuideCategories: GuideCategory[] = [
     subtitle: "Searching academic libraries and saving publications directly to any registered researcher",
     icon: Search,
     narrativeParagraphs: [
-      "The 'Search' page lets you look up published studies across worldwide academic libraries by typing a researcher's name, a study title, or 'Pangasinan State University'. Below the search box, results appear 10 per page with each study's title, co-authors, publication year, journal name, citation count, geographical priority badge ('Pangasinan State University', 'Philippines Research', or 'International Literature'), and United Nations SDG focus tags.",
-      "As Research Coordinator, you have a direct publishing privilege on this page that regular researchers do not have. At the bottom of every search result card, you will see an 'Assign Researcher' dropdown containing every registered researcher in PSU Asingan along with their Instructor ID (ASIN-00000). Once you select the researcher who authored the study and click the green 'Save to Repository' button, the publication is immediately saved as an approved record in the campus repository.",
+      "The 'Search' page lets you look up published studies across worldwide academic libraries by typing a researcher's name, a study title, or 'Pangasinan State University'. Below the search box, results appear 10 per page with each study's title, co-authors, publication year, journal name, citation count, institutional priority icon in the top-right corner (blue for PSU, green for Philippines, and red for International), and a live 'Current Session Token used' counter. Searches execute asynchronously in the background and persist when you switch between tabs, so returning to the Search tab instantly restores your loaded results without needing to re-search.",
+      "As Research Coordinator, you have a direct publishing privilege on this page that regular researchers do not have. At the bottom of every unsaved search result card, you will see an 'Assign Researcher' dropdown containing every registered researcher in PSU Asingan along with their Instructor ID (ASIN-00000). Once you select the researcher who authored the study and click the green 'Save to Repository' button, the publication is immediately saved as an approved record in the campus repository and displays a green 'Saved' badge in the bottom-right corner.",
     ],
     clickableItems: [
       {
@@ -833,6 +833,17 @@ const coordinatorGuideCategories: GuideCategory[] = [
         ),
         explanation:
           "Immediately saves the publication into the official repository under the selected researcher's name without needing a separate approval step.",
+      },
+      {
+        label: "Saved Badge (Bottom-Right Corner)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold border border-emerald-500/30">
+            <Check className="w-3.5 h-3.5" />
+            <span>Saved</span>
+          </span>
+        ),
+        explanation:
+          "Appears in the bottom-right corner of any publication that already exists as an approved record in the campus repository.",
       },
       {
         label: "Scraper Settings / Quota Button (Top-Right)",
