@@ -146,9 +146,9 @@
   --ai-foreground: #d8b4fe;
   --ai-border: rgba(168, 85, 247, 0.4);
 
-  /* Tactile Felt Texture Token (Soft Pearl Grain for Facebook Dark Mode) */
+  /* Subtle Felt Texture Token (Restored Ultra-Fine Soft Pearl Grain for Facebook Dark Mode) */
   --felt-canvas-bg: #18191a;
-  --felt-pattern: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='feltNoiseDark'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.60' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.060 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23feltNoiseDark)'/%3E%3C/svg%3E");
+  --felt-pattern: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='feltNoiseDark'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23feltNoiseDark)'/%3E%3C/svg%3E");
 }
 
 @theme inline {
