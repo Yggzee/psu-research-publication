@@ -1075,8 +1075,8 @@ const coordinatorGuideCategories: GuideCategory[] = [
     subtitle: "Approving publication claims, managing researchers, and sending ASIN-00000 invitations",
     icon: Shield,
     narrativeParagraphs: [
-      "The 'Admin Console' is your exclusive management center as Research Coordinator. At the top of the page sits your coordinator profile card (Sir Rodelio M. Garin) displaying a single 'Research Coordinator' badge and a 'Sync My Publications' button, followed by four live summary counters: Total Researchers, Invitation Requests, Pending Activations, and Pending Claims. Beneath those counters are four management tabs: 'Pending Claims', 'Researchers', 'Invite Researcher', and 'Invitation Requests'.",
-      "Every administrative workflow is organized cleanly across those four tabs. In 'Pending Claims', you review publications claimed or submitted by researchers and click 'Approve' or 'Reject'. In 'Researchers', you can sync any researcher's Google Scholar publications, edit their details, or remove an account. In 'Invite Researcher', you invite new researchers using the locked 'ASIN-' prefix + 5-digit Instructor ID (ASIN-00000) and select whether they are Faculty (with their department) or Non-Faculty. In 'Invitation Requests', you can approve requests sent from the login page with one click.",
+      "The 'Admin Console' is your exclusive management center as Research Coordinator. At the top of the page sits the master administration toolbar with 'Invite Researcher', 'Auto-Tag UN SDGs', 'Email Outbox', and 'Sync Database', followed by your coordinator profile card (Sir Rodelio M. Garin) displaying a single 'Research Coordinator' badge and a 'Sync My Publications' button, and four live summary counters: Total Researchers, Invitation Requests, Pending Activations, and Pending Claims. Beneath those counters are four management tabs: 'Invitations & Requests', 'Researchers', 'Publication Claims', and 'Integrations & Tokens'.",
+      "Every administrative workflow is organized cleanly across those four tabs. In 'Invitations & Requests', you review incoming portal requests and click 'Review & Invite' to open the pre-filled pop-up modal, or admit invited researchers who have verified their emails. In 'Researchers', you can search and filter active researchers, sync any researcher's Google Scholar publications, or click the edit icon to open their credentials in a pop-up dialog. Clicking 'Invite Researcher' opens the dedicated modal with a locked 'ASIN-' prefix + 5-digit Instructor ID (ASIN-00000) and classification selector.",
     ],
     clickableItems: [
       {
@@ -1126,7 +1126,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
           "In the Researchers table, these buttons let you sync a researcher's Google Scholar works, edit their account details, or remove their record.",
       },
       {
-        label: "Locked ASIN-00000 Input & Send Invitation Button (Tab 3: Invite Researcher)",
+        label: "Locked ASIN-00000 Input & Send Invitation Button (Invite Researcher Pop-up Modal)",
         visualReplica: (
           <div className="inline-flex flex-wrap items-center gap-2">
             <div className="inline-flex items-center rounded-md border border-border overflow-hidden text-xs font-mono">
@@ -1137,12 +1137,12 @@ const coordinatorGuideCategories: GuideCategory[] = [
             </div>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand text-white text-xs font-semibold">
               <Send className="w-3 h-3" />
-              <span>Send Invitation</span>
+              <span>Create & Send Invitation</span>
             </span>
           </div>
         ),
         explanation:
-          "Type the 5 digits of the researcher's Instructor ID (ASIN-00000), fill in their name, email, and classification, and click 'Send Invitation' to email their activation link.",
+          "Type the 5 digits of the researcher's Instructor ID (ASIN-00000), fill in their name, email, and classification, and click 'Create & Send Invitation' to email their activation link.",
       },
     ],
   },

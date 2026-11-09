@@ -100,3 +100,4 @@ Whenever picking up an idea from this document, remember:
 2. **Mandatory Terminology:** Always use **"Researchers"** (never "Faculty Roster"), **"Instructor ID (`ASIN-00000`)"**, **"Research Coordinator (Sir Rodelio M. Garin)"**, and **"Publications"**.
 3. **No UI Emojis:** Always use `lucide-react` icons in UI components.
 4. **Turso Cloud Persistence Sync:** Any database schema additions must sync with `db.mjs` and `turso.mjs`.
+

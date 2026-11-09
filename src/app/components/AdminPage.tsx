@@ -40,6 +40,14 @@ import { Label } from "./ui/label";
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { useNavigate } from "react-router";
 import {
   FACULTY_DATA_KEY,
@@ -102,7 +110,7 @@ export function AdminPage() {
   const [rosterSearch, setRosterSearch] = useState("");
   const [rosterDeptFilter, setRosterDeptFilter] = useState("all");
 
-  const [isAdding, setIsAdding] = useState(false);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
@@ -341,8 +349,13 @@ export function AdminPage() {
   const resetForm = () => {
     setForm(emptyForm);
     setEditingId(null);
-    setIsAdding(false);
+    setIsInviteModalOpen(false);
     setFormError("");
+  };
+
+  const openInviteModal = () => {
+    resetForm();
+    setIsInviteModalOpen(true);
   };
 
   const saveForm = async () => {
@@ -429,8 +442,7 @@ export function AdminPage() {
       invitationRequestId: "",
     });
     setEditingId(researcher.instructorId);
-    setIsAdding(true);
-    setActiveTab("researchers");
+    setIsInviteModalOpen(true);
     setFormError("");
   };
 
@@ -583,9 +595,8 @@ export function AdminPage() {
       invitationRequestId: req.id,
     });
     setEditingId(null);
-    setIsAdding(true);
-    setActiveTab("researchers");
-    toast.info(`Reviewing invitation for ${req.name}. Click 'Create & Send Invitation' to send.`);
+    setIsInviteModalOpen(true);
+    toast.info(`Reviewing invitation for ${req.name}. Fill details and click 'Create & Send Invitation'.`);
   };
 
   const facultyCount = researchers.filter((member) => member.isFaculty).length;
@@ -672,7 +683,27 @@ export function AdminPage() {
         title="Campus Research Administration & Governance"
         description="Pangasinan State University – Asingan Campus • Office of the Campus Research Coordinator"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={openInviteModal}
+              className="h-8 gap-1.5 text-xs font-semibold bg-brand hover:bg-brand/90 text-white shadow-2xs"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Invite Researcher</span>
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={handleRunSDGClassification}
+              disabled={isClassifyingSDG}
+              className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+              title="Batch auto-tag all campus research with UN SDGs via AI"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isClassifyingSDG ? "animate-spin" : ""}`} />
+              <span>{isClassifyingSDG ? "Tagging SDGs..." : "Auto-Tag UN SDGs"}</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -693,19 +724,6 @@ export function AdminPage() {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline">Sync Database</span>
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={() => {
-                resetForm();
-                setIsAdding(true);
-                setActiveTab("researchers");
-              }}
-              className="h-8 gap-1.5 text-xs font-semibold bg-brand hover:bg-brand/90 text-white shadow-2xs"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Invite Researcher</span>
             </Button>
           </div>
         }
@@ -782,17 +800,6 @@ export function AdminPage() {
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Sync My Publications</span>
-              </Button>
-
-              <Button
-                size="sm"
-                onClick={handleRunSDGClassification}
-                disabled={isClassifyingSDG}
-                className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
-                title="Batch auto-tag all campus research with UN SDGs via AI"
-              >
-                <Sparkles className={`w-3.5 h-3.5 ${isClassifyingSDG ? "animate-spin" : ""}`} />
-                <span>Auto-Tag UN SDGs</span>
               </Button>
             </div>
           </div>
@@ -951,7 +958,7 @@ export function AdminPage() {
                         className="bg-brand text-white hover:bg-brand/90 text-xs h-8 gap-1.5"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        <span>Invite Researcher</span>
+                        <span>Review & Invite</span>
                       </Button>
                       <Button
                         size="sm"
@@ -1076,167 +1083,10 @@ export function AdminPage() {
       )}
 
       {/* ===================================================================== */}
-      {/* TAB 2: FACULTY RESEARCHERS ROSTER                                     */}
+      {/* TAB 2: RESEARCHERS                                                    */}
       {/* ===================================================================== */}
       {activeTab === "researchers" && (
         <div className="space-y-6">
-          {/* Add / Edit Researcher Collapsible Form */}
-          {isAdding && (
-            <SectionCard
-              title={editingId ? `Edit Researcher: ${editingId}` : "Invite & Register New Researcher"}
-              description="Provide researcher credentials. An official invitation will be dispatched so they can activate their account."
-              action={
-                <Button variant="ghost" size="sm" onClick={resetForm} className="h-8 text-xs">
-                  Cancel
-                </Button>
-              }
-            >
-              {formError && (
-                <Notice variant="danger" className="mb-4">
-                  {formError}
-                </Notice>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">First Name *</Label>
-                  <Input
-                    value={form.firstName}
-                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                    placeholder="e.g. Juan"
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Middle Initial</Label>
-                  <Input
-                    value={form.middleInitial}
-                    onChange={(e) => setForm({ ...form, middleInitial: e.target.value })}
-                    placeholder="e.g. M."
-                    maxLength={5}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Last Name *</Label>
-                  <Input
-                    value={form.lastName}
-                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                    placeholder="e.g. Dela Cruz"
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Instructor ID *</Label>
-                  {editingId ? (
-                    <Input
-                      value={form.instructorId}
-                      disabled
-                      className="h-8 text-xs font-mono"
-                    />
-                  ) : (
-                    <div className="flex items-center rounded-md border border-border bg-background focus-within:ring-2 focus-within:ring-brand/20 focus-within:border-brand overflow-hidden h-8">
-                      <span className="px-2.5 h-full flex items-center bg-muted border-r border-border text-xs font-mono font-bold text-foreground select-none shrink-0">
-                        ASIN-
-                      </span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={5}
-                        value={form.instructorId.replace(/^ASIN-/i, "")}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            instructorId: e.target.value.replace(/\D/g, "").slice(0, 5),
-                          })
-                        }
-                        placeholder="00000"
-                        className="w-full h-full px-2.5 text-xs font-mono text-foreground bg-transparent outline-none"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Email Address *</Label>
-                  <Input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    placeholder="e.g. jdelacruz@psu.edu.ph"
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Department / Classification</Label>
-                  <Select
-                    value={form.isFaculty ? form.department : "Non-Faculty"}
-                    onValueChange={(val) => {
-                      if (val === "Non-Faculty") {
-                        setForm({ ...form, department: "Non-Faculty", isFaculty: false });
-                      } else {
-                        setForm({ ...form, department: val, isFaculty: true });
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEPARTMENTS.map((dept) => (
-                        <SelectItem key={dept} value={dept} className="text-xs">
-                          {dept === "Non-Faculty" ? "Non-Faculty" : `Faculty (${dept})`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Google Scholar Profile (Optional)</Label>
-                  <Input
-                    value={form.scholarUrl}
-                    onChange={(e) => setForm({ ...form, scholarUrl: e.target.value })}
-                    placeholder="User ID or Profile URL"
-                    className="h-8 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 mt-4 border-t border-border/60">
-                <div className="flex items-center gap-4">
-                  {!editingId && (
-                    <label className="flex items-center gap-2 text-xs cursor-pointer">
-                      <Checkbox
-                        checked={form.sendInvite}
-                        onCheckedChange={(checked) => setForm({ ...form, sendInvite: Boolean(checked) })}
-                      />
-                      <span>Send email invitation link</span>
-                    </label>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={resetForm} className="h-8 text-xs">
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={saveForm}
-                    className="h-8 text-xs font-semibold bg-brand text-white"
-                  >
-                    <Save className="w-3.5 h-3.5 mr-1" />
-                    <span>{editingId ? "Update Researcher" : "Create & Send Invitation"}</span>
-                  </Button>
-                </div>
-              </div>
-            </SectionCard>
-          )}
-
           {/* Researchers Table Card */}
           <SectionCard
             title="Researchers"
@@ -1549,6 +1399,181 @@ export function AdminPage() {
       {/* ===================================================================== */}
       {/* MODALS & AUDIT OUTBOX                                                 */}
       {/* ===================================================================== */}
+
+      {/* Invite & Edit Researcher Pop-up Modal */}
+      <Dialog
+        open={isInviteModalOpen}
+        onOpenChange={(open) => {
+          if (!open) resetForm();
+        }}
+      >
+        <DialogContent className="max-w-xl sm:max-w-2xl max-h-[90vh] flex flex-col p-6 overflow-hidden">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2 text-foreground">
+              <UserCheck className="w-5 h-5 text-brand" />
+              <span>{editingId ? `Edit Researcher: ${editingId}` : "Invite & Register New Researcher"}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {editingId
+                ? "Update researcher profile details, department affiliation, or Google Scholar profile."
+                : "Provide researcher credentials. An official activation link will be dispatched so they can complete their registration."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {formError && (
+            <Notice variant="danger" className="my-2">
+              {formError}
+            </Notice>
+          )}
+
+          <div className="space-y-4 py-2 overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">First Name *</Label>
+                <Input
+                  value={form.firstName}
+                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                  placeholder="e.g. Juan"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Middle Initial</Label>
+                <Input
+                  value={form.middleInitial}
+                  onChange={(e) => setForm({ ...form, middleInitial: e.target.value })}
+                  placeholder="e.g. M."
+                  maxLength={5}
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Last Name *</Label>
+                <Input
+                  value={form.lastName}
+                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                  placeholder="e.g. Dela Cruz"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Instructor ID *</Label>
+                {editingId ? (
+                  <Input
+                    value={form.instructorId}
+                    disabled
+                    className="h-8 text-xs font-mono bg-muted text-muted-foreground"
+                  />
+                ) : (
+                  <div className="flex items-center rounded-md border border-border bg-background focus-within:ring-2 focus-within:ring-brand/20 focus-within:border-brand overflow-hidden h-8">
+                    <span className="px-2.5 h-full flex items-center bg-muted border-r border-border text-xs font-mono font-bold text-foreground select-none shrink-0">
+                      ASIN-
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={5}
+                      value={form.instructorId.replace(/^ASIN-/i, "")}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          instructorId: e.target.value.replace(/\D/g, "").slice(0, 5),
+                        })
+                      }
+                      placeholder="00000"
+                      className="w-full h-full px-2.5 text-xs font-mono text-foreground bg-transparent outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Email Address *</Label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="e.g. jdelacruz@psu.edu.ph"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Department / Classification</Label>
+                <Select
+                  value={form.isFaculty ? form.department : "Non-Faculty"}
+                  onValueChange={(val) => {
+                    if (val === "Non-Faculty") {
+                      setForm({ ...form, department: "Non-Faculty", isFaculty: false });
+                    } else {
+                      setForm({ ...form, department: val, isFaculty: true });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept} value={dept} className="text-xs">
+                        {dept === "Non-Faculty" ? "Non-Faculty" : `Faculty (${dept})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1 sm:col-span-2 lg:col-span-3">
+                <Label className="text-xs font-semibold">Google Scholar Profile (Optional)</Label>
+                <Input
+                  value={form.scholarUrl}
+                  onChange={(e) => setForm({ ...form, scholarUrl: e.target.value })}
+                  placeholder="User ID or Profile URL (e.g., citations?user=...)"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+
+            {!editingId && (
+              <div className="pt-2 pb-1">
+                <label className="flex items-center gap-2 text-xs cursor-pointer select-none text-muted-foreground hover:text-foreground">
+                  <Checkbox
+                    checked={form.sendInvite}
+                    onCheckedChange={(checked) => setForm({ ...form, sendInvite: Boolean(checked) })}
+                  />
+                  <span>Dispatch email invitation link immediately</span>
+                </label>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="pt-4 mt-2 border-t border-border/60 flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={resetForm} className="h-8 text-xs">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={saveForm}
+              className="h-8 text-xs font-semibold bg-brand hover:bg-brand/90 text-white gap-1.5"
+            >
+              {editingId ? (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Update Researcher</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Create & Send Invitation</span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Email Outbox & Audit Logs Modal */}
       {outboxOpen && (
