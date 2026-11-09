@@ -1080,6 +1080,106 @@ function reconstructOpenAlexAbstract(invertedIndex) {
 }
 
 /**
+ * Compute Levenshtein distance between two strings
+ */
+export function levenshteinDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+/**
+ * Determine if a string token is an abbreviation/initials (e.g. "mj", "mju", "l", "rm")
+ */
+export function isInitialsToken(token) {
+  if (!token) return false;
+  if (token.length <= 2) return true;
+  if (token.length === 3 && !/[aeiou]{2}/i.test(token)) return true;
+  return false;
+}
+
+/**
+ * Advanced author matching: supports full names, initials (e.g. MJU, MJ, L),
+ * typo-tolerance (Levenshtein distance <= 1 for first names), and institutional affiliation affinity.
+ * Returns: 'strong' (exact name / multi-initial / PSU affiliation), 'weak' (single initial for multi-word query), or false.
+ */
+export function matchAuthorName(authorStr, queryWords, targetLast, targetFirst, targetInitials, isPsu = false) {
+  const clean = String(authorStr || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const tokens = clean.split(' ').filter(Boolean);
+  if (tokens.length === 0 || !targetLast) return false;
+
+  if (!tokens.includes(targetLast)) return false;
+
+  if (queryWords.length === 1 || !targetFirst) return 'strong';
+
+  const nonLast = tokens.filter((t) => t !== targetLast);
+  if (nonLast.length === 0) return isPsu ? 'strong' : 'weak';
+
+  // 1. Exact first name match (e.g. "mary" in "mary jane quibilan")
+  if (nonLast.includes(targetFirst)) return 'strong';
+
+  // 2. Typo tolerance on first name (Levenshtein distance <= 1, e.g. "lengrace" vs "lenigrace")
+  if (targetFirst.length >= 4 && nonLast.some((t) => t.length >= 4 && levenshteinDistance(t, targetFirst) <= 1)) {
+    return 'strong';
+  }
+
+  // 3. Multi-letter initials matching (abbreviations like "mju" or "mj")
+  for (const t of nonLast) {
+    if (isInitialsToken(t)) {
+      if (targetInitials && targetInitials.length >= 2 && (t === targetInitials || t.startsWith(targetInitials))) {
+        return 'strong';
+      }
+    }
+  }
+
+  // 4. Consecutive single-letter initials (e.g. "m" and "j" in "m. j. quibilan")
+  const initialsSequence = nonLast.filter((t) => isInitialsToken(t)).map((t) => t[0]).join('');
+  if (targetInitials && targetInitials.length >= 2 && initialsSequence.startsWith(targetInitials)) {
+    return 'strong';
+  }
+
+  // 5. If confirmed PSU / Pangasinan affiliation, match surname if no conflicting full first name
+  if (isPsu && targetFirst) {
+    const hasConflictingFullName = nonLast.some(
+      (t) => t.length > 2 && !isInitialsToken(t) && levenshteinDistance(t, targetFirst) > 1 && !targetFirst.includes(t)
+    );
+    if (!hasConflictingFullName) return 'strong';
+  }
+
+  // 6. Single initial match (e.g. "l" for "lengrace", or "m" for "mary jane")
+  for (const t of nonLast) {
+    if (isInitialsToken(t) && t === targetFirst[0]) {
+      // If query only had 1 first name (e.g. "Lengrace Mecias"), a single initial like "L." is a strong match
+      if (queryWords.length <= 2) return 'strong';
+      // If query had multiple first names (e.g. "Mary Jane"), a single initial without "J" is a weak/ambiguous match
+      return 'weak';
+    }
+  }
+
+  return false;
+}
+
+/**
  * Multi-source academic search fallback & supplement (CrossRef API + OpenAlex API)
  * Universal academic search across titles, author names, institutions (e.g. Pangasinan State University), and topics.
  */
@@ -1110,24 +1210,11 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     if (!Array.isArray(authorsArr) || authorsArr.length === 0) return false;
     if (nameTokens.length === 0) return false;
     const targetLast = nameTokens[nameTokens.length - 1];
-    const targetFirst = nameTokens[0];
-    const targetFirstInitial = targetFirst[0];
+    const targetFirstWords = nameTokens.length > 1 ? nameTokens.slice(0, nameTokens.length - 1) : [];
+    const targetFirst = targetFirstWords[0] || '';
+    const targetInitials = targetFirstWords.map((w) => w[0]).join('');
 
-    return authorsArr.some((a) => {
-      const aNorm = String(a || '')
-        .toLowerCase()
-        .replace(/[^a-z\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (!aNorm) return false;
-      const aWords = aNorm.split(' ');
-      if (!aWords.includes(targetLast)) return false;
-      if (nameTokens.length === 1) return true;
-      return (
-        aWords.includes(targetFirst) ||
-        aWords.some((w) => w !== targetLast && (w.startsWith(targetFirst) || (w.length <= 3 && w.startsWith(targetFirstInitial))))
-      );
-    });
+    return authorsArr.some((a) => matchAuthorName(a, nameTokens, targetLast, targetFirst, targetInitials, false));
   };
 
   const results = [];

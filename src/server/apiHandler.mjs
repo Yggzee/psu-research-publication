@@ -9,6 +9,9 @@ import {
   enrichBatchWithCrossRef,
   fetchCitingPapersFromOpenAlex,
   searchOpenAlexAndCrossRef,
+  levenshteinDistance,
+  isInitialsToken,
+  matchAuthorName,
 } from './scholarScraper.mjs';
 import {
   classifyPublicationSDG,
@@ -3238,7 +3241,13 @@ export async function handleApiRequest(req, res) {
 
       const topicVariants = extractTopicVariants(bareQuery);
 
+      const targetLast = queryWords.length > 0 ? queryWords[queryWords.length - 1] : '';
+      const targetFirstWords = queryWords.length > 1 ? queryWords.slice(0, queryWords.length - 1) : [];
+      const targetFirst = targetFirstWords[0] || '';
+      const targetInitials = targetFirstWords.map((w) => w[0]).join('');
+
       const allResearchers = db.prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'").all();
+      const allFacultyRows = allResearchers;
       const matchingResearchers = allResearchers.filter((r) => {
         const rName = String(r.name || '').toLowerCase();
         const rLast = String(r.last_name || '').toLowerCase();
@@ -3250,56 +3259,97 @@ export async function handleApiRequest(req, res) {
         return false;
       });
 
-      const matchesQueriedAuthor = (item) => {
+      const isPsuItem = (item) => {
         if (!item) return false;
-        if (item.isTargetAuthor) return true;
-        if (queryWords.length === 0) return false;
-
-        const targetLast = queryWords[queryWords.length - 1];
-        const targetFirst = queryWords[0];
-        const targetFirstInit = targetFirst ? targetFirst[0] : '';
-
-        // Check if item belongs to any matched researcher by ID or matchesResearcher
-        for (const mr of matchingResearchers) {
-          if (item.owner_id && (item.owner_id === mr.instructor_id || item.owner_id === mr.id)) return true;
-          if (matchesResearcher(item, mr)) return true;
+        if (item.isPsu || item.source === 'institutional_repository') return true;
+        if (item.owner_id && (String(item.owner_id).startsWith('PSU-') || String(item.owner_id).startsWith('ASIN-') || String(item.owner_id).startsWith('res-'))) {
+          return true;
         }
 
-        // Check owner_name field
-        const oNorm = String(item.owner_name || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-        if (oNorm) {
-          const oTokens = oNorm.split(' ');
-          if (oTokens.includes(targetLast)) {
-            if (queryWords.length === 1) return true;
-            if (oTokens.includes(targetFirst) || oTokens.some((t) => t.startsWith(targetFirst) || (t.length <= 3 && t.startsWith(targetFirstInit)))) {
-              return true;
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.owner_name || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
+        
+        // 1. Direct institutional and campus markers for Pangasinan State University
+        if (
+          text.includes('pangasinan state university') ||
+          text.includes('psu.edu.ph') ||
+          /\bpangasinan\s+state\b/i.test(text) ||
+          (/\bpsu\b/i.test(text) && /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos|sta\.?\s*maria|santa\s*maria|pangasinan|campus)\b/i.test(text)) ||
+          /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos)\s+campus\b/i.test(text) ||
+          /\b(san carlos|sta\.?\s*maria|santa\s*maria)\s+campus\b/i.test(text) ||
+          /\bpsu\s+(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos|sta\.?\s*maria|santa\s*maria)\b/i.test(text) ||
+          /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos),\s*pangasinan\b/i.test(text) ||
+          /\b(sual|bolinao|tayug|dagupan|calasiao),\s*pangasinan\b/i.test(text) ||
+          /\b(municipality|town|port|power\s*plant)\s+of\s+sual\b/i.test(text)
+        ) {
+          return true;
+        }
+
+        // 2. Strict author verification against registered faculty in database
+        const authorsArr = Array.isArray(item.authors) ? item.authors : [item.authors];
+        for (const a of authorsArr) {
+          const aClean = String(a || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+          if (!aClean || aClean.length < 4) continue;
+
+          for (const fac of allFacultyRows) {
+            const facLast = String(fac.last_name || '').toLowerCase().trim();
+            const facFirst = String(fac.first_name || '').toLowerCase().trim();
+            const facFull = String(fac.name || `${fac.first_name} ${fac.last_name}`).toLowerCase().trim();
+
+            if (facFull && (aClean === facFull || aClean.includes(facFull))) return true;
+            if (facLast && facLast.length >= 3) {
+              const authorTokens = aClean.split(' ');
+              if (authorTokens.includes(facLast)) {
+                const firstInitial = facFirst ? facFirst[0] : '';
+                if (facFirst && aClean.includes(facFirst)) return true;
+                if (firstInitial && authorTokens.some((t) => t === firstInitial || t.startsWith(firstInitial))) return true;
+              }
             }
           }
         }
+        return false;
+      };
 
-        const authorsArr = Array.isArray(item.authors)
-          ? item.authors
-          : typeof item.authors === 'string'
-          ? [item.authors]
-          : [];
+      const matchesQueriedAuthor = (item) => {
+        if (!item) return false;
+        if (item.isTargetAuthor) return 'strong';
+        if (!targetLast) return false;
+
+        // Check if item belongs to any matched researcher by ID or matchesResearcher
+        for (const mr of matchingResearchers) {
+          if (item.owner_id && (item.owner_id === mr.instructor_id || item.owner_id === mr.id)) return 'strong';
+          if (matchesResearcher(item, mr)) return 'strong';
+        }
+
+        const isPsu = isPsuItem(item);
+
+        // Check owner_name field
+        if (item.owner_name) {
+          const res = matchAuthorName(item.owner_name, queryWords, targetLast, targetFirst, targetInitials, isPsu);
+          if (res) return res;
+        }
+
+        let authorsArr = [];
+        if (Array.isArray(item.authors)) {
+          authorsArr = item.authors;
+        } else if (typeof item.authors === 'string') {
+          try {
+            const p = JSON.parse(item.authors);
+            authorsArr = Array.isArray(p) ? p : item.authors.split(/[,;]/);
+          } catch {
+            authorsArr = item.authors.split(/[,;]/);
+          }
+        }
+        authorsArr = authorsArr.map((a) => String(a || '').trim()).filter(Boolean);
         if (authorsArr.length === 0) return false;
 
-        return authorsArr.some((a) => {
-          const aNorm = String(a || '')
-            .toLowerCase()
-            .replace(/[^a-z\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          if (!aNorm) return false;
-          if (aNorm.includes(bareLower)) return true;
-          const aTokens = aNorm.split(' ');
-          if (!aTokens.includes(targetLast)) return false;
-          if (queryWords.length === 1) return true;
-          return (
-            aTokens.includes(targetFirst) ||
-            aTokens.some((t) => t !== targetLast && (t.startsWith(targetFirst) || (t.length <= 3 && t.startsWith(targetFirstInit))))
-          );
-        });
+        let bestMatch = false;
+        for (const a of authorsArr) {
+          const matchResult = matchAuthorName(a, queryWords, targetLast, targetFirst, targetInitials, isPsu);
+          if (matchResult === 'strong') return 'strong';
+          if (matchResult === 'weak') bestMatch = 'weak';
+        }
+
+        return bestMatch;
       };
 
       const insertScraped = db.prepare(`
@@ -3366,7 +3416,7 @@ export async function handleApiRequest(req, res) {
           if (itemCitations > existing.citations) existing.citations = itemCitations;
           if (!existing.citedByLink && normalizedItem.citedByLink) existing.citedByLink = normalizedItem.citedByLink;
           if (!existing.url && normalizedItem.url) existing.url = normalizedItem.url;
-          if ((!existing.abstract || existing.abstract.length < 20) && normalizedItem.abstract) {
+          if (normalizedItem.abstract && (!existing.abstract || normalizedItem.abstract.length > existing.abstract.length)) {
             existing.abstract = normalizedItem.abstract;
           }
           if (normalizedItem.authors.length > existing.authors.length) {
@@ -3381,6 +3431,9 @@ export async function handleApiRequest(req, res) {
           }
           if (normalizedItem.isTargetAuthor) existing.isTargetAuthor = true;
           if (normalizedItem.isPsu) existing.isPsu = true;
+          if (normalizedItem.geo_tier === 'psu' || (!existing.geo_tier && normalizedItem.geo_tier)) {
+            existing.geo_tier = normalizedItem.geo_tier;
+          }
           if (normalizedItem.owner_name && !existing.owner_name) existing.owner_name = normalizedItem.owner_name;
           if (normalizedItem.owner_id && !existing.owner_id) existing.owner_id = normalizedItem.owner_id;
           if (normalizedItem.source && !existing.source) existing.source = normalizedItem.source;
@@ -3492,6 +3545,15 @@ export async function handleApiRequest(req, res) {
           queryPromises.push(
             scrapeGoogleScholarDirect(`${cleanQuery} "Pangasinan State University"`, 0, 5).catch(() => []),
             scrapeGoogleScholarDirect(`${cleanQuery} Philippines`, 0, 8).catch(() => [])
+          );
+        } else if (page === 0 && (isPersonNameQuery || isExplicitAuthorQuery) && targetLast) {
+          queryPromises.push(
+            scrapeGoogleScholarDirect(`${targetLast} "Pangasinan State University"`, 0, 8)
+              .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
+              .catch(() => []),
+            scrapeGoogleScholarDirect(`${targetLast} Pangasinan`, 0, 5)
+              .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
+              .catch(() => [])
           );
         }
         const liveArrays = await Promise.all(queryPromises);
@@ -3703,8 +3765,9 @@ export async function handleApiRequest(req, res) {
           const matchesAll = queryWords.length > 0 && queryWords.every((w) => haystack.includes(w));
           const matchesPartial = queryWords.length >= 2 && queryWords.filter((w) => haystack.includes(w)).length >= Math.ceil(queryWords.length * 0.7);
           const matchesSemantic = topicVariants.synonyms.some((s) => hasWordMatch(haystack, s)) || topicVariants.stems.some((s) => hasWordMatch(haystack, s));
+          const matchesAuthor = (isPersonNameQuery || isExplicitAuthorQuery) && targetLast && hasWordMatch(haystack, targetLast) && (matchesQueriedAuthor(rp) || (isPsuItem(rp) && hasWordMatch(haystack, targetLast)));
 
-          if (haystack.includes(bareLower) || matchesAll || matchesSemantic || (!isPersonNameQuery && matchesPartial)) {
+          if (haystack.includes(bareLower) || matchesAll || matchesSemantic || matchesAuthor || (!isPersonNameQuery && matchesPartial)) {
             addCandidateToPool({
               id: rp.id,
               title: rp.title,
@@ -3735,8 +3798,9 @@ export async function handleApiRequest(req, res) {
           const matchesAll = queryWords.length > 0 && queryWords.every((w) => hasWordMatch(haystack, w));
           const matchesPartial = queryWords.length >= 2 && queryWords.filter((w) => hasWordMatch(haystack, w)).length >= Math.ceil(queryWords.length * 0.7);
           const matchesSemantic = topicVariants.synonyms.some((s) => hasWordMatch(haystack, s)) || topicVariants.stems.some((s) => hasWordMatch(haystack, s));
+          const matchesAuthor = (isPersonNameQuery || isExplicitAuthorQuery) && targetLast && hasWordMatch(haystack, targetLast) && (matchesQueriedAuthor(sp) || (isPsuItem(sp) && hasWordMatch(haystack, targetLast)));
 
-          if (hasWordMatch(haystack, bareLower) || matchesAll || matchesSemantic || (!isPersonNameQuery && matchesPartial)) {
+          if (hasWordMatch(haystack, bareLower) || matchesAll || matchesSemantic || matchesAuthor || (!isPersonNameQuery && matchesPartial)) {
             addCandidateToPool({
               id: sp.id,
               title: sp.title,
@@ -3765,6 +3829,15 @@ export async function handleApiRequest(req, res) {
           hybridQueries.push(
             searchOpenAlexAndCrossRef(`${cleanQuery} Pangasinan State University`, 0, 8).catch(() => []),
             searchOpenAlexAndCrossRef(`${cleanQuery} Philippines`, 0, 15).catch(() => [])
+          );
+        } else if (page === 0 && (isPersonNameQuery || isExplicitAuthorQuery) && targetLast) {
+          hybridQueries.push(
+            searchOpenAlexAndCrossRef(`${targetLast} Pangasinan State University`, 0, 8)
+              .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
+              .catch(() => []),
+            searchOpenAlexAndCrossRef(`${targetLast} Pangasinan`, 0, 5)
+              .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
+              .catch(() => [])
           );
         }
         const hybridArrays = await Promise.all(hybridQueries);
@@ -3798,58 +3871,6 @@ export async function handleApiRequest(req, res) {
       // -----------------------------------------------------------------------
       // 3-TIER RANKING SYSTEM (PSU FIRST -> PHILIPPINES SECOND -> FOREIGN THIRD)
       // -----------------------------------------------------------------------
-      const allFacultyRows = db.prepare('SELECT name, first_name, last_name FROM researchers').all();
-
-      const isPsuItem = (item) => {
-        if (!item) return false;
-        if (item.isPsu || item.source === 'institutional_repository') return true;
-        if (item.owner_id && (String(item.owner_id).startsWith('PSU-') || String(item.owner_id).startsWith('ASIN-') || String(item.owner_id).startsWith('res-'))) {
-          return true;
-        }
-
-        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.owner_name || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
-        
-        // 1. Direct institutional and campus markers for Pangasinan State University
-        if (
-          text.includes('pangasinan state university') ||
-          text.includes('psu.edu.ph') ||
-          /\bpangasinan\s+state\b/i.test(text) ||
-          (/\bpsu\b/i.test(text) && /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos|sta\.?\s*maria|santa\s*maria|pangasinan|campus)\b/i.test(text)) ||
-          /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos)\s+campus\b/i.test(text) ||
-          /\b(san carlos|sta\.?\s*maria|santa\s*maria)\s+campus\b/i.test(text) ||
-          /\bpsu\s+(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos|sta\.?\s*maria|santa\s*maria)\b/i.test(text) ||
-          /\b(asingan|lingayen|urdaneta|bayambang|binmaley|infanta|alaminos|san carlos),\s*pangasinan\b/i.test(text) ||
-          /\b(sual|bolinao|tayug|dagupan|calasiao),\s*pangasinan\b/i.test(text) ||
-          /\b(municipality|town|port|power\s*plant)\s+of\s+sual\b/i.test(text)
-        ) {
-          return true;
-        }
-
-        // 2. Strict author verification against registered faculty in database
-        const authorsArr = Array.isArray(item.authors) ? item.authors : [item.authors];
-        for (const a of authorsArr) {
-          const aClean = String(a || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-          if (!aClean || aClean.length < 4) continue;
-
-          for (const fac of allFacultyRows) {
-            const facLast = String(fac.last_name || '').toLowerCase().trim();
-            const facFirst = String(fac.first_name || '').toLowerCase().trim();
-            const facFull = String(fac.name || `${fac.first_name} ${fac.last_name}`).toLowerCase().trim();
-
-            if (facFull && (aClean === facFull || aClean.includes(facFull))) return true;
-            if (facLast && facLast.length >= 3) {
-              const authorTokens = aClean.split(' ');
-              if (authorTokens.includes(facLast)) {
-                const firstInitial = facFirst ? facFirst[0] : '';
-                if (facFirst && aClean.includes(facFirst)) return true;
-                if (firstInitial && authorTokens.some((t) => t === firstInitial || t.startsWith(firstInitial))) return true;
-              }
-            }
-          }
-        }
-        return false;
-      };
-
       const isPhItem = (item) => {
         if (isPsuItem(item)) return false;
         if (item.geo_tier === 'philippines') return true;
@@ -3926,9 +3947,14 @@ export async function handleApiRequest(req, res) {
         const isPsu = isPsuItem(item);
         const isPh = isPhItem(item);
 
-        // Author match gets top priority (+500,000 pts) ONLY when searching by researcher name or explicit author
-        if ((isPersonNameQuery || isExplicitAuthorQuery) && matchesQueriedAuthor(item)) {
-          score += 500000;
+        // Author match gets top priority (+500,000 pts for strong, +50,000 for weak/ambiguous initial) ONLY when searching by researcher name or explicit author
+        if (isPersonNameQuery || isExplicitAuthorQuery) {
+          const authorMatchQuality = matchesQueriedAuthor(item);
+          if (authorMatchQuality === 'strong') {
+            score += 500000;
+          } else if (authorMatchQuality === 'weak') {
+            score += 50000;
+          }
         }
 
         // Content Relevance Scoring:
