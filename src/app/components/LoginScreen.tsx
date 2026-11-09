@@ -6,7 +6,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import psuLogo from "../assets/psu-logo.png";
+import psuBookLogo from "../assets/psu-book-logo.svg";
 import psuBuilding from "../assets/psu_newbuilding.jpg";
 import { setCurrentUser, getCurrentUser, getManagedResearchers } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
@@ -207,9 +207,9 @@ export function LoginScreen() {
           {/* Branding + Small ? Guide Button */}
           <div className="flex items-center gap-3 mb-6">
             <img 
-              src={psuLogo} 
-              alt="PSU Logo" 
-              className="w-14 h-14 object-contain rounded-full shrink-0"
+              src={psuBookLogo} 
+              alt="PSU Research Portal Logo" 
+              className="w-14 h-14 object-contain shrink-0"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">

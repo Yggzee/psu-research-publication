@@ -31,6 +31,7 @@ import { Input } from "./ui/input";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import psuBookLogo from "../assets/psu-book-logo.svg";
 import { getCurrentUser, isAuthenticated } from "../utils/researchStore";
 import { apiService, type ScholarSearchResult } from "../services/api.service";
 import { useTheme } from "../utils/themeContext";
@@ -252,8 +253,16 @@ export function PublicRepositoryPortal() {
       <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           
-          {/* TOP-LEFT REPOSITORY METRICS COUNTER + SMALL ? GUIDE BUTTON */}
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+          {/* TOP-LEFT REPOSITORY LOGO + METRICS COUNTER + SMALL ? GUIDE BUTTON */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div
+              className="flex items-center gap-2 cursor-pointer shrink-0"
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              title="PSU Asingan Research Portal"
+            >
+              <img src={psuBookLogo} alt="PSU Research Portal" className="w-8 h-8 object-contain shrink-0" />
+              <span className="hidden md:inline font-bold text-xs text-foreground tracking-tight">PSU Research</span>
+            </div>
             <div className="flex items-center gap-1.5 sm:gap-3 font-mono text-[10px] sm:text-[11px] bg-muted/40 border border-border/60 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg overflow-x-auto no-scrollbar shrink">
               <span className="flex items-center gap-1" title="Verified Publications">
                 <BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-brand shrink-0" />
@@ -338,6 +347,18 @@ export function PublicRepositoryPortal() {
       {/* ---------------------------------------------------- */}
       <section className="relative py-8 md:py-12 px-4 sm:px-6 bg-gradient-to-b from-brand/5 via-background to-background border-b border-border/60">
         <div className="max-w-4xl mx-auto text-center space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-2">
+            <img src={psuBookLogo} alt="PSU Research Portal" className="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-md" />
+            <div className="text-center sm:text-left">
+              <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-brand/10 text-brand border border-brand/20 mb-1">
+                Pangasinan State University • Asingan Campus
+              </div>
+              <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-foreground tracking-tight leading-tight">
+                Institutional Research Repository
+              </h1>
+            </div>
+          </div>
+
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-foreground">
             Explore Institutional Research & Academic Literature
           </h2>

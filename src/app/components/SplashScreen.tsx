@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { GraduationCap } from "lucide-react";
-import psuLogo from "../assets/psu-logo.png";
+import psuBookLogo from "../assets/psu-book-logo.svg";
 
 export function SplashScreen() {
   const navigate = useNavigate();
@@ -30,11 +30,11 @@ export function SplashScreen() {
           transition={{ delay: 0.2, duration: 0.5 }}
           className="flex justify-center mb-6"
         >
-          <div className="bg-white rounded-full p-6 shadow-lg">
+          <div className="bg-white/90 dark:bg-card/90 rounded-2xl p-6 shadow-xl border border-border/60">
             <img 
-              src={psuLogo} 
-              alt="PSU Logo" 
-              className="w-24 h-24 object-contain rounded-full"
+              src={psuBookLogo} 
+              alt="PSU Research Portal Logo" 
+              className="w-28 h-28 object-contain"
             />
           </div>
         </motion.div>

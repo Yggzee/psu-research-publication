@@ -49,7 +49,7 @@ import {
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
-import psuLogo from "../assets/psu-logo.png";
+import psuBookLogo from "../assets/psu-book-logo.svg";
 import { getCurrentUser, isAuthenticated } from "../utils/researchStore";
 import { useTheme } from "../utils/themeContext";
 
@@ -1269,7 +1269,7 @@ export function SystemGuidePage() {
             }
             className="flex items-center gap-3 cursor-pointer group"
           >
-            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain rounded-full" />
+            <img src={psuBookLogo} alt="PSU Research Portal" className="w-10 h-10 object-contain shrink-0" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm sm:text-base font-bold text-foreground tracking-tight group-hover:text-brand transition-colors">

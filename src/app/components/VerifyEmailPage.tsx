@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { CheckCircle2, AlertCircle, Loader2, ArrowRight, ShieldCheck, Clock } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import psuLogo from "../assets/psu-logo.png";
+import psuBookLogo from "../assets/psu-book-logo.svg";
 import { apiService } from "../services/api.service";
 
 export function VerifyEmailPage() {
@@ -57,7 +57,7 @@ export function VerifyEmailPage() {
       >
         {/* Brand Header */}
         <div className="flex items-center justify-center gap-3 mb-6">
-          <img src={psuLogo} alt="PSU Logo" className="w-14 h-14 object-contain" />
+          <img src={psuBookLogo} alt="PSU Research Portal" className="w-14 h-14 object-contain" />
           <div>
             <h1 className="text-xl font-bold text-gray-900 leading-tight">Pangasinan State University</h1>
             <p className="text-xs text-blue-700 font-medium">Asingan Campus • Research & Publication System</p>

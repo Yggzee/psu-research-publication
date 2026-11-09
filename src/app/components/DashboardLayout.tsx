@@ -24,7 +24,7 @@ import {
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
-import psuLogo from "../assets/psu-logo.png";
+import psuBookLogo from "../assets/psu-book-logo.svg";
 import { clearCurrentUser, getCurrentUser } from "../utils/researchStore";
 import { useTheme } from "../utils/themeContext";
 import { ConfirmModal } from "./ConfirmModal";
@@ -252,7 +252,7 @@ export function DashboardLayout() {
             className="flex items-center gap-3 cursor-pointer min-w-0"
             onClick={() => navigate(currentUser.role === "admin" ? "/dashboard" : "/dashboard/publications")}
           >
-            <img src={psuLogo} alt="PSU Logo" className="w-10 h-10 object-contain rounded-full shrink-0" />
+            <img src={psuBookLogo} alt="PSU Research Portal" className="w-10 h-10 object-contain shrink-0" />
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-foreground tracking-tight truncate">Research Portal</h2>
               <p className="text-[11px] text-muted-foreground truncate">PSU Asingan Campus</p>
@@ -332,7 +332,7 @@ export function DashboardLayout() {
                   setMobileMenuOpen(false);
                 }}
               >
-                <img src={psuLogo} alt="PSU Logo" className="w-9 h-9 object-contain rounded-full" />
+                <img src={psuBookLogo} alt="PSU Research Portal" className="w-9 h-9 object-contain shrink-0" />
                 <div>
                   <h2 className="text-sm font-bold text-foreground">Research Portal</h2>
                   <p className="text-[11px] text-muted-foreground">PSU Asingan</p>
@@ -411,7 +411,7 @@ export function DashboardLayout() {
                 className="lg:hidden flex items-center gap-2 p-1 -ml-1 rounded-xl hover:bg-muted/60 transition-colors text-left"
                 aria-label="Open Navigation Menu"
               >
-                <img src={psuLogo} alt="PSU" className="w-8 h-8 object-contain" />
+                <img src={psuBookLogo} alt="PSU Research Portal" className="w-8 h-8 object-contain shrink-0" />
                 <div className="min-w-0">
                   <span className="text-xs font-bold text-foreground block leading-tight truncate">
                     PSU Asingan
