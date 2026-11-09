@@ -91,6 +91,9 @@ Always enforce the following standardized terminology and formatting across all 
      - **Scholarly Data Retrieval:** Free open-access academic APIs (**OpenAlex** and **CrossRef**) with polite headers, alongside direct/cached Google Scholar scraping and Apify free credits with the $1.00 quota circuit breaker.
      - **Search & Intelligence:** Local in-memory algorithms, regex concept dictionaries, and SQLite composite indexes.
      - **Strict Prohibition:** Never introduce paid external APIs, paid vector database services, paid LLM tokens, or cloud services that incur billing charges. Every feature must remain 100% free-to-run.
+8. **Pre-Task Workspace Skill Evaluation (`.agents/skills`):**
+   - At the start of every user prompt, proactively inspect the available workspace skills in `.agents/skills` (e.g., `grill-me`, `frontend-design`, `web-search`, `golang-data-structures`, etc.) to determine if any skill applies directly to the user's request.
+   - If a relevant skill exists (such as `/grill-me` for requirements alignment and design interviews, `frontend-design` for distinctive UI/UX design, or `web-search` for external discovery), activate and execute that skill first before proceeding with code changes or actual implementation work.
 
 ## Project Guidelines
 
