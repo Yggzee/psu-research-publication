@@ -144,7 +144,18 @@ async function callLLM(prompt, systemInstruction = '', temperature = 0.2) {
   }
 }
 
-const RETRIEVAL_STOPWORDS = new Set(['the', 'what', 'does', 'about', 'talk', 'talks', 'study', 'this', 'that', 'with', 'from', 'using', 'and', 'for', 'are', 'how', 'who', 'which', 'research', 'paper', 'papers', 'tell', 'explain', 'summary', 'summarize', 'there', 'their', 'can', 'you']);
+const RETRIEVAL_STOPWORDS = new Set([
+  'the', 'what', 'does', 'about', 'talk', 'talks', 'study', 'this', 'that', 'with', 'from', 'using',
+  'and', 'for', 'are', 'how', 'who', 'which', 'research', 'paper', 'papers', 'tell', 'explain',
+  'summary', 'summarize', 'there', 'their', 'can', 'you', 'your', 'available', 'date', 'dates',
+  'dating', 'free', 'busy', 'time', 'day', 'days', 'year', 'years', 'want', 'wants', 'like', 'likes',
+  'need', 'needs', 'please', 'help', 'meet', 'hang', 'out', 'come', 'will', 'would', 'could', 'should',
+  'have', 'has', 'had', 'been', 'being', 'having', 'make', 'makes', 'made', 'get', 'gets', 'got',
+  'know', 'knows', 'known', 'think', 'thinks', 'thought', 'see', 'sees', 'saw', 'seen', 'look', 'looks',
+  'give', 'gives', 'gave', 'given', 'find', 'finds', 'found', 'show', 'shows', 'shown', 'call', 'calls',
+  'good', 'well', 'best', 'better', 'bad', 'much', 'many', 'more', 'most', 'some', 'any', 'all',
+  'just', 'now', 'then', 'here', 'when', 'where', 'why', 'yes', 'not', 'did', 'was', 'were'
+]);
 
 /**
  * Keyword retrieval: rank publications by overlap with the question (title weighted higher).
@@ -175,9 +186,22 @@ function retrieveRelevantPapers(publications, question, limit = 8) {
 function routeQuestion(q, publications = []) {
   const s = q.toLowerCase().trim();
 
-  // 1. Casual Greetings
+  // 1. Casual Greetings & Mood Inquiries
   if (/^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings|kumusta|magandang\s*(araw|umaga|hapon|gabi))([\s!.,?]+(there|bot|ai|assistant|campus\s*ai)?)?[\s!.,?]*$/i.test(s)) {
     return 'greeting';
+  }
+  if (/^(how are you|how are you doing|how is it going|how's it going|what's up|wassup|kamusta ka)[\s!.,?]*$/i.test(s)) {
+    return 'small_talk_mood';
+  }
+
+  // 2. Personal, Dating, Relationship & Availability Queries
+  if (/\b(available for a date|go on a date|go out with me|be my (girlfriend|boyfriend|partner|date|valentine)|do you (date|have a girlfriend|have a boyfriend|love me|like me)|are you (available|free|single|dating|taken|in love|married)|will you marry me|date me|can we date|hang out)\b/i.test(s) || /^(are you available\??|are you free\??)$/i.test(s)) {
+    return 'persona_dating';
+  }
+
+  // 3. Bot Persona / Identity & Capabilities
+  if (/^(who are you|what are you|are you (an ai|a bot|a robot|human|alive|real)|what is your name|tell me about yourself)[\s!.,?]*$/i.test(s)) {
+    return 'persona_identity';
   }
 
   // System Overview / About the platform
@@ -302,6 +326,15 @@ function handleRoutedQuestion(routeInfo, publications, meta) {
   switch (route) {
     case 'greeting':
       return "Hello! I am Campus AI for PSU Asingan. How can I help you today? You can ask me about our campus researchers, publications, JC3 points, or how the system works.";
+
+    case 'small_talk_mood':
+      return "I am doing great and ready to assist you! As Campus AI for PSU Asingan, I am here to help you navigate our campus research repository, explore faculty publications, check citation statistics, or evaluate JC3 points. What would you like to explore today?";
+
+    case 'persona_dating':
+      return "I am Campus AI, an automated academic intelligence assistant for PSU Asingan. I am always available 24/7 to help you search publications, inspect citation metrics, check JC3 points, and explore university research, but I do not have personal feelings, date, or engage in relationships. How can I assist you with university research today?";
+
+    case 'persona_identity':
+      return "I am Campus AI, the official academic intelligence assistant of Pangasinan State University - Asingan Campus. I assist researchers, students, and administrators with navigating our institutional research repository, exploring publications, calculating DBM-CHED JC3 points, and finding scholarly literature.";
 
     case 'system_overview':
       return `Welcome to the PSU Asingan Research Publication Tracking System!
@@ -486,7 +519,15 @@ You can inspect any paper and simulate custom percentage shares in the Research 
 
     case 'general_status':
     default: {
-      return `System Overview (PSU Asingan):\n\n• Approved Publications: ${meta.totalPublications ?? (publications || []).length}\n• Registered Researchers: ${meta.totalResearchers ?? list.length}\n• Total Citations: ${meta.totalCitations ?? 0}`;
+      const pubCount = meta.totalPublications ?? (publications || []).length;
+      const resCount = meta.totalResearchers ?? list.length;
+      const citCount = meta.totalCitations ?? 0;
+      return `The PSU Asingan Research Publication Tracking System currently tracks ${pubCount} approved research publication${pubCount !== 1 ? 's' : ''} and ${resCount} registered researcher profile${resCount !== 1 ? 's' : ''}, with a cumulative total of ${citCount} citation${citCount !== 1 ? 's' : ''} across our academic departments.
+
+System Overview (PSU Asingan):
+• Approved Publications: ${pubCount}
+• Registered Researchers: ${resCount}
+• Total Citations: ${citCount}`;
     }
   }
 }
@@ -864,24 +905,6 @@ export async function askCampusIntelligence(question, publications = [], systemM
     };
   }
 
-  // Fast pre-filter for obvious personal or completely off-topic queries
-  const offTopicRegex = /\b(favorite (food|color|movie|song|game|animal)|who made you|are you (alive|human|dating|in love|single)|tell me a joke|weather in|how to cook|bake|recipe|cryptocurrency|bitcoin|horoscope|zodiac|love letter|dating advice|who is the president of|who won the)\b/i;
-  if (offTopicRegex.test(trimmedQ)) {
-    return {
-      answer: `I am PSU Asingan’s Academic Intelligence Assistant. I am designed exclusively to assist you with our Research Publication Tracking System and campus academic research. I do not answer personal questions or unrelated topics.
-
-I can assist you with:
-1. System Activity: Current repository metrics, active researchers, and system records.
-2. System Features: How Google Scholar claiming, UN SDG matrix, JC3 (KRA II) points, or search tools work.
-3. Research Purposes: Campus research clusters, institutional impact, and accreditation alignment.
-4. Specific Research: Summaries, authors, methodology, findings, and citations of any PSU paper.
-
-How may I assist you with our system or research repository today?`,
-      citedPapers: [],
-      source: 'guardrail',
-    };
-  }
-
   // Agent 1: code-only router for fast, 100% accurate, specific answers
   const route = routeQuestion(trimmedQ, publications || []);
   if (route !== 'paper') {
@@ -914,6 +937,24 @@ How may I assist you with our system or research repository today?`,
       answer: handleRoutedQuestion(route, publications || [], systemMetadata),
       citedPapers,
       source: 'database',
+    };
+  }
+
+  // Fast pre-filter for obvious personal or completely off-topic queries
+  const offTopicRegex = /\b(favorite (food|color|movie|song|game|animal)|who made you|are you (alive|human|dating|in love|single)|tell me a joke|weather in|how to cook|bake|recipe|cryptocurrency|bitcoin|horoscope|zodiac|love letter|dating advice|who is the president of|who won the|write a poem|write an essay|movie recommendation|play a game)\b/i;
+  if (offTopicRegex.test(trimmedQ)) {
+    return {
+      answer: `I am PSU Asingan’s Academic Intelligence Assistant. I am designed exclusively to assist you with our Research Publication Tracking System and campus academic research. I do not answer personal questions or unrelated topics.
+
+I can assist you with:
+1. System Activity: Current repository metrics, active researchers, and system records.
+2. System Features: How Google Scholar claiming, UN SDG matrix, JC3 (KRA II) points, or search tools work.
+3. Research Purposes: Campus research clusters, institutional impact, and accreditation alignment.
+4. Specific Research: Summaries, authors, methodology, findings, and citations of any PSU paper.
+
+How may I assist you with our system or research repository today?`,
+      citedPapers: [],
+      source: 'guardrail',
     };
   }
 
@@ -1065,8 +1106,15 @@ USER QUESTION: "${trimmedQ}"`;
     }
 
     // 4. Local RAG Retrieval & Synthesis
-    const stop = new Set(['the', 'what', 'does', 'about', 'talk', 'study', 'this', 'that', 'with', 'from', 'using', 'and', 'for', 'are', 'how', 'who', 'which', 'research', 'paper', 'papers', 'tell', 'explain', 'summary', 'summarize', 'there', 'their', 'can', 'you']);
-    const words = qLower.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !stop.has(w));
+    const words = qLower.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !RETRIEVAL_STOPWORDS.has(w));
+
+    if (words.length === 0) {
+      return {
+        answer: "I am Campus AI for PSU Asingan. How can I help you today? You can ask me about our campus researchers, approved publications, citation metrics, JC3 (KRA II) points, or search for research topics like 'agriculture', 'machine learning', or 'reading comprehension'.",
+        citedPapers: [],
+        source: 'local-rag',
+      };
+    }
 
     const scored = (publications || [])
       .map(p => {
@@ -1074,17 +1122,31 @@ USER QUESTION: "${trimmedQ}"`;
         const authStr = (Array.isArray(p.authors) ? p.authors.join(' ') : (p.authors || '')).toLowerCase();
         const absStr = (p.abstract || '').toLowerCase();
         const sdgStr = (typeof p.sdg_tags === 'string' ? p.sdg_tags : JSON.stringify(p.sdg_tags || '')).toLowerCase();
+        const jrnStr = (p.journal || '').toLowerCase();
 
         let score = 0;
+        let matchedCount = 0;
         for (const w of words) {
-          if (titleStr.includes(w)) score += 4;
-          if (authStr.includes(w)) score += 3;
-          if (sdgStr.includes(w)) score += 2;
-          if (absStr.includes(w)) score += 1;
+          const stem = w.length >= 5 ? w.slice(0, 5) : w;
+          const matchField = (field) => field.includes(w) || (w.length >= 5 && field.includes(stem));
+
+          let hit = false;
+          if (matchField(titleStr)) { score += 5; hit = true; }
+          if (matchField(authStr)) { score += 4; hit = true; }
+          if (matchField(sdgStr)) { score += 3; hit = true; }
+          if (matchField(jrnStr)) { score += 3; hit = true; }
+          if (matchField(absStr)) { score += 1; hit = true; }
+          if (hit) matchedCount++;
         }
-        return { p, score };
+        return { p, score, matchedCount };
       })
-      .filter(s => s.score > 0)
+      .filter(s => {
+        // High confidence match:
+        // Either title, author, sdg, or journal matched directly (score >= 3), OR at least 2 distinct words matched
+        if (s.score >= 3) return true;
+        if (words.length > 1 && s.matchedCount >= 2 && s.score >= 2) return true;
+        return false;
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, 4);
 
