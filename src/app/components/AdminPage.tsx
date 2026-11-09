@@ -1022,35 +1022,43 @@ export function AdminPage() {
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0 self-start sm:self-center w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border/40 justify-start sm:justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openScholarReview(researcher.instructorId, researcher.name, researcher.scholarUrl)}
-                          className="h-8 text-xs gap-1.5 text-brand border-brand/30 hover:bg-brand-soft"
-                        >
-                          <GraduationCap className="w-3.5 h-3.5" />
-                          <span>Sync Scholar</span>
-                        </Button>
+                        {isCoordinator ? (
+                          <span className="text-[11px] font-medium text-muted-foreground italic px-2 py-1">
+                            Managed in My Profile
+                          </span>
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openScholarReview(researcher.instructorId, researcher.name, researcher.scholarUrl)}
+                              className="h-8 text-xs gap-1.5 text-brand border-brand/30 hover:bg-brand-soft"
+                            >
+                              <GraduationCap className="w-3.5 h-3.5" />
+                              <span>Sync Scholar</span>
+                            </Button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => editResearcher(researcher)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                          title="Edit profile"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => editResearcher(researcher)}
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                              title="Edit profile"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
 
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteTarget({ id: researcher.instructorId, name: researcher.name })}
-                          className="h-8 w-8 p-0 text-danger hover:bg-danger-soft hover:text-danger"
-                          title="Remove researcher"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeleteTarget({ id: researcher.instructorId, name: researcher.name })}
+                              className="h-8 w-8 p-0 text-danger hover:bg-danger-soft hover:text-danger"
+                              title="Remove researcher"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
