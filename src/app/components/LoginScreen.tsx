@@ -217,9 +217,9 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen flex bg-background text-foreground transition-colors duration-200">
+    <div className="min-h-screen flex bg-felt-canvas text-foreground transition-colors duration-200">
       {/* Left Side - Forms */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-slate-50 dark:bg-background overflow-y-auto min-h-screen transition-colors duration-200">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-felt-canvas overflow-y-auto min-h-screen transition-colors duration-200">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}

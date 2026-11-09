@@ -243,7 +243,7 @@ export function DashboardLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-foreground transition-colors duration-200">
+    <div className="min-h-screen bg-felt-canvas text-foreground transition-colors duration-200">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white dark:bg-card border-r border-border/70 flex-col z-20">
         {/* Logo + Small ? Guide Button */}

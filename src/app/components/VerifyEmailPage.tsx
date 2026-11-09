@@ -48,7 +48,7 @@ export function VerifyEmailPage() {
   }, [token]);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 sm:p-6">
+    <div className="min-h-screen bg-felt-canvas text-foreground flex flex-col justify-center items-center p-4 sm:p-6 transition-colors">
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}

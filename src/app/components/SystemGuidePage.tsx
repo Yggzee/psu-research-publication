@@ -1228,7 +1228,7 @@ export function SystemGuidePage() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-background text-foreground flex flex-col font-sans">
+    <div className="min-h-screen w-full bg-felt-canvas text-foreground flex flex-col font-sans">
       {/* ==================================================== */}
       {/* FULL-WIDTH INSTITUTIONAL TOP HEADER                  */}
       {/* ==================================================== */}

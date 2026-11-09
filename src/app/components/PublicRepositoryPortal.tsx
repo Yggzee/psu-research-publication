@@ -245,7 +245,7 @@ export function PublicRepositoryPortal() {
   const isScraperLockedForPublic = !loggedIn && scraperStatus && !scraperStatus.isAvailableForPublic;
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+    <div className="min-h-screen bg-felt-canvas text-foreground flex flex-col font-sans">
       {/* ---------------------------------------------------- */}
       {/* TOP INSTITUTIONAL NAVIGATION HEADER                  */}
       {/* ---------------------------------------------------- */}
