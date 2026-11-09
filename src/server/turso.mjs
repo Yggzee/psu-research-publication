@@ -298,18 +298,23 @@ export async function initTursoSchema() {
     )
   );
 
-  // Migrate admin user on Turso Cloud to psuac-rc / admin123 with Sir Rodelio M. Garin profile
+  // Migrate admin user on Turso Cloud to ENV_MANAGED (never store admin password in cloud DB!)
   try {
+    const adminUsername = process.env.ADMIN_USERNAME || 'psuac-rc';
     await tursoClient.execute({
       sql: `UPDATE users 
-            SET username = 'psuac-rc', 
-                password = 'admin123',
+            SET username = ?, 
+                password = 'ENV_MANAGED',
                 name = 'Sir Rodelio M. Garin',
                 email = 'rodeliogarin@gmail.com',
                 department = 'Campus Research Unit / BSIT',
                 scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
                 google_scholar_id = 'x6PdtN8AAAAJ'
             WHERE role = 'admin'`,
+      args: [adminUsername],
+    });
+    await tursoClient.execute({
+      sql: "DELETE FROM users WHERE id = 'user-1794223646835-yndd'",
       args: [],
     });
     await tursoClient.execute({
@@ -416,19 +421,21 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
 
     try { localDb.exec('PRAGMA foreign_keys = ON;'); } catch {}
 
-    // Post-rehydration guard: ensure admin credentials and Sir Garin's identity remain in lockstep
+    // Post-rehydration guard: ensure admin credentials remain ENV_MANAGED
     try {
+      const adminUsername = process.env.ADMIN_USERNAME || 'psuac-rc';
       prepareFn(`
         UPDATE users 
-        SET username = 'psuac-rc', 
-            password = 'admin123',
+        SET username = ?, 
+            password = 'ENV_MANAGED',
             name = 'Sir Rodelio M. Garin',
             email = 'rodeliogarin@gmail.com',
             department = 'Campus Research Unit / BSIT',
             scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
             google_scholar_id = 'x6PdtN8AAAAJ'
         WHERE role = 'admin'
-      `).run();
+      `).run(adminUsername);
+      prepareFn("DELETE FROM users WHERE id = 'user-1794223646835-yndd'").run();
       prepareFn(`
         UPDATE researchers 
         SET user_id = 'admin-1',

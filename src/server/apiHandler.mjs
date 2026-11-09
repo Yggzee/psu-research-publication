@@ -27,10 +27,12 @@ import {
   sendRegistrationApprovedEmail,
   getAppBaseUrl,
 } from './emailService.mjs';
-import { rateLimiter } from './rateLimiter.mjs';
+import { rateLimiter, loginAttemptTracker } from './rateLimiter.mjs';
 import { applySecurityHeaders } from './securityHeaders.mjs';
 import {
   matchesResearcher,
+  hashPassword,
+  verifyPassword,
   signSessionToken,
   verifySessionToken,
   authenticateCaller,
@@ -614,7 +616,104 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'Username/Instructor ID and password are required' });
       }
 
-      // Check users table (matches username, email, or instructor ID)
+      // 1a. Security Guardrail: Check for temporary 15-minute lockout (5 failed attempts limit)
+      const clientIp = rateLimiter.getClientIp(req);
+      const accountLock = loginAttemptTracker.isLocked(loginId);
+      const ipLock = loginAttemptTracker.isLocked(clientIp);
+
+      if (accountLock || ipLock) {
+        const remaining = accountLock?.remainingMinutes || ipLock?.remainingMinutes || 15;
+        return sendJson(429, {
+          error: `Too many failed login attempts. Your account is temporarily locked for ${remaining} minute(s) to protect against unauthorized access.`,
+          isLocked: true,
+          remainingMinutes: remaining,
+        });
+      }
+
+      // 1b. Check Root Research Coordinator credentials from Environment (.env / Render)
+      const adminUserEnv = (process.env.ADMIN_USERNAME || 'psuac-rc').trim().toLowerCase();
+      const adminPassEnv = process.env.ADMIN_PASSWORD || 'admin123';
+      const isAdminLogin =
+        loginId.toLowerCase() === adminUserEnv ||
+        loginId.toLowerCase() === 'admin' ||
+        loginId.toLowerCase() === 'rodeliogarin@gmail.com';
+
+      if (isAdminLogin) {
+        let isMatch = false;
+        try {
+          const passBuf = Buffer.from(password);
+          const envBuf = Buffer.from(adminPassEnv);
+          if (passBuf.length === envBuf.length) {
+            isMatch = crypto.timingSafeEqual(passBuf, envBuf);
+          }
+        } catch {}
+
+        if (!isMatch) {
+          const failAcc = loginAttemptTracker.recordFailure(loginId);
+          loginAttemptTracker.recordFailure(clientIp);
+          if (failAcc.isLocked) {
+            return sendJson(429, {
+              error: 'Too many failed login attempts. Your account is temporarily locked for 15 minutes to protect against unauthorized access.',
+              isLocked: true,
+              remainingMinutes: 15,
+            });
+          }
+          return sendJson(401, {
+            error: `Invalid login credentials. ${failAcc.attemptsRemaining} attempt(s) remaining before a 15-minute lockout.`,
+            attemptsRemaining: failAcc.attemptsRemaining,
+          });
+        }
+
+        // Coordinator credentials verified successfully!
+        loginAttemptTracker.recordSuccess(loginId);
+        loginAttemptTracker.recordSuccess(clientIp);
+
+        const adminDb = db.prepare(`
+          SELECT u.*, r.instructor_id 
+          FROM users u
+          LEFT JOIN researchers r ON u.id = r.user_id
+          WHERE u.role = 'admin'
+          LIMIT 1
+        `).get() || {
+          id: 'admin-1',
+          role: 'admin',
+          name: 'Sir Rodelio M. Garin',
+          username: adminUserEnv,
+          email: 'rodeliogarin@gmail.com',
+          department: 'Campus Research Unit / BSIT',
+          is_faculty: 1,
+          scholar_url: 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+          google_scholar_id: 'x6PdtN8AAAAJ',
+        };
+
+        const token = signSessionToken({
+          id: adminDb.id,
+          role: 'admin',
+          name: adminDb.name || 'Sir Rodelio M. Garin',
+          username: adminDb.username || adminUserEnv,
+          instructorId: adminDb.instructor_id || 'PSU-002',
+          department: adminDb.department || 'Campus Research Unit / BSIT',
+        });
+
+        return sendJson(200, {
+          user: {
+            id: adminDb.id,
+            role: 'admin',
+            name: adminDb.name || 'Sir Rodelio M. Garin',
+            username: adminDb.username || adminUserEnv,
+            email: adminDb.email || 'rodeliogarin@gmail.com',
+            instructorId: adminDb.instructor_id || 'PSU-002',
+            department: adminDb.department || 'Campus Research Unit / BSIT',
+            isFaculty: true,
+            photoUrl: adminDb.photo_url || null,
+            scholarUrl: adminDb.scholar_url || 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+            googleScholarId: adminDb.google_scholar_id || 'x6PdtN8AAAAJ',
+          },
+          token,
+        });
+      }
+
+      // 1c. Check Researcher credentials in SQLite using salted scrypt verification
       const user = db.prepare(`
         SELECT u.*, r.instructor_id 
         FROM users u
@@ -623,12 +722,53 @@ export async function handleApiRequest(req, res) {
           LOWER(u.username) = LOWER(?) OR 
           LOWER(u.email) = LOWER(?) OR 
           LOWER(r.instructor_id) = LOWER(?)
-        ) AND u.password = ?
+        )
         LIMIT 1
-      `).get(loginId, loginId, loginId, password);
+      `).get(loginId, loginId, loginId);
 
       if (!user) {
-        return sendJson(401, { error: 'Invalid login credentials.' });
+        const failAcc = loginAttemptTracker.recordFailure(loginId);
+        loginAttemptTracker.recordFailure(clientIp);
+        if (failAcc.isLocked) {
+          return sendJson(429, {
+            error: 'Too many failed login attempts. Your account is temporarily locked for 15 minutes to protect against unauthorized access.',
+            isLocked: true,
+            remainingMinutes: 15,
+          });
+        }
+        return sendJson(401, {
+          error: `Invalid login credentials. ${failAcc.attemptsRemaining} attempt(s) remaining before a 15-minute lockout.`,
+          attemptsRemaining: failAcc.attemptsRemaining,
+        });
+      }
+
+      const isPasswordValid = verifyPassword(password, user.password);
+      if (!isPasswordValid) {
+        const failAcc = loginAttemptTracker.recordFailure(loginId);
+        loginAttemptTracker.recordFailure(clientIp);
+        if (failAcc.isLocked) {
+          return sendJson(429, {
+            error: 'Too many failed login attempts. Your account is temporarily locked for 15 minutes to protect against unauthorized access.',
+            isLocked: true,
+            remainingMinutes: 15,
+          });
+        }
+        return sendJson(401, {
+          error: `Invalid login credentials. ${failAcc.attemptsRemaining} attempt(s) remaining before a 15-minute lockout.`,
+          attemptsRemaining: failAcc.attemptsRemaining,
+        });
+      }
+
+      // Password verified!
+      loginAttemptTracker.recordSuccess(loginId);
+      loginAttemptTracker.recordSuccess(clientIp);
+
+      // Lazy upgrade to scrypt if user's password was still plaintext
+      if (user.password && !user.password.startsWith('scrypt$') && user.password !== 'ENV_MANAGED') {
+        try {
+          const hashed = hashPassword(password);
+          db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, user.id);
+        } catch {}
       }
 
       // Check account verification & approval status
@@ -743,7 +883,7 @@ export async function handleApiRequest(req, res) {
         userId,
         trimmedInstId,
         trimmedEmail,
-        password,
+        hashPassword(password),
         fullName,
         department,
         isFaculty ? 1 : 0,
@@ -924,7 +1064,7 @@ export async function handleApiRequest(req, res) {
         UPDATE users 
         SET password = ?, status = 'active', email_verified_at = ?, verification_token = NULL 
         WHERE id = ?
-      `).run(newPassword, now, user.id);
+      `).run(hashPassword(newPassword), now, user.id);
 
       db.prepare(`
         UPDATE researchers 
@@ -963,15 +1103,27 @@ export async function handleApiRequest(req, res) {
 
       const user = db.prepare(`
         SELECT u.* FROM users u
-        WHERE (u.id = ? OR LOWER(u.username) = LOWER(?)) AND u.password = ?
+        WHERE (u.id = ? OR LOWER(u.username) = LOWER(?))
         LIMIT 1
-      `).get(userId || '', username || '', currentPassword);
+      `).get(userId || '', username || '');
 
       if (!user) {
+        return sendJson(401, { error: 'User account not found.' });
+      }
+
+      if (user.role === 'admin' || user.password === 'ENV_MANAGED') {
+        return sendJson(403, { 
+          error: 'The Research Coordinator credentials are environment-secured via ADMIN_PASSWORD in your hosting settings or .env file.' 
+        });
+      }
+
+      const isCurrentValid = verifyPassword(currentPassword, user.password);
+      if (!isCurrentValid) {
         return sendJson(401, { error: 'Current password is incorrect.' });
       }
 
-      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(newPassword, user.id);
+      const hashedNew = hashPassword(newPassword);
+      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashedNew, user.id);
       return sendJson(200, { success: true, message: 'Password updated successfully!' });
     }
 
@@ -1707,7 +1859,7 @@ export async function handleApiRequest(req, res) {
         userId,
         trimmedInstId,
         trimmedEmail,
-        initialPassword,
+        hashPassword(initialPassword),
         fullName,
         mi || null,
         department,
@@ -2089,7 +2241,7 @@ export async function handleApiRequest(req, res) {
       if (current.user_id) {
         if (sanitized.password) {
           db.prepare('UPDATE users SET name = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?, password = ? WHERE id = ?')
-            .run(fullName, department, photoUrl, scholarUrl || null, googleScholarId || null, sanitized.password, current.user_id);
+            .run(fullName, department, photoUrl, scholarUrl || null, googleScholarId || null, hashPassword(sanitized.password), current.user_id);
         } else {
           db.prepare('UPDATE users SET name = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ? WHERE id = ?')
             .run(fullName, department, photoUrl, scholarUrl || null, googleScholarId || null, current.user_id);
@@ -2949,7 +3101,7 @@ export async function handleApiRequest(req, res) {
             resUserId,
             trimmedInstId,
             userEmail,
-            userPassword,
+            hashPassword(userPassword),
             fullName,
             userDept,
             userIsFaculty,

@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso, executeBatchOnTurso } from './turso.mjs';
-import { matchesResearcher } from './authHelper.mjs';
+import { matchesResearcher, hashPassword } from './authHelper.mjs';
 import { localHeuristicSDG } from './aiService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -368,7 +368,9 @@ export function initDatabase() {
   initSetting('scraper_quota_threshold_usd', '1.00');
   initSetting('scraper_daily_limit', '100');
 
-  // Seed default admin account ONLY if no admin exists
+  const adminUsername = process.env.ADMIN_USERNAME || 'psuac-rc';
+
+  // Seed default admin account with password = 'ENV_MANAGED' (never stored in DB!)
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!existingAdmin) {
     db.prepare(`
@@ -376,9 +378,9 @@ export function initDatabase() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'admin-1',
-      'psuac-rc',
+      adminUsername,
       'rodeliogarin@gmail.com',
-      'admin123',
+      'ENV_MANAGED',
       'Sir Rodelio M. Garin',
       'admin',
       'Campus Research Unit / BSIT',
@@ -387,26 +389,31 @@ export function initDatabase() {
       'x6PdtN8AAAAJ',
       new Date().toISOString()
     );
-    console.log('[Database] Default admin user initialized (psuac-rc / admin123).');
+    console.log('[Database] Default admin user initialized with ENV_MANAGED credentials.');
   } else {
-    // Idempotent migration to ensure admin credentials match psuac-rc / admin123 with Sir Rodelio M. Garin identity
+    // Idempotent migration to ensure admin credentials match .env and are removed from database
     try {
       db.prepare(`
         UPDATE users 
-        SET username = 'psuac-rc', 
-            password = 'admin123',
+        SET username = ?, 
+            password = 'ENV_MANAGED',
             name = 'Sir Rodelio M. Garin',
             email = 'rodeliogarin@gmail.com',
             department = 'Campus Research Unit / BSIT',
             scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
             google_scholar_id = 'x6PdtN8AAAAJ'
         WHERE role = 'admin'
-      `).run();
-      console.log('[Database] Admin user synchronized to psuac-rc / admin123 with Sir Rodelio M. Garin profile.');
+      `).run(adminUsername);
+      console.log('[Database] Admin user credentials protected via .env (password marked ENV_MANAGED).');
     } catch (e) {
       console.warn('[Admin Upgrade Error]:', e.message);
     }
   }
+
+  // Delete duplicate orphaned test account from earlier experiments
+  try {
+    db.prepare("DELETE FROM users WHERE id = 'user-1794223646835-yndd'").run();
+  } catch {}
 
   // Ensure Sir Rodelio M. Garin's researcher profile is linked to admin-1
   try {
@@ -423,9 +430,37 @@ export function initDatabase() {
   } catch (e) {
     console.warn('[Garin Researcher Link Error]:', e.message);
   }
+
+  // Upgrade any plaintext researcher passwords to salted scrypt hashes
+  migrateResearcherPasswordsToScrypt(db);
   // Call on startup audit to recalibrate any inflated citation counts
   auditAndSyncResearcherCitations();
   autoBackfillMissingSDGs();
+}
+
+/**
+ * Scan users table and transparently upgrade any plaintext passwords to salted scrypt hashes
+ */
+export function migrateResearcherPasswordsToScrypt(dbInstance = db) {
+  try {
+    const unhashedUsers = dbInstance.prepare(`
+      SELECT id, username, password FROM users 
+      WHERE password IS NOT NULL 
+        AND password != 'ENV_MANAGED' 
+        AND password NOT LIKE 'scrypt$%'
+    `).all();
+
+    if (unhashedUsers.length > 0) {
+      console.log(`[Security] Migrating ${unhashedUsers.length} plaintext researcher password(s) to salted scrypt hashes...`);
+      for (const u of unhashedUsers) {
+        const hashed = hashPassword(u.password);
+        dbInstance.prepare('UPDATE users SET password = ? WHERE id = ?').run(hashed, u.id);
+      }
+      console.log('[Security] Researcher passwords successfully upgraded to scrypt hashes.');
+    }
+  } catch (err) {
+    console.warn('[Password Migration Error]:', err.message);
+  }
 }
 
 /**

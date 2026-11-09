@@ -174,3 +174,101 @@ class SlidingWindowRateLimiter {
 }
 
 export const rateLimiter = new SlidingWindowRateLimiter();
+
+/**
+ * High-performance In-Memory Login Attempt Tracker
+ * Rules:
+ * - 5 failed attempts allowed
+ * - 15-minute temporary lockout upon 5th failure
+ * - Tracks by account identifier (username / email / instructor_id) and IP fallback
+ * - Immediate reset upon successful login
+ */
+class LoginAttemptTracker {
+  constructor() {
+    this.attempts = new Map();
+    this.maxAttempts = 5;
+    this.lockoutDurationMs = 15 * 60 * 1000; // 15 minutes
+    this.windowMs = 15 * 60 * 1000;          // 15-minute rolling window
+
+    this.cleanupInterval = setInterval(() => this.cleanup(), 3 * 60 * 1000);
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  isLocked(key) {
+    if (!key) return null;
+    const norm = String(key).toLowerCase().trim();
+    const entry = this.attempts.get(norm);
+    if (!entry) return null;
+
+    const now = Date.now();
+    if (entry.lockUntil && entry.lockUntil > now) {
+      return {
+        isLocked: true,
+        remainingMinutes: Math.ceil((entry.lockUntil - now) / (60 * 1000)),
+      };
+    }
+
+    if (entry.lockUntil && entry.lockUntil <= now) {
+      this.attempts.delete(norm);
+      return null;
+    }
+
+    if (now - entry.firstAttemptAt > this.windowMs) {
+      this.attempts.delete(norm);
+      return null;
+    }
+
+    return null;
+  }
+
+  recordFailure(key) {
+    if (!key) return { isLocked: false, attemptsRemaining: this.maxAttempts - 1 };
+    const norm = String(key).toLowerCase().trim();
+    const now = Date.now();
+    let entry = this.attempts.get(norm);
+
+    if (!entry || now - entry.firstAttemptAt > this.windowMs) {
+      entry = { attempts: 1, lockUntil: 0, firstAttemptAt: now };
+    } else {
+      entry.attempts += 1;
+    }
+
+    if (entry.attempts >= this.maxAttempts) {
+      entry.lockUntil = now + this.lockoutDurationMs;
+      this.attempts.set(norm, entry);
+      return {
+        isLocked: true,
+        remainingMinutes: 15,
+        attemptsRemaining: 0,
+      };
+    }
+
+    this.attempts.set(norm, entry);
+    return {
+      isLocked: false,
+      remainingMinutes: 0,
+      attemptsRemaining: Math.max(0, this.maxAttempts - entry.attempts),
+    };
+  }
+
+  recordSuccess(key) {
+    if (!key) return;
+    const norm = String(key).toLowerCase().trim();
+    this.attempts.delete(norm);
+  }
+
+  cleanup() {
+    const now = Date.now();
+    for (const [key, entry] of this.attempts.entries()) {
+      if (entry.lockUntil && entry.lockUntil <= now) {
+        this.attempts.delete(key);
+      } else if (!entry.lockUntil && now - entry.firstAttemptAt > this.windowMs) {
+        this.attempts.delete(key);
+      }
+    }
+  }
+}
+
+export const loginAttemptTracker = new LoginAttemptTracker();

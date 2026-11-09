@@ -238,87 +238,104 @@ export function SettingsPage() {
               <CardTitle className="text-sm font-semibold">Account Security & Password</CardTitle>
             </div>
             <CardDescription className="text-xs">
-              Change your password to keep your researcher credentials secure.
+              {currentUser.role === "admin"
+                ? "Research Coordinator credentials and administrative access."
+                : "Change your password to keep your researcher credentials secure."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md text-xs">
-              <div className="space-y-1.5">
-                <Label htmlFor="current-pw" className="text-xs font-medium">Current Password</Label>
-                <div className="relative">
-                  <Input
-                    id="current-pw"
-                    type={showCurrentPw ? "text" : "password"}
-                    required
-                    placeholder="Enter current password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="pr-9 h-9 text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPw(!showCurrentPw)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showCurrentPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
+            {currentUser.role === "admin" ? (
+              <div className="p-4 rounded-lg bg-brand/5 border border-brand/20 space-y-2.5 max-w-lg text-xs">
+                <div className="flex items-center gap-2 font-semibold text-brand">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Environment-Secured Coordinator Credentials</span>
                 </div>
+                <p className="text-muted-foreground leading-relaxed">
+                  Your Research Coordinator credentials are detached from the database and managed securely through Environment Variables (<code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ADMIN_USERNAME</code> and <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ADMIN_PASSWORD</code>).
+                </p>
+                <p className="text-muted-foreground leading-relaxed">
+                  To rotate your password, update the <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">ADMIN_PASSWORD</code> environment secret in your Render dashboard or local <code className="px-1 py-0.5 rounded bg-muted font-mono text-[11px]">.env</code> file.
+                </p>
               </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="new-pw" className="text-xs font-medium">New Password</Label>
-                <div className="relative">
-                  <Input
-                    id="new-pw"
-                    type={showNewPw ? "text" : "password"}
-                    required
-                    placeholder="At least 4 characters"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="pr-9 h-9 text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPw(!showNewPw)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showNewPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
+            ) : (
+              <form onSubmit={handlePasswordSubmit} className="space-y-4 max-w-md text-xs">
+                <div className="space-y-1.5">
+                  <Label htmlFor="current-pw" className="text-xs font-medium">Current Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="current-pw"
+                      type={showCurrentPw ? "text" : "password"}
+                      required
+                      placeholder="Enter current password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      className="pr-9 h-9 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPw(!showCurrentPw)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showCurrentPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="confirm-pw" className="text-xs font-medium">Confirm New Password</Label>
-                <Input
-                  id="confirm-pw"
-                  type="password"
-                  required
-                  placeholder="Re-enter new password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="new-pw" className="text-xs font-medium">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="new-pw"
+                      type={showNewPw ? "text" : "password"}
+                      required
+                      placeholder="At least 4 characters"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="pr-9 h-9 text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPw(!showNewPw)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showNewPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                </div>
 
-              <Button
-                type="submit"
-                disabled={savingPassword}
-                size="sm"
-                className="bg-brand hover:bg-brand/90 text-white text-xs gap-1.5 mt-2"
-              >
-                {savingPassword ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Updating Password...</span>
-                  </>
-                ) : (
-                  <>
-                    <KeyRound className="w-3.5 h-3.5" />
-                    <span>Update Password</span>
-                  </>
-                )}
-              </Button>
-            </form>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirm-pw" className="text-xs font-medium">Confirm New Password</Label>
+                  <Input
+                    id="confirm-pw"
+                    type="password"
+                    required
+                    placeholder="Re-enter new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={savingPassword}
+                  size="sm"
+                  className="bg-brand hover:bg-brand/90 text-white text-xs gap-1.5 mt-2"
+                >
+                  {savingPassword ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Updating Password...</span>
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="w-3.5 h-3.5" />
+                      <span>Update Password</span>
+                    </>
+                  )}
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
       )}

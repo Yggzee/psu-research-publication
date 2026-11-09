@@ -1164,7 +1164,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
     subtitle: "Managing your coordinator profile, appearance theme, password, and cloud database backup",
     icon: Settings,
     narrativeParagraphs: [
-      "At the bottom left of the sidebar, 'My Profile' and 'Settings' allow you to manage your personal coordinator portfolio, view all your publications, manage system preferences, and perform database cloud synchronization. In 'My Profile', you can view your complete publication catalog, citation density, contact email, and connected Google Scholar link. In 'Settings', you can switch themes, change passwords, and click 'Sync Database' to guarantee that all local SQLite tables are permanently replicated to Turso Cloud.",
+      "At the bottom left of the sidebar, 'My Profile' and 'Settings' allow you to manage your personal coordinator portfolio, view all your publications, manage system preferences, and perform database cloud synchronization. In 'My Profile', you can view your complete publication catalog, citation density, contact email, and connected Google Scholar link. In 'Settings', you can switch themes, inspect environment credential security settings, and click 'Sync Database' to guarantee that all local SQLite tables are permanently replicated to Turso Cloud.",
       "The 'System & Cloud Storage' tab shows the live connection status of the portal's Turso Cloud storage, ensuring that all researcher accounts, invitations, publications, and citations are permanently backed up and never lost even when the cloud server restarts.",
     ],
     clickableItems: [

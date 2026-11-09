@@ -133,8 +133,10 @@ export function LoginScreen() {
     } catch (err: any) {
       console.warn("API login failed:", err);
 
-      // Check if server returned a 403 verification/approval status message
       const errMessage = err.message || "";
+      const cleanMessage = errMessage.replace(/^API Error: \d+ [^:]+:\s*/, "");
+
+      // Check if server returned a 403 verification/approval status message
       if (
         errMessage.includes("pending email") ||
         errMessage.includes("verification") ||
@@ -144,79 +146,13 @@ export function LoginScreen() {
       ) {
         setLoginStatusAlert({
           status: "pending",
-          message: errMessage.replace(/^API Error: \d+ [^:]+:\s*/, ""),
+          message: cleanMessage,
         });
         setIsLoading(false);
         return;
       }
 
-      // 2. Local Fallback for offline admin usage
-      const instructor = getManagedResearchers().find(
-        (member) =>
-          (member.instructorId?.toLowerCase() === inputId.toLowerCase() ||
-           member.name.toLowerCase() === inputId.toLowerCase() ||
-           (member as any).email?.toLowerCase() === inputId.toLowerCase()) &&
-          member.password === password,
-      );
-
-      if (
-        (inputId.toLowerCase() === "psu-002" || inputId.toLowerCase() === "rodeliogarin@gmail.com") &&
-        password === "123456"
-      ) {
-        setCurrentUser({
-          role: "admin",
-          instructorId: "PSU-002",
-          name: "Sir Rodelio M. Garin",
-          username: "PSU-002",
-          email: "rodeliogarin@gmail.com",
-          department: "Campus Research Unit / BSIT",
-          isFaculty: true,
-          photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
-          scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-          googleScholarId: "x6PdtN8AAAAJ",
-        });
-        navigate(resolveTargetUrl("admin"));
-        return;
-      }
-
-      if (instructor) {
-        setCurrentUser({
-          role: "instructor",
-          instructorId: instructor.instructorId,
-          name: instructor.name,
-          department: instructor.department,
-          isFaculty: instructor.isFaculty,
-          photoUrl: instructor.photoUrl,
-        });
-        navigate(resolveTargetUrl("instructor"));
-        return;
-      }
-
-      if (
-        (inputId.toLowerCase() === "psuac-rc" ||
-          inputId.toLowerCase() === "admin" ||
-          inputId.toLowerCase() === "rodeliogarin@gmail.com" ||
-          inputId.toLowerCase() === "admin@psu.edu.ph") &&
-        (password === "admin123" || password === "admin")
-      ) {
-        setCurrentUser({
-          id: "admin-1",
-          role: "admin",
-          instructorId: "PSU-002",
-          name: "Sir Rodelio M. Garin",
-          username: "psuac-rc",
-          email: "rodeliogarin@gmail.com",
-          department: "Campus Research Unit / BSIT",
-          photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
-          scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-          googleScholarId: "x6PdtN8AAAAJ",
-          isFaculty: true,
-        });
-        navigate(resolveTargetUrl("admin"));
-        return;
-      }
-
-      setLoginError(err.message || "Invalid login. Please check your credentials.");
+      setLoginError(cleanMessage || "Invalid login. Please check your credentials.");
     } finally {
       setIsLoading(false);
     }

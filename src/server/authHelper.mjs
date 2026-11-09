@@ -368,3 +368,38 @@ export function sanitizeResearcherInput(data, caller) {
     password: data.password,
   };
 }
+
+/**
+ * One-way cryptographic password hashing using Node.js crypto.scryptSync
+ * Format: scrypt$<salt_hex>$<derivedKey_hex>
+ */
+export function hashPassword(password) {
+  if (!password) return '';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `scrypt$${salt}$${derivedKey}`;
+}
+
+/**
+ * Constant-time password verification against stored scrypt hash
+ */
+export function verifyPassword(password, stored) {
+  if (!password || !stored) return false;
+  // If stored in old plaintext, check equality (migration will catch it)
+  if (!stored.startsWith('scrypt$')) {
+    return password === stored;
+  }
+  const parts = stored.split('$');
+  if (parts.length !== 3) return false;
+  const salt = parts[1];
+  const originalKeyHex = parts[2];
+  try {
+    const derivedKey = crypto.scryptSync(password, salt, 64).toString('hex');
+    const a = Buffer.from(derivedKey, 'hex');
+    const b = Buffer.from(originalKeyHex, 'hex');
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
