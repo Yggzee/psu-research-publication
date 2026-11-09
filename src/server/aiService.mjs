@@ -166,10 +166,12 @@ function retrieveRelevantPapers(publications, question, limit = 8) {
 
   const scored = publications.map(p => {
     const title = (p.title || '').toLowerCase();
-    const rest = `${p.abstract || ''} ${Array.isArray(p.authors) ? p.authors.join(' ') : p.authors || ''}`.toLowerCase();
+    const authors = `${Array.isArray(p.authors) ? p.authors.join(' ') : p.authors || ''} ${p.owner_name || ''}`.toLowerCase();
+    const rest = `${p.abstract || ''} ${p.journal || ''}`.toLowerCase();
     let score = 0;
     for (const w of words) {
-      if (title.includes(w)) score += 3;
+      if (authors.includes(w)) score += 5;
+      else if (title.includes(w)) score += 4;
       else if (rest.includes(w)) score += 1;
     }
     return { p, score };
@@ -966,21 +968,50 @@ How may I assist you with our system or research repository today?`,
   }
 
   // Agent 2: retrieval-augmented paper answers using only the most relevant papers
-  const relevantPapers = retrieveRelevantPapers(publications, trimmedQ, 8);
-  const paperSummaries = relevantPapers.map((p, idx) => ({
-    refId: idx + 1,
-    id: p.id,
-    title: p.title,
-    authors: Array.isArray(p.authors) ? p.authors.join(', ') : p.authors,
-    year: p.year,
-    citations: p.citations || 0,
-    journal: p.journal || 'PSU Archive',
-    indexing: p.journal_indexing || 'Institutional Refereed',
-    jc3Points: p.jc3_points || (p.nbc461_points ? (p.nbc461_points >= 25 ? 50.0 : p.nbc461_points >= 15 ? 30.0 : p.nbc461_points >= 10 ? 20.0 : 10.0) : 10.0),
-    abstract: p.abstract ? p.abstract.slice(0, 350) : 'Full text on archive',
-    sdg: p.sdg_tags ? (typeof p.sdg_tags === 'string' ? p.sdg_tags : JSON.stringify(p.sdg_tags)) : 'General Research',
-    rationale: p.sdg_rationale || '',
-  }));
+  const isAllOrAuthorQuery = /\b(each|all|every|list all|show all|complete|overview)\b/i.test(trimmedQ) ||
+    (systemMetadata.researchersList || []).some(r => {
+      const parts = r.split(/\s+/).filter(w => w.length > 3);
+      return parts.some(p => trimmedQ.toLowerCase().includes(p.toLowerCase()));
+    });
+  const effectiveLimit = isAllOrAuthorQuery ? 20 : 8;
+
+  const relevantPapers = retrieveRelevantPapers(publications, trimmedQ, effectiveLimit);
+  const paperSummaries = relevantPapers.map((p, idx) => {
+    let sdgDisplay = '';
+    let rationaleDisplay = p.sdg_rationale || '';
+
+    if (p.sdg_tags && p.sdg_tags !== '[]' && p.sdg_tags !== '""' && p.sdg_tags !== '["General Research"]') {
+      try {
+        const parsed = typeof p.sdg_tags === 'string' && p.sdg_tags.startsWith('[') ? JSON.parse(p.sdg_tags) : p.sdg_tags;
+        sdgDisplay = Array.isArray(parsed) ? parsed.join(', ') : String(parsed);
+      } catch {
+        sdgDisplay = String(p.sdg_tags);
+      }
+    }
+
+    if (!sdgDisplay || sdgDisplay === 'General Research') {
+      const heuristic = localHeuristicSDG(p.title || '', p.abstract || '');
+      sdgDisplay = heuristic.primarySDG + (heuristic.secondarySDG ? `, ${heuristic.secondarySDG}` : '');
+      if (!rationaleDisplay && heuristic.rationales?.[heuristic.primarySDG]) {
+        rationaleDisplay = heuristic.rationales[heuristic.primarySDG];
+      }
+    }
+
+    return {
+      refId: idx + 1,
+      id: p.id,
+      title: p.title,
+      authors: Array.isArray(p.authors) ? p.authors.join(', ') : p.authors,
+      year: p.year,
+      citations: p.citations || 0,
+      journal: p.journal || 'PSU Archive',
+      indexing: p.journal_indexing || 'Institutional Refereed',
+      jc3Points: p.jc3_points || (p.nbc461_points ? (p.nbc461_points >= 25 ? 50.0 : p.nbc461_points >= 15 ? 30.0 : p.nbc461_points >= 10 ? 20.0 : 10.0) : 10.0),
+      abstract: p.abstract ? p.abstract.slice(0, 350) : 'Full text on archive',
+      sdg: sdgDisplay,
+      rationale: rationaleDisplay,
+    };
+  });
 
   const contextText = paperSummaries
     .map(p => `[Ref ${p.refId}] "${p.title}" (${p.year}) by ${p.authors} | Journal: ${p.journal} | Indexing: ${p.indexing} | JC3 Base: ${p.jc3Points} pts | Citations: ${p.citations}\nUN SDGs: ${p.sdg}\nAbstract: ${p.abstract}`)

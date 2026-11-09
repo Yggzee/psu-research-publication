@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso, executeBatchOnTurso } from './turso.mjs';
 import { matchesResearcher } from './authHelper.mjs';
+import { localHeuristicSDG } from './aiService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -388,6 +389,38 @@ export function initDatabase() {
   }
   // Call on startup audit to recalibrate any inflated citation counts
   auditAndSyncResearcherCitations();
+  autoBackfillMissingSDGs();
+}
+
+/**
+ * Automatically backfill missing SDG tags and CHED priorities using the academic classifier
+ */
+export function autoBackfillMissingSDGs() {
+  try {
+    const unclassified = db.prepare(`
+      SELECT id, title, abstract FROM publications
+      WHERE (sdg_tags IS NULL OR sdg_tags = '' OR sdg_tags = '[]' OR sdg_tags = '["General Research"]')
+      AND approval_status = 'approved'
+    `).all();
+
+    if (unclassified.length > 0) {
+      console.log(`[SDG Backfill] Auto-classifying ${unclassified.length} publications...`);
+      for (const pub of unclassified) {
+        const classified = localHeuristicSDG(pub.title || '', pub.abstract || '');
+        const tags = JSON.stringify([classified.primarySDG, ...(classified.secondarySDG ? [classified.secondarySDG] : [])]);
+        const rationale = classified.rationale || '';
+        const ched = classified.chedPriority || '';
+        db.prepare(`
+          UPDATE publications
+          SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?
+          WHERE id = ?
+        `).run(tags, rationale, ched, pub.id);
+      }
+      console.log(`[SDG Backfill] Finished auto-classifying ${unclassified.length} publications.`);
+    }
+  } catch (err) {
+    console.warn('[SDG Backfill Error]:', err.message);
+  }
 }
 
 /**
@@ -427,6 +460,7 @@ const tursoSyncWithTimeout = async () => {
     await initTursoSchema();
     await rehydrateFromTurso(db, originalPrepare);
     auditAndSyncResearcherCitations();
+    autoBackfillMissingSDGs();
   })();
 
   const timeoutTask = new Promise((resolve) => {
