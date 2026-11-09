@@ -1180,23 +1180,34 @@ export async function handleApiRequest(req, res) {
         const s = stem(w);
         if (s.length >= 3) stems.add(s);
 
-        if (w.startsWith('farm') || s === 'farm') {
-          ['farmer', 'farmers', 'farming', 'farms', 'agriculture', 'agricultural', 'crop', 'crops', 'cultivation', 'livestock', 'agronomy'].forEach((x) => synonyms.add(x));
+        // 1. Agriculture & Farming Domain
+        if (w.startsWith('farm') || s === 'farm' || w === 'agriculture' || w === 'agricultural' || w === 'agronomy' || w === 'crop' || w === 'crops') {
+          ['farmer', 'farmers', 'farming', 'farms', 'agriculture', 'agricultural', 'crop', 'crops', 'cultivation', 'livestock', 'poultry', 'soil', 'fertilizer', 'rice', 'palay', 'corn', 'cassava', 'dairy', 'irrigation', 'organic farming', 'agrarian', 'sdg 2', 'zero hunger'].forEach((x) => synonyms.add(x));
         }
-        if (w.startsWith('fish') || s === 'fish') {
-          ['fishery', 'fisheries', 'fishing', 'fisherfolk', 'aquaculture', 'marine', 'tilapia', 'bangus'].forEach((x) => synonyms.add(x));
+
+        // 2. Fishery, Aquaculture & Marine Domain
+        if (w.startsWith('fish') || s === 'fish' || w === 'aquaculture' || w === 'marine' || w === 'aquatic' || w === 'tilapia' || w === 'bangus') {
+          ['fishery', 'fisheries', 'fishing', 'fisherfolk', 'aquaculture', 'marine', 'tilapia', 'bangus', 'milkfish', 'fingerling', 'fingerlings', 'hatchery', 'coastal', 'aquatic', 'pond', 'freshwater', 'sdg 14', 'life below water'].forEach((x) => synonyms.add(x));
         }
-        if (w === 'robot' || w === 'robotics' || s === 'robot') {
-          ['robot', 'robotics', 'robotic', 'arduino', 'microcontroller', 'automation', 'sensor'].forEach((x) => synonyms.add(x));
+
+        // 3. Arduino, IoT, Robotics & Embedded Engineering
+        if (w === 'arduino' || w === 'microcontroller' || w === 'sensor' || w === 'sensors' || w === 'iot' || w === 'robot' || w === 'robotics' || w === 'automation' || s === 'robot') {
+          ['arduino', 'microcontroller', 'microcontrollers', 'sensor', 'sensors', 'iot', 'internet of things', 'smart', 'automation', 'robotics', 'telemetry', 'embedded', 'hardware', 'gsm', 'relay', 'esp32', 'esp8266', 'raspberry pi', 'circuit', 'mechatronics', 'sdg 9', 'industry, innovation'].forEach((x) => synonyms.add(x));
         }
-        if (w === 'ai' || w === 'artificial' || w === 'intelligence') {
-          ['ai', 'machine learning', 'deep learning', 'neural', 'nlp', 'computer vision'].forEach((x) => synonyms.add(x));
+
+        // 4. Research Tracking, Bibliometrics & Scholarly Systems
+        if (w === 'research' || w === 'tracking' || w === 'citation' || w === 'citations' || w === 'repository' || w === 'tracker') {
+          ['research tracking', 'citation tracking', 'repository', 'citations', 'bibliometrics', 'scientometrics', 'scholarly communication', 'h-index', 'research impact', 'publication tracker', 'academic tracking', 'published research', 'journal indexing'].forEach((x) => synonyms.add(x));
         }
-        if (w === 'iot' || w === 'microcontroller' || w === 'sensor' || w === 'sensors') {
-          ['iot', 'internet of things', 'smart', 'arduino', 'esp32', 'esp8266', 'raspberry pi', 'sensors'].forEach((x) => synonyms.add(x));
+
+        // 5. Artificial Intelligence & Data Science
+        if (w === 'ai' || w === 'artificial' || w === 'intelligence' || w === 'machine' || w === 'learning' || w === 'data') {
+          ['ai', 'machine learning', 'deep learning', 'neural', 'nlp', 'computer vision', 'data science', 'analytics', 'predictive', 'algorithm'].forEach((x) => synonyms.add(x));
         }
-        if (w === 'arduino') {
-          ['arduino', 'microcontroller'].forEach((x) => synonyms.add(x));
+
+        // 6. Education, Mathematics & Pedagogy
+        if (w === 'education' || w === 'teaching' || w === 'instruction' || w === 'learning' || w === 'curriculum' || w === 'modular' || w === 'math' || w === 'mathematics') {
+          ['education', 'teaching', 'pedagogy', 'instruction', 'curriculum', 'learning', 'modular', 'mathematics', 'modular arithmetic', 'academic performance', 'student', 'students', 'school', 'schools', 'sdg 4', 'quality education'].forEach((x) => synonyms.add(x));
         }
       }
 
@@ -1244,13 +1255,34 @@ export async function handleApiRequest(req, res) {
         const topicVariants = extractTopicVariants(q);
         const qLower = topicVariants.rawQuery;
 
+        const allResearchers = db.prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'").all();
+        const matchingResearchers = allResearchers.filter((r) => {
+          const rName = String(r.name || '').toLowerCase();
+          const rLast = String(r.last_name || '').toLowerCase();
+          const rFirst = String(r.first_name || '').toLowerCase();
+          return (
+            rName.includes(qLower) ||
+            qLower.includes(rName) ||
+            (topicVariants.topicWords.length > 0 && topicVariants.topicWords.every((w) => rName.includes(w) || rFirst.includes(w) || rLast.includes(w)))
+          );
+        });
+
         const isContentRelevant = (p) => {
+          // If query matches a registered researcher and this publication belongs to them
+          for (const mr of matchingResearchers) {
+            if (p.owner_id && (p.owner_id === mr.instructor_id || p.owner_id === mr.id)) return true;
+            if (matchesResearcher(p, mr)) return true;
+          }
+
           const tLower = String(p.title || '').toLowerCase();
           const aLower = String(p.authors || '').toLowerCase();
           const oLower = String(p.owner_name || '').toLowerCase();
           const absLower = String(p.abstract || '').toLowerCase();
           const kwLower = String(p.keywords || '').toLowerCase();
-          const fullContent = `${tLower} ${aLower} ${oLower} ${absLower} ${kwLower}`;
+          const sdgLower = String(p.sdg_tags || '').toLowerCase();
+          const chedLower = String(p.ched_priority || '').toLowerCase();
+          const journalLower = String(p.journal || '').toLowerCase();
+          const fullContent = `${tLower} ${aLower} ${oLower} ${absLower} ${kwLower} ${sdgLower} ${chedLower} ${journalLower}`;
 
           if (hasWordMatch(fullContent, qLower)) return true;
           if (topicVariants.stems.some((s) => hasWordMatch(fullContent, s))) return true;
@@ -1260,7 +1292,7 @@ export async function handleApiRequest(req, res) {
             const hits = topicVariants.topicWords.filter(
               (w) => hasWordMatch(fullContent, w) || hasWordMatch(fullContent, w.replace(/(ing|ers?|ed|s)$/i, ''))
             ).length;
-            if (hits >= Math.ceil(topicVariants.topicWords.length * 0.7)) return true;
+            if (hits >= Math.ceil(topicVariants.topicWords.length * 0.5)) return true;
           }
           return false;
         };
@@ -1274,21 +1306,49 @@ export async function handleApiRequest(req, res) {
             const oLower = String(p.owner_name || '').toLowerCase();
             const absLower = String(p.abstract || '').toLowerCase();
             const kwLower = String(p.keywords || '').toLowerCase();
+            const sdgLower = String(p.sdg_tags || '').toLowerCase();
+            const chedLower = String(p.ched_priority || '').toLowerCase();
+
+            // Registered researcher match gets primary author boost
+            for (const mr of matchingResearchers) {
+              if (p.owner_id && (p.owner_id === mr.instructor_id || p.owner_id === mr.id)) {
+                score += 500;
+                break;
+              }
+              if (matchesResearcher(p, mr)) {
+                score += 500;
+                break;
+              }
+            }
 
             // Title exact/word match
             if (hasWordMatch(tLower, qLower)) {
-              score += 200;
-              if (tLower === qLower || tLower.startsWith(qLower)) score += 100;
+              score += 300;
+              if (tLower === qLower || tLower.startsWith(qLower)) score += 150;
             } else if (hasWordMatch(absLower, qLower)) {
               // Deep content/abstract match (e.g. technology/tools mentioned in text)
-              score += 120;
+              score += 180;
             } else if (hasWordMatch(kwLower, qLower)) {
-              score += 100;
+              score += 150;
             }
 
             // Author/Faculty match
             if (hasWordMatch(aLower, qLower) || hasWordMatch(oLower, qLower)) {
-              score += 150;
+              score += 250;
+            }
+
+            // SDG / CHED Priority match
+            if (hasWordMatch(sdgLower, qLower) || hasWordMatch(chedLower, qLower)) {
+              score += 120;
+            }
+
+            // Topic words match across fields
+            for (const w of topicVariants.topicWords) {
+              if (hasWordMatch(tLower, w)) score += 60;
+              if (hasWordMatch(absLower, w)) score += 30;
+              if (hasWordMatch(kwLower, w)) score += 30;
+              if (hasWordMatch(oLower, w)) score += 50;
+              if (hasWordMatch(aLower, w)) score += 40;
             }
 
             // Stem hits
@@ -1296,12 +1356,14 @@ export async function handleApiRequest(req, res) {
               if (hasWordMatch(tLower, s)) score += 40;
               if (hasWordMatch(absLower, s)) score += 20;
               if (hasWordMatch(kwLower, s)) score += 20;
+              if (hasWordMatch(sdgLower, s)) score += 20;
             }
 
             // Domain synonyms hits (e.g. farmers, crops, agriculture for farming)
             for (const syn of topicVariants.synonyms) {
-              if (hasWordMatch(tLower, syn)) score += 30;
-              if (hasWordMatch(absLower, syn)) score += 15;
+              if (hasWordMatch(tLower, syn)) score += 40;
+              if (hasWordMatch(absLower, syn)) score += 20;
+              if (hasWordMatch(sdgLower, syn)) score += 20;
             }
 
             score += Math.min(30, (Number(p.citations) || 0) * 0.2);
@@ -3174,18 +3236,53 @@ export async function handleApiRequest(req, res) {
           queryWords.length <= 3 &&
           !/university|college|school|campus|department|journal|republic|philippines|state|system|analysis|development|assessment|evaluation|education|technology|learning|management|farming|agriculture|arduino|iot|model|framework|study|impact|effect|design|implementation/i.test(bareQuery));
 
+      const topicVariants = extractTopicVariants(bareQuery);
+
+      const allResearchers = db.prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'").all();
+      const matchingResearchers = allResearchers.filter((r) => {
+        const rName = String(r.name || '').toLowerCase();
+        const rLast = String(r.last_name || '').toLowerCase();
+        const rFirst = String(r.first_name || '').toLowerCase();
+        if (rName.includes(bareLower) || bareLower.includes(rName)) return true;
+        if (queryWords.length > 0 && queryWords.every((w) => rName.includes(w) || rFirst.includes(w) || rLast.includes(w))) {
+          return true;
+        }
+        return false;
+      });
+
       const matchesQueriedAuthor = (item) => {
+        if (!item) return false;
+        if (item.isTargetAuthor) return true;
         if (queryWords.length === 0) return false;
+
+        const targetLast = queryWords[queryWords.length - 1];
+        const targetFirst = queryWords[0];
+        const targetFirstInit = targetFirst ? targetFirst[0] : '';
+
+        // Check if item belongs to any matched researcher by ID or matchesResearcher
+        for (const mr of matchingResearchers) {
+          if (item.owner_id && (item.owner_id === mr.instructor_id || item.owner_id === mr.id)) return true;
+          if (matchesResearcher(item, mr)) return true;
+        }
+
+        // Check owner_name field
+        const oNorm = String(item.owner_name || '').toLowerCase().replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (oNorm) {
+          const oTokens = oNorm.split(' ');
+          if (oTokens.includes(targetLast)) {
+            if (queryWords.length === 1) return true;
+            if (oTokens.includes(targetFirst) || oTokens.some((t) => t.startsWith(targetFirst) || (t.length <= 3 && t.startsWith(targetFirstInit)))) {
+              return true;
+            }
+          }
+        }
+
         const authorsArr = Array.isArray(item.authors)
           ? item.authors
           : typeof item.authors === 'string'
           ? [item.authors]
           : [];
         if (authorsArr.length === 0) return false;
-
-        const targetLast = queryWords[queryWords.length - 1];
-        const targetFirst = queryWords[0];
-        const targetFirstInit = targetFirst ? targetFirst[0] : '';
 
         return authorsArr.some((a) => {
           const aNorm = String(a || '')
@@ -3254,6 +3351,12 @@ export async function handleApiRequest(req, res) {
           pdfUrl: item.pdfUrl || null,
           citedByLink: item.citedByLink || item.cited_by_link || '',
           fromCache: Boolean(item.fromCache),
+          owner_name: item.owner_name || null,
+          owner_id: item.owner_id || null,
+          isTargetAuthor: Boolean(item.isTargetAuthor),
+          isPsu: Boolean(item.isPsu),
+          geo_tier: item.geo_tier || null,
+          source: item.source || null,
         };
 
         if (!existing) {
@@ -3276,28 +3379,55 @@ export async function handleApiRequest(req, res) {
           ) {
             existing.journal = normalizedItem.journal;
           }
+          if (normalizedItem.isTargetAuthor) existing.isTargetAuthor = true;
+          if (normalizedItem.isPsu) existing.isPsu = true;
+          if (normalizedItem.owner_name && !existing.owner_name) existing.owner_name = normalizedItem.owner_name;
+          if (normalizedItem.owner_id && !existing.owner_id) existing.owner_id = normalizedItem.owner_id;
+          if (normalizedItem.source && !existing.source) existing.source = normalizedItem.source;
         }
       };
 
       // -----------------------------------------------------------------------
-      // STEP 1: Check if query matches a registered researcher with a Google Scholar Profile ID
-      // (e.g. "Rodelio M. Garin", "Honelly Cascolan") — /citations?user= is fast & 0 tokens!
+      // STEP 1: Pre-load ALL verified publications for matching registered researchers
+      // from the local repository, plus scrape their Google Scholar Profile ID (0 tokens)
       // -----------------------------------------------------------------------
       let matchedScholarProfile = false;
       try {
-        const allResearchers = db.prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'").all();
-        const matchingResearchers = allResearchers.filter((r) => {
-          const rName = String(r.name || '').toLowerCase();
-          const rLast = String(r.last_name || '').toLowerCase();
-          const rFirst = String(r.first_name || '').toLowerCase();
-          if (rName.includes(bareLower) || bareLower.includes(rName)) return true;
-          if (queryWords.length > 0 && queryWords.every((w) => rName.includes(w) || rFirst.includes(w) || rLast.includes(w))) {
-            return true;
-          }
-          return false;
-        });
-
         for (const r of matchingResearchers) {
+          try {
+            const authorPubs = db.prepare(`
+              SELECT * FROM publications 
+              WHERE approval_status = 'approved' 
+                AND (owner_id = ? OR owner_id = ? OR owner_name LIKE ? OR authors LIKE ?)
+            `).all(r.instructor_id, r.id, `%${r.last_name}%`, `%${r.last_name}%`);
+
+            for (const p of authorPubs) {
+              if (matchesResearcher(p, r) || p.owner_id === r.instructor_id || String(p.owner_name || '').toLowerCase().includes(r.last_name.toLowerCase())) {
+                addCandidateToPool({
+                  id: p.id,
+                  title: p.title,
+                  authors: p.authors,
+                  journal: p.journal,
+                  year: p.year,
+                  citations: p.citations,
+                  abstract: p.abstract,
+                  keywords: p.keywords,
+                  url: p.url,
+                  citedByLink: p.cited_by_link,
+                  fromCache: true,
+                  owner_name: p.owner_name,
+                  owner_id: p.owner_id,
+                  isTargetAuthor: true,
+                  isPsu: true,
+                  geo_tier: 'psu',
+                  source: 'institutional_repository',
+                });
+              }
+            }
+          } catch (preloadErr) {
+            console.warn('[ScholarSearch] Researcher repository preload warning:', preloadErr.message);
+          }
+
           let scholarId = r.google_scholar_id || '';
           if (!scholarId && r.scholar_url) {
             const m = String(r.scholar_url).match(/[?&]user=([a-zA-Z0-9_-]+)/);
@@ -3311,7 +3441,15 @@ export async function handleApiRequest(req, res) {
                 const now = new Date().toISOString();
                 runInTransaction(() => {
                   for (const pub of profData.publications) {
-                    addCandidateToPool(pub);
+                    addCandidateToPool({
+                      ...pub,
+                      owner_name: r.name,
+                      owner_id: r.instructor_id,
+                      isTargetAuthor: true,
+                      isPsu: true,
+                      geo_tier: 'psu',
+                      source: 'google_scholar_profile',
+                    });
                     insertScraped.run(
                       pub.id,
                       pub.title,
@@ -3561,10 +3699,12 @@ export async function handleApiRequest(req, res) {
       try {
         const repoPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved' ORDER BY citations DESC, year DESC").all();
         for (const rp of repoPubs) {
-          const haystack = `${rp.title || ''} ${rp.authors || ''} ${rp.owner_name || ''} ${rp.journal || ''} ${rp.abstract || ''} ${rp.keywords || ''}`.toLowerCase();
+          const haystack = `${rp.title || ''} ${rp.authors || ''} ${rp.owner_name || ''} ${rp.journal || ''} ${rp.abstract || ''} ${rp.keywords || ''} ${rp.sdg_tags || ''} ${rp.ched_priority || ''}`.toLowerCase();
           const matchesAll = queryWords.length > 0 && queryWords.every((w) => haystack.includes(w));
           const matchesPartial = queryWords.length >= 2 && queryWords.filter((w) => haystack.includes(w)).length >= Math.ceil(queryWords.length * 0.7);
-          if (haystack.includes(bareLower) || matchesAll || (!isPersonNameQuery && matchesPartial)) {
+          const matchesSemantic = topicVariants.synonyms.some((s) => hasWordMatch(haystack, s)) || topicVariants.stems.some((s) => hasWordMatch(haystack, s));
+
+          if (haystack.includes(bareLower) || matchesAll || matchesSemantic || (!isPersonNameQuery && matchesPartial)) {
             addCandidateToPool({
               id: rp.id,
               title: rp.title,
@@ -3573,9 +3713,15 @@ export async function handleApiRequest(req, res) {
               year: rp.year,
               citations: rp.citations,
               abstract: rp.abstract,
+              keywords: rp.keywords,
               url: rp.url,
               citedByLink: rp.cited_by_link,
               fromCache: true,
+              owner_name: rp.owner_name,
+              owner_id: rp.owner_id,
+              isPsu: true,
+              geo_tier: 'psu',
+              source: 'institutional_repository',
             });
           }
         }
@@ -3588,7 +3734,9 @@ export async function handleApiRequest(req, res) {
           const haystack = `${sp.title || ''} ${sp.authors || ''} ${sp.journal || ''} ${sp.abstract || ''}`.toLowerCase();
           const matchesAll = queryWords.length > 0 && queryWords.every((w) => hasWordMatch(haystack, w));
           const matchesPartial = queryWords.length >= 2 && queryWords.filter((w) => hasWordMatch(haystack, w)).length >= Math.ceil(queryWords.length * 0.7);
-          if (hasWordMatch(haystack, bareLower) || matchesAll || (!isPersonNameQuery && matchesPartial)) {
+          const matchesSemantic = topicVariants.synonyms.some((s) => hasWordMatch(haystack, s)) || topicVariants.stems.some((s) => hasWordMatch(haystack, s));
+
+          if (hasWordMatch(haystack, bareLower) || matchesAll || matchesSemantic || (!isPersonNameQuery && matchesPartial)) {
             addCandidateToPool({
               id: sp.id,
               title: sp.title,
@@ -3653,7 +3801,13 @@ export async function handleApiRequest(req, res) {
       const allFacultyRows = db.prepare('SELECT name, first_name, last_name FROM researchers').all();
 
       const isPsuItem = (item) => {
-        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
+        if (!item) return false;
+        if (item.isPsu || item.source === 'institutional_repository') return true;
+        if (item.owner_id && (String(item.owner_id).startsWith('PSU-') || String(item.owner_id).startsWith('ASIN-') || String(item.owner_id).startsWith('res-'))) {
+          return true;
+        }
+
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.owner_name || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
         
         // 1. Direct institutional and campus markers for Pangasinan State University
         if (
@@ -3698,7 +3852,8 @@ export async function handleApiRequest(req, res) {
 
       const isPhItem = (item) => {
         if (isPsuItem(item)) return false;
-        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
+        if (item.geo_tier === 'philippines') return true;
+        const text = `${item.title || ''} ${Array.isArray(item.authors) ? item.authors.join(' ') : item.authors || ''} ${item.owner_name || ''} ${item.journal || ''} ${item.abstract || ''} ${item.affiliation || ''} ${item.url || ''}`.toLowerCase();
 
         return (
           /\b(philippines?|filipino|pilipinas)\b/i.test(text) ||
@@ -3720,17 +3875,19 @@ export async function handleApiRequest(req, res) {
         );
       };
 
-      const topicVariants = extractTopicVariants(bareQuery);
-
-      // STRICT TOPIC & AUTHOR RELEVANCE GATE:
-      // Person-name queries match publications authored by that person;
-      // Topic queries match publications mentioning the topic, its stems, or its domain synonyms.
+      // HIGH-RECALL TOPIC & AUTHOR RELEVANCE FILTER
       const isTopicRelevant = (item) => {
-        if (matchesQueriedAuthor(item)) {
+        if ((isPersonNameQuery || isExplicitAuthorQuery) && matchesQueriedAuthor(item)) {
           return true;
         }
+        // When searching by person name or explicit author, retain all candidates
+        // while target author papers are boosted to top rank (+500,000 pts)
         if (isExplicitAuthorQuery || matchedScholarProfile || isPersonNameQuery) {
-          return false;
+          const tLower = String(item.title || '').toLowerCase();
+          const absLower = String(item.abstract || '').toLowerCase();
+          const full = `${tLower} ${absLower}`;
+          if (queryWords.some((w) => hasWordMatch(full, w))) return true;
+          return true;
         }
 
         const tLower = String(item.title || '').toLowerCase();
@@ -3747,12 +3904,12 @@ export async function handleApiRequest(req, res) {
         // 3. Domain synonym match (e.g. "farmer", "crops", "agriculture" for "farming")
         if (topicVariants.synonyms.some((s) => hasWordMatch(fullContent, s))) return true;
 
-        // 4. For multi-word queries, require at least 70% of query words to appear in content
+        // 4. For multi-word queries, require at least 50% of query words to appear in content
         if (topicVariants.topicWords.length >= 2) {
           const hits = topicVariants.topicWords.filter(
             (w) => hasWordMatch(fullContent, w) || hasWordMatch(fullContent, w.replace(/(ing|ers?|ed|s)$/i, ''))
           ).length;
-          if (hits >= Math.ceil(topicVariants.topicWords.length * 0.7)) return true;
+          if (hits >= Math.ceil(topicVariants.topicWords.length * 0.5)) return true;
         }
 
         return false;
@@ -3769,9 +3926,9 @@ export async function handleApiRequest(req, res) {
         const isPsu = isPsuItem(item);
         const isPh = isPhItem(item);
 
-        // Author match gets highest priority when searching by researcher name
-        if (matchesQueriedAuthor(item)) {
-          score += 500;
+        // Author match gets top priority (+500,000 pts) ONLY when searching by researcher name or explicit author
+        if ((isPersonNameQuery || isExplicitAuthorQuery) && matchesQueriedAuthor(item)) {
+          score += 500000;
         }
 
         // Content Relevance Scoring:
@@ -3800,9 +3957,9 @@ export async function handleApiRequest(req, res) {
         }
 
         // 3-TIER HIERARCHY (ONLY FOR VERIFIED RELEVANT PAPERS):
-        // Tier 1: PSU Papers about this Topic (+100,000)
-        // Tier 2: Philippines Papers about this Topic (+10,000)
-        // Tier 3: Foreign Papers (+0)
+        // Tier 1: PSU Papers about this Topic (+100,000 pts)
+        // Tier 2: Philippines Papers about this Topic (+10,000 pts)
+        // Tier 3: Foreign Papers (+0 pts)
         if (isPsu) {
           score += 100000;
         } else if (isPh) {
@@ -3820,9 +3977,9 @@ export async function handleApiRequest(req, res) {
         return score;
       };
 
-      const allRankedResults = relevantPool.sort(
-        (a, b) => computeRelevance(b) - computeRelevance(a)
-      );
+      const allRankedResults = relevantPool
+        .map((item) => ({ ...item, _score: computeRelevance(item) }))
+        .sort((a, b) => (b._score || 0) - (a._score || 0));
 
       const startIndex = page * limit;
       const pageResults = allRankedResults.slice(startIndex, startIndex + limit);

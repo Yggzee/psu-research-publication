@@ -84,6 +84,13 @@ Always enforce the following standardized terminology and formatting across all 
      - **Crawler & Security Policies (`public/robots.txt`, `public/.well-known/security.txt`, `src/server/prod.mjs`):** Verify `/robots.txt` and `/.well-known/security.txt` resolve as `text/plain; charset=UTF-8` and missing non-HTML extensions return `404` instead of `index.html`.
      - **SEO & Social Metadata (`index.html`):** Ensure meta description, OpenGraph (`og:*`), Twitter Card, and canonical tags remain intact.
      - **WCAG AA Color Contrast:** Ensure all text elements maintain at least a `4.5:1` contrast ratio in both Light Mode and Dark Mode.
+7. **Mandatory 100% Free-Tier & Zero-Cost Infrastructure:**
+   - The entire system (development, runtime, deployment, search, and indexing) must always run exclusively on **100% free services and open-access public protocols**:
+     - **Hosting & Compute:** Render Free Tier (`src/server/prod.mjs`, Node.js runtime).
+     - **Persistence:** Turso Cloud Free Tier SQLite (`@libsql/client`) paired with local SQLite WAL-mode cache.
+     - **Scholarly Data Retrieval:** Free open-access academic APIs (**OpenAlex** and **CrossRef**) with polite headers, alongside direct/cached Google Scholar scraping and Apify free credits with the $1.00 quota circuit breaker.
+     - **Search & Intelligence:** Local in-memory algorithms, regex concept dictionaries, and SQLite composite indexes.
+     - **Strict Prohibition:** Never introduce paid external APIs, paid vector database services, paid LLM tokens, or cloud services that incur billing charges. Every feature must remain 100% free-to-run.
 
 ## Project Guidelines
 
