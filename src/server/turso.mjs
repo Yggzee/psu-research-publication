@@ -298,6 +298,32 @@ export async function initTursoSchema() {
     )
   );
 
+  // Migrate admin user on Turso Cloud to psuac-rc / admin123 with Sir Rodelio M. Garin profile
+  try {
+    await tursoClient.execute({
+      sql: `UPDATE users 
+            SET username = 'psuac-rc', 
+                password = 'admin123',
+                name = 'Sir Rodelio M. Garin',
+                email = 'rodeliogarin@gmail.com',
+                department = 'Campus Research Unit / BSIT',
+                scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+                google_scholar_id = 'x6PdtN8AAAAJ'
+            WHERE role = 'admin'`,
+      args: [],
+    });
+    await tursoClient.execute({
+      sql: `UPDATE researchers 
+            SET user_id = 'admin-1',
+                scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+                google_scholar_id = 'x6PdtN8AAAAJ'
+            WHERE instructor_id = 'PSU-002' OR name LIKE '%Garin%'`,
+      args: [],
+    });
+  } catch (adminErr) {
+    console.warn('[Turso Admin Migration Warning]:', adminErr.message);
+  }
+
   console.log('[Turso] Cloud schema initialized.');
 }
 
@@ -389,6 +415,28 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
     }
 
     try { localDb.exec('PRAGMA foreign_keys = ON;'); } catch {}
+
+    // Post-rehydration guard: ensure admin credentials and Sir Garin's identity remain in lockstep
+    try {
+      prepareFn(`
+        UPDATE users 
+        SET username = 'psuac-rc', 
+            password = 'admin123',
+            name = 'Sir Rodelio M. Garin',
+            email = 'rodeliogarin@gmail.com',
+            department = 'Campus Research Unit / BSIT',
+            scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+            google_scholar_id = 'x6PdtN8AAAAJ'
+        WHERE role = 'admin'
+      `).run();
+      prepareFn(`
+        UPDATE researchers 
+        SET user_id = 'admin-1',
+            scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+            google_scholar_id = 'x6PdtN8AAAAJ'
+        WHERE instructor_id = 'PSU-002' OR name LIKE '%Garin%'
+      `).run();
+    } catch {}
 
     console.log(`[Turso Sync] Successfully rehydrated ${totalRestored} records from Turso Cloud!`);
   } catch (err) {

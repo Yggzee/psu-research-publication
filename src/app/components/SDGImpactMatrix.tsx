@@ -243,15 +243,6 @@ export function SDGImpactMatrix() {
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
               <span>Refresh</span>
             </Button>
-            <Button
-              size="sm"
-              onClick={handleBatchClassify}
-              disabled={isBatchRunning}
-              className="text-xs h-8 gap-1.5 bg-ai hover:bg-ai/90 text-white shadow-2xs"
-            >
-              <Sparkles className={`h-3.5 w-3.5 ${isBatchRunning ? "animate-spin" : ""}`} />
-              <span>{isBatchRunning ? "Classifying..." : "Auto-Tag with AI"}</span>
-            </Button>
           </div>
         }
       />

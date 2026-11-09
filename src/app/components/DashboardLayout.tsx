@@ -466,20 +466,20 @@ export function DashboardLayout() {
               >
                 <div className="text-right hidden sm:block">
                   <p className="text-xs font-semibold text-foreground group-hover:text-brand transition-colors leading-tight">
-                    {currentUser.name}
+                    {currentUser.role === "admin" ? "Sir Rodelio M. Garin" : currentUser.name}
                   </p>
                   <p className="text-[11px] text-muted-foreground leading-tight">
                     {currentUser.role === "admin"
-                      ? "Campus Research Coordinator"
-                      : `${currentUser.department || "Faculty"} Instructor`}
+                      ? "Research Coordinator"
+                      : `${currentUser.department || "Faculty"} Researcher`}
                   </p>
                 </div>
                 <Avatar className="h-8 w-8 ring-1 ring-border group-hover:ring-brand/50 transition-all">
                   {currentUser.photoUrl ? (
-                    <AvatarImage src={currentUser.photoUrl} alt={currentUser.name} />
+                    <AvatarImage src={currentUser.photoUrl} alt={currentUser.role === "admin" ? "Sir Rodelio M. Garin" : currentUser.name} />
                   ) : null}
                   <AvatarFallback className="bg-brand text-white font-semibold text-xs">
-                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
+                    {currentUser.role === "admin" ? "RG" : currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
                   </AvatarFallback>
                 </Avatar>
               </div>

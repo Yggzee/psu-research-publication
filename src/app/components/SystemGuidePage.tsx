@@ -1086,20 +1086,20 @@ const coordinatorGuideCategories: GuideCategory[] = [
     subtitle: "Approving publication claims, managing researchers, and sending ASIN-00000 invitations",
     icon: Shield,
     narrativeParagraphs: [
-      "The 'Admin Console' is your exclusive management center as Research Coordinator. At the top of the page sits the master administration toolbar with 'Invite Researcher', 'Auto-Tag UN SDGs', 'Email Outbox', and 'Sync Database', followed by your coordinator profile card (Sir Rodelio M. Garin) displaying a single 'Research Coordinator' badge and a 'Sync My Publications' button, and four live summary counters: Total Researchers, Invitation Requests, Pending Activations, and Pending Claims. Beneath those counters are four management tabs: 'Invitations & Requests', 'Researchers', 'Publication Claims', and 'Integrations & Tokens'.",
+      "The 'Admin Console' is your exclusive management center as Research Coordinator. At the top of the page sits the master administration toolbar with 'Invite Researcher' and 'Email Outbox', followed by four live summary counters: Total Researchers, Invitation Requests, Pending Activations, and Pending Claims. Beneath those counters are four management tabs: 'Invitations & Requests', 'Researchers', 'Publication Claims', and 'Integrations & Tokens'.",
       "Every administrative workflow is organized cleanly across those four tabs. In 'Invitations & Requests', you review incoming portal requests and click 'Review & Invite' to open the pre-filled pop-up modal, or admit invited researchers who have verified their emails. In 'Researchers', you can search and filter active researchers, sync any researcher's Google Scholar publications, or click the edit icon to open their credentials in a pop-up dialog. Clicking 'Invite Researcher' opens the dedicated modal with a locked 'ASIN-' prefix + 5-digit Instructor ID (ASIN-00000) and classification selector.",
     ],
     clickableItems: [
       {
-        label: "Sync My Publications Button (Coordinator Card)",
+        label: "Invite Researcher Button",
         visualReplica: (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sync My Publications</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold shadow-2xs">
+            <Plus className="w-3.5 h-3.5" />
+            <span>Invite Researcher</span>
           </span>
         ),
         explanation:
-          "Updates your own Google Scholar publications in the campus repository with one click.",
+          "Opens the dedicated pop-up modal to invite a new campus researcher with a locked 'ASIN-' prefix and 5-digit Instructor ID.",
       },
       {
         label: "Approve & Reject Buttons (Tab 1: Pending Claims)",
@@ -1164,10 +1164,21 @@ const coordinatorGuideCategories: GuideCategory[] = [
     subtitle: "Managing your coordinator profile, appearance theme, password, and cloud database backup",
     icon: Settings,
     narrativeParagraphs: [
-      "At the bottom left of the sidebar, 'My Profile' and 'Settings' allow you to manage your personal coordinator account and system-wide display preferences. In 'My Profile', you can update your photo, contact email, and Google Scholar link. In 'Settings', you have four tabs: 'Appearance & Theme', 'Security & Password', 'Display Preferences', and 'System & Cloud Storage'.",
+      "At the bottom left of the sidebar, 'My Profile' and 'Settings' allow you to manage your personal coordinator portfolio, view all your publications, manage system preferences, and perform database cloud synchronization. In 'My Profile', you can view your complete publication catalog, citation density, contact email, and connected Google Scholar link. In 'Settings', you can switch themes, change passwords, and click 'Sync Database' to guarantee that all local SQLite tables are permanently replicated to Turso Cloud.",
       "The 'System & Cloud Storage' tab shows the live connection status of the portal's Turso Cloud storage, ensuring that all researcher accounts, invitations, publications, and citations are permanently backed up and never lost even when the cloud server restarts.",
     ],
     clickableItems: [
+      {
+        label: "Sync Database Button (Settings Header)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-semibold shadow-2xs">
+            <RefreshCw className="w-3.5 h-3.5 text-brand" />
+            <span>Sync Database</span>
+          </span>
+        ),
+        explanation:
+          "Located at the top right of the Settings header, this triggers a verification and immediate push of all local database records to Turso Cloud.",
+      },
       {
         label: "Appearance Mode Cards (Light / Dark / System)",
         visualReplica: (

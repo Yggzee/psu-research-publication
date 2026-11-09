@@ -372,20 +372,56 @@ export function initDatabase() {
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!existingAdmin) {
     db.prepare(`
-      INSERT INTO users (id, username, email, password, name, role, department, is_faculty, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, username, email, password, name, role, department, is_faculty, scholar_url, google_scholar_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'admin-1',
-      'admin',
-      'admin@psu.edu.ph',
-      'admin',
+      'psuac-rc',
+      'rodeliogarin@gmail.com',
+      'admin123',
       'Sir Rodelio M. Garin',
       'admin',
       'Campus Research Unit / BSIT',
       1,
+      'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+      'x6PdtN8AAAAJ',
       new Date().toISOString()
     );
-    console.log('[Database] Default admin user initialized (admin / admin).');
+    console.log('[Database] Default admin user initialized (psuac-rc / admin123).');
+  } else {
+    // Idempotent migration to ensure admin credentials match psuac-rc / admin123 with Sir Rodelio M. Garin identity
+    try {
+      db.prepare(`
+        UPDATE users 
+        SET username = 'psuac-rc', 
+            password = 'admin123',
+            name = 'Sir Rodelio M. Garin',
+            email = 'rodeliogarin@gmail.com',
+            department = 'Campus Research Unit / BSIT',
+            scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+            google_scholar_id = 'x6PdtN8AAAAJ'
+        WHERE role = 'admin'
+      `).run();
+      console.log('[Database] Admin user synchronized to psuac-rc / admin123 with Sir Rodelio M. Garin profile.');
+    } catch (e) {
+      console.warn('[Admin Upgrade Error]:', e.message);
+    }
+  }
+
+  // Ensure Sir Rodelio M. Garin's researcher profile is linked to admin-1
+  try {
+    const garinRes = db.prepare(`SELECT id FROM researchers WHERE (instructor_id = 'PSU-002' OR name LIKE '%Garin%') LIMIT 1`).get();
+    if (garinRes) {
+      db.prepare(`
+        UPDATE researchers 
+        SET user_id = 'admin-1',
+            scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
+            google_scholar_id = 'x6PdtN8AAAAJ'
+        WHERE id = ?
+      `).run(garinRes.id);
+    }
+  } catch (e) {
+    console.warn('[Garin Researcher Link Error]:', e.message);
   }
   // Call on startup audit to recalibrate any inflated citation counts
   auditAndSyncResearcherCitations();

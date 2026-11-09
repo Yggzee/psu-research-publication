@@ -193,18 +193,24 @@ export function LoginScreen() {
       }
 
       if (
-        (inputId.toLowerCase() === "admin" || inputId.toLowerCase() === "admin@psu.edu.ph") &&
-        password === "admin"
+        (inputId.toLowerCase() === "psuac-rc" ||
+          inputId.toLowerCase() === "admin" ||
+          inputId.toLowerCase() === "rodeliogarin@gmail.com" ||
+          inputId.toLowerCase() === "admin@psu.edu.ph") &&
+        (password === "admin123" || password === "admin")
       ) {
         setCurrentUser({
+          id: "admin-1",
           role: "admin",
+          instructorId: "PSU-002",
           name: "Sir Rodelio M. Garin",
-          username: "admin",
-          email: "admin@psu.edu.ph",
+          username: "psuac-rc",
+          email: "rodeliogarin@gmail.com",
           department: "Campus Research Unit / BSIT",
           photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
           scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
           googleScholarId: "x6PdtN8AAAAJ",
+          isFaculty: true,
         });
         navigate(resolveTargetUrl("admin"));
         return;
@@ -397,7 +403,7 @@ export function LoginScreen() {
                 </div>
 
                 <p className="text-[11px] text-center text-muted-foreground">
-                  Default administrator: <span className="font-mono font-medium text-foreground">admin / admin</span>
+                  Research Coordinator: <span className="font-mono font-medium text-foreground">psuac-rc / admin123</span>
                 </p>
               </div>
             </CardContent>
@@ -431,7 +437,7 @@ export function LoginScreen() {
                 <CheckCircle2 className="w-4 h-4 text-green-400" /> Multi-Index Tracking
               </div>
               <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-green-400" /> Admin Moderation
+                <CheckCircle2 className="w-4 h-4 text-green-400" /> Coordinator Moderation
               </div>
             </div>
           </div>

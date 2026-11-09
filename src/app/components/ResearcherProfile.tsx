@@ -151,6 +151,13 @@ export function ResearcherProfile() {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl font-bold text-foreground truncate">{researcher.name}</h2>
                 {(() => {
+                  const isCoordinator =
+                    (researcher.id || "").toUpperCase() === "PSU-002" ||
+                    (researcher.instructorId || "").toUpperCase() === "PSU-002" ||
+                    (researcher.name || "").toLowerCase().includes("garin");
+                  if (isCoordinator) {
+                    return <StatusBadge status="admin" label="Research Coordinator" />;
+                  }
                   const isNonFaculty =
                     researcher.isFaculty === false ||
                     researcher.department === "Non-Faculty" ||
@@ -162,10 +169,6 @@ export function ResearcherProfile() {
                     />
                   );
                 })()}
-                {((researcher.id || "").toUpperCase() === "PSU-002" ||
-                  (researcher.name || "").toLowerCase().includes("garin")) && (
-                  <StatusBadge status="admin" label="Research Coordinator" />
-                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">

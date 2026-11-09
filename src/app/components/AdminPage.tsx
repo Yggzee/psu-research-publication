@@ -149,8 +149,6 @@ export function AdminPage() {
     details?: any;
   } | null>(null);
 
-  const [isClassifyingSDG, setIsClassifyingSDG] = useState(false);
-
   // Public Scraper & Quota Guardrail Settings
   const [publicScraperEnabled, setPublicScraperEnabled] = useState(true);
   const [scraperQuotaThreshold, setScraperQuotaThreshold] = useState("1.00");
@@ -196,66 +194,6 @@ export function AdminPage() {
       setIsUpdatingScraperSettings(false);
     }
   };
-
-  const handleRunSDGClassification = async () => {
-    setIsClassifyingSDG(true);
-    toast.loading("Running AI UN SDG classifier on campus publications...", { id: "sdg-batch" });
-    try {
-      const res = await apiService.batchClassifySDG();
-      toast.success(`Successfully auto-tagged ${res.processed} campus publications into UN SDGs!`, { id: "sdg-batch" });
-      await loadData();
-    } catch (err: any) {
-      toast.error(`Auto-classification error: ${err.message}`, { id: "sdg-batch" });
-    } finally {
-      setIsClassifyingSDG(false);
-    }
-  };
-
-  const coordinatorData = useMemo(() => {
-    const found = researchers.find((r) => {
-      const id = (r.instructorId || r.id || "").toUpperCase();
-      const name = (r.name || "").toLowerCase();
-      const email = (r.email || "").toLowerCase();
-      return (
-        id === "PSU-002" ||
-        name.includes("garin") ||
-        name.includes("rodelio") ||
-        email.includes("rodeliogarin")
-      );
-    });
-
-    if (found) {
-      return {
-        name: found.name || "Sir Rodelio M. Garin",
-        instructorId: found.instructorId || "PSU-002",
-        department: found.department || "BSIT",
-        email: found.email || "rodeliogarin@gmail.com",
-        scholarUrl: found.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-        totalPublications:
-          typeof found.totalPublications === "number"
-            ? found.totalPublications
-            : Array.isArray((found as any).totalPublications)
-            ? (found as any).totalPublications.length
-            : Number(found.totalPublications) || 0,
-        totalCitations:
-          typeof found.totalCitations === "number"
-            ? found.totalCitations
-            : Number(found.totalCitations) || 0,
-        photoUrl: found.photoUrl || "https://scholar.google.com/citations/images/avatar_scholar_128.png",
-      };
-    }
-
-    return {
-      name: "Sir Rodelio M. Garin",
-      instructorId: "PSU-002",
-      department: "BSIT",
-      email: "rodeliogarin@gmail.com",
-      scholarUrl: "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-      totalPublications: 0,
-      totalCitations: 0,
-      photoUrl: "https://scholar.google.com/citations/images/avatar_scholar_128.png",
-    };
-  }, [researchers]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -660,9 +598,9 @@ export function AdminPage() {
             <Shield className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h2 className="text-lg font-bold text-foreground">Institutional Admin Access Restricted</h2>
+            <h2 className="text-lg font-bold text-foreground">Research Coordinator Access Restricted</h2>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              You do not have administrative privileges to manage researchers, system credentials, or campus invitations.
+              You do not have administrative privileges as Research Coordinator to manage researchers, system credentials, or campus invitations.
             </p>
           </div>
           <Button
@@ -694,17 +632,6 @@ export function AdminPage() {
             </Button>
 
             <Button
-              size="sm"
-              onClick={handleRunSDGClassification}
-              disabled={isClassifyingSDG}
-              className="h-8 text-xs gap-1.5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
-              title="Batch auto-tag all campus research with UN SDGs via AI"
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${isClassifyingSDG ? "animate-spin" : ""}`} />
-              <span>{isClassifyingSDG ? "Tagging SDGs..." : "Auto-Tag UN SDGs"}</span>
-            </Button>
-
-            <Button
               variant="outline"
               size="sm"
               onClick={openOutboxModal}
@@ -714,97 +641,9 @@ export function AdminPage() {
               <Inbox className="w-3.5 h-3.5 text-blue-600" />
               <span className="hidden sm:inline">Email Outbox</span>
             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadData}
-              disabled={isLoading}
-              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Sync Database</span>
-            </Button>
           </div>
         }
       />
-
-      {/* 2. Personalized Coordinator Dossier & Command Header */}
-      <Card className="relative overflow-hidden border-border/80 bg-gradient-to-br from-card via-card to-blue-50/50 dark:to-blue-950/20 shadow-xs">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-brand/5 rounded-full blur-3xl pointer-events-none" />
-        <CardContent className="p-4 sm:p-6 space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Left: Coordinator Identity */}
-            <div className="flex items-center gap-3.5 sm:gap-5 min-w-0">
-              <div className="relative shrink-0">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-brand/40 shadow-md bg-muted">
-                  <img
-                    src={coordinatorData.photoUrl || "https://scholar.google.com/citations/images/avatar_scholar_128.png"}
-                    alt={coordinatorData.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div
-                  className="absolute -bottom-1 -right-1 bg-amber-500 text-white rounded-full p-1.5 shadow-xs border-2 border-card"
-                  title="Verified Campus Research Coordinator"
-                >
-                  <Award className="w-3.5 h-3.5" />
-                </div>
-              </div>
-
-              <div className="space-y-1.5 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base sm:text-xl font-bold text-foreground tracking-tight">
-                    Sir Rodelio M. Garin
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">
-                    <Award className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                    Research Coordinator
-                  </span>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Pangasinan State University – Asingan Campus
-                </p>
-
-                <div className="flex items-center gap-2.5 sm:gap-3 text-xs text-muted-foreground pt-0.5 flex-wrap">
-                  <span className="font-medium text-foreground">
-                    <strong className="text-brand font-semibold">{coordinatorData.totalPublications}</strong> Publications
-                  </span>
-                  <span>•</span>
-                  <span className="font-medium text-foreground">
-                    <strong className="text-brand font-semibold">{coordinatorData.totalCitations}</strong> Citations
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Quick Coordinator Actions */}
-            <div className="flex items-center gap-2 flex-wrap lg:justify-end shrink-0 pt-3 lg:pt-0 border-t lg:border-0 border-border/50">
-              <a
-                href={coordinatorData.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en"}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-border/80 bg-background hover:bg-muted/60 text-foreground transition-all shadow-2xs"
-              >
-                <GraduationCap className="w-3.5 h-3.5 text-brand" />
-                <span>Google Scholar</span>
-                <ExternalLink className="w-3 h-3 text-muted-foreground" />
-              </a>
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => openScholarReview("PSU-002", "Sir Rodelio M. Garin", coordinatorData.scholarUrl)}
-                className="h-8 text-xs gap-1.5 border-brand/30 text-brand hover:bg-brand-soft"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Sync My Publications</span>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* 2. Feedback Banners */}
       {actionSuccessMsg && (
@@ -978,7 +817,7 @@ export function AdminPage() {
           {/* SECTION 2: INVITED RESEARCHERS AWAITING ACTIVATION */}
           <SectionCard
             title="Invited Researchers Awaiting Activation"
-            description="Researchers invited by Admin. Once the researcher confirms their account via their invitation link, admit them to officially recognize their profile."
+            description="Researchers invited by the Research Coordinator. Once the researcher confirms their account via their invitation link, admit them to officially recognize their profile."
             action={
               <Badge variant="outline" className="font-mono text-xs">
                 {pendingRegistrations.length} pending
