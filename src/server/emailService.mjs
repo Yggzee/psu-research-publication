@@ -132,8 +132,17 @@ async function dispatchEmail({ to, toName, subject, html, emailType, token, link
 
   if (transporter && isSmtpConfigured) {
     try {
+      let fromAddress = process.env.SMTP_FROM || `"PSU Research System" <${process.env.SMTP_USER}>`;
+      if (fromAddress && !fromAddress.includes('<') && process.env.SMTP_USER) {
+        if (fromAddress.includes(process.env.SMTP_USER)) {
+          fromAddress = fromAddress.replace(process.env.SMTP_USER, `<${process.env.SMTP_USER}>`);
+        } else {
+          fromAddress = `"${fromAddress.replace(/"/g, '')}" <${process.env.SMTP_USER}>`;
+        }
+      }
+
       const sendPromise = transporter.sendMail({
-        from: process.env.SMTP_FROM || `"PSU Research System" <${process.env.SMTP_USER}>`,
+        from: fromAddress,
         to: to,
         subject: subject,
         html: html,
