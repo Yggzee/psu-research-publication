@@ -218,6 +218,63 @@ export function PublicationDetail() {
     }
   };
 
+  const citingPapers: any[] = useMemo(() => {
+    return Array.isArray(publication?.citingPapers) ? publication.citingPapers : [];
+  }, [publication?.citingPapers]);
+
+  const filteredCitingPapers = useMemo(() => {
+    const list = citingPapers.filter((cp) => {
+      if (!citingSearch.trim()) return true;
+      const q = citingSearch.toLowerCase();
+      const cTitle = String(cp.title || "").toLowerCase();
+      const cAuthors = Array.isArray(cp.authors)
+        ? cp.authors.join(", ").toLowerCase()
+        : String(cp.authors || "").toLowerCase();
+      const cJournal = String(cp.journal || "").toLowerCase();
+      return cTitle.includes(q) || cAuthors.includes(q) || cJournal.includes(q);
+    });
+
+    return [...list].sort((a, b) => {
+      let comparison = 0;
+      switch (citeSortColumn) {
+        case "year": {
+          const aYr = Number(a.year) || 0;
+          const bYr = Number(b.year) || 0;
+          comparison = aYr - bYr;
+          break;
+        }
+        case "title": {
+          comparison = String(a.title || "").localeCompare(String(b.title || ""));
+          break;
+        }
+        case "authors": {
+          const aAuth = Array.isArray(a.authors) ? a.authors.join(", ") : String(a.authors || "");
+          const bAuth = Array.isArray(b.authors) ? b.authors.join(", ") : String(b.authors || "");
+          comparison = aAuth.localeCompare(bAuth);
+          break;
+        }
+        case "journal": {
+          const aJ = String(a.journal || "");
+          const bJ = String(b.journal || "");
+          comparison = aJ.localeCompare(bJ);
+          break;
+        }
+        case "vol": {
+          comparison = String(a.volume_issue || "").localeCompare(String(b.volume_issue || ""));
+          break;
+        }
+        case "quarter": {
+          comparison = String(a.quarter || "").localeCompare(String(b.quarter || ""));
+          break;
+        }
+        case "index":
+        default:
+          return 0;
+      }
+      return citeSortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [citingPapers, citingSearch, citeSortColumn, citeSortDirection]);
+
   if (loading) {
     return (
       <div className="text-center py-20 space-y-3">
@@ -247,9 +304,6 @@ export function PublicationDetail() {
 
   const citationTrendData = Array.isArray(publication.citationTrend)
     ? publication.citationTrend
-    : [];
-  const citingPapers: any[] = Array.isArray(publication.citingPapers)
-    ? publication.citingPapers
     : [];
   const yearsActive = Math.max(1, new Date().getFullYear() - (Number(publication.year) || new Date().getFullYear()) + 1);
 
@@ -353,57 +407,6 @@ export function PublicationDetail() {
       toast.error(`Excel export failed: ${err?.message || "Unknown error"}`);
     }
   };
-
-  const filteredCitingPapers = useMemo(() => {
-    const list = citingPapers.filter((cp) => {
-      if (!citingSearch.trim()) return true;
-      const q = citingSearch.toLowerCase();
-      const cTitle = String(cp.title || "").toLowerCase();
-      const cAuthors = Array.isArray(cp.authors)
-        ? cp.authors.join(", ").toLowerCase()
-        : String(cp.authors || "").toLowerCase();
-      const cJournal = String(cp.journal || "").toLowerCase();
-      return cTitle.includes(q) || cAuthors.includes(q) || cJournal.includes(q);
-    });
-
-    return [...list].sort((a, b) => {
-      let comparison = 0;
-      switch (citeSortColumn) {
-        case "year": {
-          const aYr = Number(a.year) || 0;
-          const bYr = Number(b.year) || 0;
-          comparison = aYr - bYr;
-          break;
-        }
-        case "title": {
-          comparison = String(a.title || "").localeCompare(String(b.title || ""));
-          break;
-        }
-        case "authors": {
-          const aAuth = Array.isArray(a.authors) ? a.authors.join(", ") : String(a.authors || "");
-          const bAuth = Array.isArray(b.authors) ? b.authors.join(", ") : String(b.authors || "");
-          comparison = aAuth.localeCompare(bAuth);
-          break;
-        }
-        case "journal": {
-          comparison = String(a.journal || "").localeCompare(String(b.journal || ""));
-          break;
-        }
-        case "vol": {
-          comparison = String(a.volume_issue || "").localeCompare(String(b.volume_issue || ""));
-          break;
-        }
-        case "quarter": {
-          comparison = String(a.quarter || "").localeCompare(String(b.quarter || ""));
-          break;
-        }
-        case "index":
-        default:
-          return 0;
-      }
-      return citeSortDirection === "asc" ? comparison : -comparison;
-    });
-  }, [citingPapers, citingSearch, citeSortColumn, citeSortDirection]);
 
   const totalFilteredCitations = filteredCitingPapers.length;
   const totalCitingPages = Math.max(
