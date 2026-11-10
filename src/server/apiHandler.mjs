@@ -1131,7 +1131,7 @@ export async function handleApiRequest(req, res) {
     // 1c. UPDATE PROFILE: PUT /api/auth/profile
     // ----------------------------------------------------
     if (pathname === '/api/auth/profile' && method === 'PUT') {
-      const { userId, username, name, email, department, photoUrl, scholarUrl, googleScholarId } = await readJsonBody();
+      const { userId, username, name, email, department, photoUrl, scholarUrl, googleScholarId, instructorId } = await readJsonBody();
       const caller = authenticateCaller(req);
       
       const user = db.prepare(`
@@ -1155,6 +1155,12 @@ export async function handleApiRequest(req, res) {
       const updatedPhoto = photoUrl !== undefined ? photoUrl : user.photo_url;
       const updatedScholar = scholarUrl !== undefined ? scholarUrl : user.scholar_url;
       const updatedScholarId = googleScholarId !== undefined ? googleScholarId : user.google_scholar_id;
+      const updatedInstructorId = instructorId !== undefined ? instructorId.trim() : (user.instructor_id || user.username);
+
+      if (instructorId && instructorId !== user.username && user.role !== 'admin') {
+        db.prepare(`UPDATE users SET username = ? WHERE id = ?`).run(updatedInstructorId, user.id);
+        db.prepare(`UPDATE researchers SET instructor_id = ? WHERE user_id = ? OR LOWER(instructor_id) = LOWER(?)`).run(updatedInstructorId, user.id, user.username);
+      }
 
       db.prepare(`
         UPDATE users 
@@ -1163,7 +1169,7 @@ export async function handleApiRequest(req, res) {
       `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id);
 
       db.prepare(`
-        UPDATE researchers
+        UPDATE researchers 
         SET name = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
         WHERE user_id = ? OR LOWER(instructor_id) = LOWER(?)
       `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id, user.username);
@@ -1174,7 +1180,8 @@ export async function handleApiRequest(req, res) {
           id: user.id,
           role: user.role,
           name: updatedName,
-          username: user.username,
+          username: updatedInstructorId || user.username,
+          instructorId: updatedInstructorId || user.username,
           email: updatedEmail,
           department: updatedDept,
           photoUrl: updatedPhoto,

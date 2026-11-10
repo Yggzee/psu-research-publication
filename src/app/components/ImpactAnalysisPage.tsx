@@ -174,91 +174,6 @@ export function ImpactAnalysisPage() {
       <PageHeader
         title="Research Impact Analysis"
         description="Comprehensive metrics, citation velocity, and academic department benchmarks"
-        actions={
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Quick Window Presets */}
-            <div className="flex items-center p-0.5 rounded-lg bg-muted/50 border border-border/70 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  const yrs = getLastNYears(5);
-                  setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
-                }}
-                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  yearRange.end - yearRange.start === 4
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                5Y
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const yrs = getLastNYears(10);
-                  setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
-                }}
-                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  yearRange.end - yearRange.start === 9
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                10Y
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const currentYr = new Date().getFullYear();
-                  setYearRange({ start: 2015, end: currentYr });
-                }}
-                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                  yearRange.start === 2015 && yearRange.end - yearRange.start > 9
-                    ? "bg-card text-foreground font-semibold shadow-2xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                All (2015–{new Date().getFullYear()})
-              </button>
-            </div>
-
-            {/* Year Navigator Pill */}
-            <div className="flex items-center gap-1 bg-card border border-border/70 rounded-lg p-0.5 shadow-2xs">
-              <button
-                type="button"
-                onClick={handleYearBack}
-                disabled={yearRange.start <= 2015}
-                className="p-1.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                title="Previous 5 years"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-              <span className="px-2 text-xs font-semibold font-mono text-foreground">
-                {yearRange.start}–{yearRange.end}
-              </span>
-              <button
-                type="button"
-                onClick={handleYearForward}
-                disabled={yearRange.end >= new Date().getFullYear()}
-                className="p-1.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
-                title="Next 5 years"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchData}
-              disabled={isLoading}
-              className="text-xs h-8 gap-1.5"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
-              <span>Refresh</span>
-            </Button>
-          </div>
-        }
       />
 
       {/* 2. Key Metrics Row */}
@@ -302,6 +217,99 @@ export function ImpactAnalysisPage() {
           subtitle="Publishing researchers"
           icon={Users}
         />
+      </div>
+
+      {/* 2.5 Dedicated Unified Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2.5 rounded-xl bg-card border border-border/70 shadow-2xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 pl-1">
+            <Calendar className="w-3.5 h-3.5 text-brand" />
+            <span>Time Window:</span>
+          </span>
+
+          {/* Quick Window Presets */}
+          <div className="flex items-center p-0.5 rounded-lg bg-muted/60 border border-border/60 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                const yrs = getLastNYears(5);
+                setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
+              }}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                yearRange.end - yearRange.start === 4
+                  ? "bg-card text-brand font-bold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              5Y
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const yrs = getLastNYears(10);
+                setYearRange({ start: yrs[0], end: yrs[yrs.length - 1] });
+              }}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                yearRange.end - yearRange.start === 9
+                  ? "bg-card text-brand font-bold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              10Y
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const currentYr = new Date().getFullYear();
+                setYearRange({ start: 2015, end: currentYr });
+              }}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
+                yearRange.start === 2015 && yearRange.end - yearRange.start > 9
+                  ? "bg-card text-brand font-bold shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All (2015–{new Date().getFullYear()})
+            </button>
+          </div>
+
+          {/* Stepper Pill */}
+          <div className="flex items-center gap-1 bg-muted/40 border border-border/70 rounded-lg p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={handleYearBack}
+              disabled={yearRange.start <= 2015}
+              className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+              title="Previous 5 years"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <span className="px-2 text-xs font-bold font-mono text-foreground">
+              {yearRange.start}–{yearRange.end}
+            </span>
+            <button
+              type="button"
+              onClick={handleYearForward}
+              disabled={yearRange.end >= new Date().getFullYear()}
+              className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+              title="Next 5 years"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Refresh Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={fetchData}
+          disabled={isLoading}
+          className="text-xs h-8 gap-1.5 font-medium shrink-0"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />
+          <span>Refresh Analytics</span>
+        </Button>
       </div>
 
       {/* 3. Navigation Tabs */}

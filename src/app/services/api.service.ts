@@ -303,6 +303,7 @@ class ApiService {
   async updateProfile(data: {
     userId?: string;
     username?: string;
+    instructorId?: string;
     name?: string;
     email?: string;
     department?: string;
@@ -317,6 +318,7 @@ class ApiService {
         role: 'admin' | 'instructor';
         name: string;
         username: string;
+        instructorId?: string;
         email?: string;
         department?: string;
         photoUrl?: string;

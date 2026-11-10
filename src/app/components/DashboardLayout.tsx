@@ -65,7 +65,7 @@ const adminNavigationCategories: NavCategory[] = [
     category: "ANALYTICS",
     items: [
       { name: "Impact Analysis", path: "/dashboard/impact", icon: TrendingUp },
-      { name: "SDG Radar", path: "/dashboard/sdg-matrix", icon: Target },
+      { name: "SDG Alignment", path: "/dashboard/sdg-matrix", icon: Target },
       { name: "Reports", path: "/dashboard/reports", icon: FileBarChart },
       { name: "Ask Campus AI", path: "/dashboard/ai-history", icon: Sparkles, isAI: true },
     ],
@@ -95,7 +95,7 @@ const instructorNavigationCategories: NavCategory[] = [
   {
     category: "ANALYTICS",
     items: [
-      { name: "SDG Radar", path: "/dashboard/sdg-matrix", icon: Target },
+      { name: "SDG Alignment", path: "/dashboard/sdg-matrix", icon: Target },
       { name: "Ask Campus AI", path: "/dashboard/ai-history", icon: Sparkles, isAI: true },
     ],
   },
@@ -109,12 +109,22 @@ const bottomUtilityNavigation = [
 export function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const currentUser = getCurrentUser();
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser() || { role: "instructor", name: "Researcher" });
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
+
+  // Sync user state on update events
+  useEffect(() => {
+    const handleUpdate = () => {
+      const user = getCurrentUser();
+      if (user) setCurrentUser(user);
+    };
+    window.addEventListener("current-user-updated", handleUpdate);
+    return () => window.removeEventListener("current-user-updated", handleUpdate);
+  }, []);
 
   // Defensive check in case component mounted without valid session
   if (!currentUser) {
@@ -167,7 +177,7 @@ export function DashboardLayout() {
     if (pathname.startsWith("/dashboard/researchers")) return "Researchers";
     if (pathname.startsWith("/dashboard/publications")) return "Publications";
     if (pathname.startsWith("/dashboard/impact")) return "Impact Analysis";
-    if (pathname.startsWith("/dashboard/sdg-matrix")) return "UN SDG Radar";
+    if (pathname.startsWith("/dashboard/sdg-matrix")) return "SDG Alignment";
     if (pathname.startsWith("/dashboard/reports")) return "Accreditation Reports";
     if (pathname.startsWith("/dashboard/ai-history") || pathname.startsWith("/dashboard/ask-ai"))
       return "Campus AI History";
@@ -466,7 +476,7 @@ export function DashboardLayout() {
               >
                 <div className="text-right hidden sm:block">
                   <p className="text-xs font-semibold text-foreground group-hover:text-brand transition-colors leading-tight">
-                    {currentUser.role === "admin" ? "Sir Rodelio M. Garin" : currentUser.name}
+                    {currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : "Researcher")}
                   </p>
                   <p className="text-[11px] text-muted-foreground leading-tight">
                     {currentUser.role === "admin"
@@ -476,10 +486,10 @@ export function DashboardLayout() {
                 </div>
                 <Avatar className="h-8 w-8 ring-1 ring-border group-hover:ring-brand/50 transition-all">
                   {currentUser.photoUrl ? (
-                    <AvatarImage src={currentUser.photoUrl} alt={currentUser.role === "admin" ? "Sir Rodelio M. Garin" : currentUser.name} />
+                    <AvatarImage src={currentUser.photoUrl} alt={currentUser.name || "User"} />
                   ) : null}
                   <AvatarFallback className="bg-brand text-white font-semibold text-xs">
-                    {currentUser.role === "admin" ? "RG" : currentUser.name ? currentUser.name.charAt(0).toUpperCase() : "U"}
+                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : currentUser.role === "admin" ? "R" : "U"}
                   </AvatarFallback>
                 </Avatar>
               </div>

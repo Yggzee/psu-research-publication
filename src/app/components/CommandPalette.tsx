@@ -106,7 +106,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             className="cursor-pointer"
           >
             <Target className="mr-2 h-4 w-4 text-emerald-600" />
-            <span>UN SDG Impact Radar & Research Evidence Directory</span>
+            <span>UN SDG Alignment & Research Evidence Directory</span>
           </CommandItem>
           {isAdmin && (
             <CommandItem

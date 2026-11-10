@@ -221,15 +221,14 @@ export function SDGImpactMatrix() {
 
   const tabs = [
     { id: "overview", label: "Impact Footprint & Agendas", icon: Target },
-    { id: "directory", label: "17 UN Goals Directory", count: 17, icon: Layers },
-    { id: "evidence", label: "Evidence Explorer", count: activeSDGItem?.count || 0, icon: BookOpen },
+    { id: "goals", label: "17 UN Goals & Evidence", count: 17, icon: Layers },
   ];
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* 1. Page Header */}
       <PageHeader
-        title="UN Sustainable Development Goals (SDG) Matrix"
+        title="UN Sustainable Development Goals (SDG Alignment)"
         description="Institutional alignment with the 17 UN Goals for AACCUP accreditation, SUC Leveling, and THE Impact Rankings"
         actions={
           <div className="flex items-center gap-2">
@@ -387,121 +386,114 @@ export function SDGImpactMatrix() {
         </div>
       )}
 
-      {/* 5. Tab 2: 17 UN Goals Directory */}
-      {activeTab === "directory" && (
-        <Card className="border-border/60 shadow-xs">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-brand" />
-                  <span>17 UN Sustainable Goals Directory</span>
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Select any goal to inspect publication evidence, citations, and AI alignment rationales
-                </CardDescription>
-              </div>
+      {/* 5. Tab 2: 17 UN Goals & Evidence Explorer */}
+      {activeTab === "goals" && (
+        <div className="space-y-6">
+          <Card className="border-border/60 shadow-xs">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-brand" />
+                    <span>17 UN Sustainable Development Goals</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Select any goal to inspect matching research publications, citation evidence, and AI rationales directly below
+                  </CardDescription>
+                </div>
 
-              {/* Quick jump */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 scroll-smooth max-w-full">
-                <span className="text-[11px] text-muted-foreground mr-1 shrink-0">Active:</span>
-                {sdgsWithPapers.map((g) => {
-                  const color = SDG_COLORS[g.sdg] || "#0038A8";
+                {/* Quick jump */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 scroll-smooth max-w-full">
+                  <span className="text-[11px] text-muted-foreground mr-1 shrink-0">Active:</span>
+                  {sdgsWithPapers.map((g) => {
+                    const color = SDG_COLORS[g.sdg] || "#0038A8";
+                    const isSelected =
+                      selectedSDG === g.fullLabel ||
+                      selectedSDG === g.sdg ||
+                      (extractSDGNum(selectedSDG) !== null && extractSDGNum(selectedSDG) === extractSDGNum(g.sdg));
+                    return (
+                      <button
+                        key={g.sdg}
+                        onClick={() => setSelectedSDG(g.fullLabel)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-all border shrink-0 cursor-pointer ${
+                          isSelected
+                            ? "bg-foreground text-background border-foreground shadow-2xs"
+                            : "bg-muted/40 hover:bg-muted text-foreground border-border/60"
+                        }`}
+                      >
+                        <span style={{ color: isSelected ? undefined : color }}>{g.sdg}</span> ({g.count})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                {radarData.map((goal) => {
                   const isSelected =
-                    selectedSDG === g.fullLabel ||
-                    selectedSDG === g.sdg ||
-                    (extractSDGNum(selectedSDG) !== null && extractSDGNum(selectedSDG) === extractSDGNum(g.sdg));
+                    selectedSDG === goal.fullLabel ||
+                    selectedSDG === goal.sdg ||
+                    (extractSDGNum(selectedSDG) !== null && extractSDGNum(selectedSDG) === extractSDGNum(goal.sdg));
+                  const hasPapers = goal.count > 0;
+                  const sdgColor = SDG_COLORS[goal.sdg] || "#0038A8";
+
                   return (
                     <button
-                      key={g.sdg}
-                      onClick={() => {
-                        setSelectedSDG(g.fullLabel);
-                        setActiveTab("evidence");
-                      }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold transition-all border shrink-0 cursor-pointer ${
+                      key={goal.sdg}
+                      onClick={() => setSelectedSDG(goal.fullLabel)}
+                      className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between h-28 relative overflow-hidden group cursor-pointer ${
                         isSelected
-                          ? "bg-foreground text-background border-foreground shadow-2xs"
-                          : "bg-muted/40 hover:bg-muted text-foreground border-border/60"
+                          ? "border-brand bg-brand-soft ring-2 ring-brand/20 shadow-xs"
+                          : hasPapers
+                          ? "border-border/80 bg-card hover:border-brand/60 hover:shadow-2xs"
+                          : "border-border/40 bg-muted/10 opacity-70 hover:opacity-100"
                       }`}
                     >
-                      <span style={{ color: isSelected ? undefined : color }}>{g.sdg}</span> ({g.count})
+                      <div
+                        className="absolute top-0 left-0 right-0 h-1"
+                        style={{ backgroundColor: sdgColor }}
+                      />
+
+                      <div className="flex items-center justify-between w-full pt-1">
+                        <span
+                          className="text-xs font-black font-mono"
+                          style={{ color: sdgColor }}
+                        >
+                          {goal.sdg}
+                        </span>
+                        <Badge
+                          variant={hasPapers ? "default" : "outline"}
+                          className={`text-[10px] font-mono px-1.5 py-0 h-4 ${
+                            hasPapers
+                              ? "bg-brand text-white font-bold"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {goal.count}
+                        </Badge>
+                      </div>
+
+                      <p className="text-xs font-medium text-foreground line-clamp-2 leading-tight">
+                        {goal.fullName}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+                        <span>{hasPapers ? "View evidence" : "No outputs"}</span>
+                        {isSelected && (
+                          <span className="text-brand font-bold">Selected</span>
+                        )}
+                      </div>
                     </button>
                   );
                 })}
               </div>
-            </div>
-          </CardHeader>
+            </CardContent>
+          </Card>
 
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
-              {radarData.map((goal) => {
-                const isSelected =
-                  selectedSDG === goal.fullLabel ||
-                  selectedSDG === goal.sdg ||
-                  (extractSDGNum(selectedSDG) !== null && extractSDGNum(selectedSDG) === extractSDGNum(goal.sdg));
-                const hasPapers = goal.count > 0;
-                const sdgColor = SDG_COLORS[goal.sdg] || "#0038A8";
-
-                return (
-                  <button
-                    key={goal.sdg}
-                    onClick={() => {
-                      setSelectedSDG(goal.fullLabel);
-                      setActiveTab("evidence");
-                    }}
-                    className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between h-28 relative overflow-hidden group cursor-pointer ${
-                      isSelected
-                        ? "border-brand bg-brand-soft ring-2 ring-brand/20 shadow-xs"
-                        : hasPapers
-                        ? "border-border/80 bg-card hover:border-brand/60 hover:shadow-2xs"
-                        : "border-border/40 bg-muted/10 opacity-70 hover:opacity-100"
-                    }`}
-                  >
-                    <div
-                      className="absolute top-0 left-0 right-0 h-1"
-                      style={{ backgroundColor: sdgColor }}
-                    />
-
-                    <div className="flex items-center justify-between w-full pt-1">
-                      <span
-                        className="text-xs font-black font-mono"
-                        style={{ color: sdgColor }}
-                      >
-                        {goal.sdg}
-                      </span>
-                      <Badge
-                        variant={hasPapers ? "default" : "outline"}
-                        className={`text-[10px] font-mono px-1.5 py-0 h-4 ${
-                          hasPapers
-                            ? "bg-brand text-white font-bold"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {goal.count}
-                      </Badge>
-                    </div>
-
-                    <p className="text-xs font-medium text-foreground line-clamp-2 leading-tight">
-                      {goal.fullName}
-                    </p>
-
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                      <span>{hasPapers ? "View papers" : "No outputs"}</span>
-                      {isSelected && (
-                        <span className="text-brand font-bold">Active</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* 6. Tab 3: Evidence Explorer */}
-      {activeTab === "evidence" && (
-        <Card className="border-border/60 shadow-xs overflow-hidden">
+          {/* Supporting Evidence Card in Same Tab */}
+          <Card className="border-border/60 shadow-xs overflow-hidden">
           <CardHeader className="bg-muted/30 border-b border-border/60 pb-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -755,6 +747,7 @@ export function SDGImpactMatrix() {
             )}
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Inspector Drawer */}

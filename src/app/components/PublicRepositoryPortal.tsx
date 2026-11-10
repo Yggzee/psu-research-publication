@@ -256,12 +256,11 @@ export function PublicRepositoryPortal() {
           {/* TOP-LEFT REPOSITORY LOGO + METRICS COUNTER + SMALL ? GUIDE BUTTON */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div
-              className="flex items-center gap-2 cursor-pointer shrink-0"
+              className="flex items-center cursor-pointer shrink-0"
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
               title="PSU Asingan Research Portal"
             >
               <img src={psuBookLogo} alt="PSU Research Portal" className="w-8 h-8 object-contain shrink-0" />
-              <span className="hidden md:inline font-bold text-xs text-foreground tracking-tight">PSU Research</span>
             </div>
             <div className="flex items-center gap-1.5 sm:gap-3 font-mono text-[10px] sm:text-[11px] bg-muted/40 border border-border/60 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg overflow-x-auto no-scrollbar shrink">
               <span className="flex items-center gap-1" title="Verified Publications">
@@ -347,24 +346,12 @@ export function PublicRepositoryPortal() {
       {/* ---------------------------------------------------- */}
       <section className="relative py-8 md:py-12 px-4 sm:px-6 bg-gradient-to-b from-brand/5 via-background to-background border-b border-border/60">
         <div className="max-w-4xl mx-auto text-center space-y-4">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-2">
-            <img src={psuBookLogo} alt="PSU Research Portal" className="w-16 h-16 sm:w-20 sm:h-20 object-contain drop-shadow-md" />
-            <div className="text-center sm:text-left">
-              <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-brand/10 text-brand border border-brand/20 mb-1">
-                Pangasinan State University • Asingan Campus
-              </div>
-              <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold text-foreground tracking-tight leading-tight">
-                Institutional Research Repository
-              </h1>
-            </div>
-          </div>
-
           <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-foreground">
             Explore Institutional Research & Academic Literature
           </h2>
 
           <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Search verified scholarly publications, faculty studies, and SDG impact contributions from Pangasinan State University, with access to global academic literature.
+            Search verified scholarly publications from PSU Asingan and explore global academic literature.
           </p>
 
           {/* SEARCH MODE SWITCHER TOGGLE */}
@@ -429,71 +416,6 @@ export function PublicRepositoryPortal() {
                   {isRepoLoading ? "Searching..." : "Search"}
                 </Button>
               </div>
-
-              {/* QUICK FILTER PILLS */}
-              <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-xs">
-                <span className="text-muted-foreground font-medium flex items-center gap-1">
-                  <Filter className="w-3 h-3" /> Filters:
-                </span>
-
-                {/* Department Filter */}
-                <select
-                  value={selectedDept}
-                  onChange={(e) => setSelectedDept(e.target.value)}
-                  aria-label="Filter researches by department"
-                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground"
-                >
-                  <option value="all">All Departments</option>
-                  <option value="BSIT">BSIT (Information Technology)</option>
-                  <option value="BSEd">BSEd (Teacher Education)</option>
-                  <option value="DAT/BAT">DAT/BAT (Agriculture & Tech)</option>
-                </select>
-
-                {/* SDG Filter */}
-                <select
-                  value={selectedSdg}
-                  onChange={(e) => setSelectedSdg(e.target.value)}
-                  aria-label="Filter researches by UN Sustainable Development Goal"
-                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground max-w-[180px] truncate"
-                >
-                  <option value="all">All UN SDG Goals</option>
-                  {SDG_LIST.map((sdg) => (
-                    <option key={sdg} value={sdg}>
-                      {sdg}
-                    </option>
-                  ))}
-                </select>
-
-                {/* Sort Order */}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  aria-label="Sort research publications order"
-                  className="h-7 px-2.5 rounded-lg text-[11px] bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground"
-                >
-                  <option value="citations">Highest Citations</option>
-                  <option value="recent">Most Recent Year</option>
-                  <option value="title">Title (A-Z)</option>
-                </select>
-
-                {(query || selectedSdg !== "all" || selectedDept !== "all") && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setQuery("");
-                      setSelectedSdg("all");
-                      setSelectedDept("all");
-                      setSelectedYear("all");
-                      setHasRepoSearched(false);
-                      loadRepositoryShowcase();
-                    }}
-                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    Reset Filters
-                  </Button>
-                )}
-              </div>
             </form>
           )}
 
@@ -522,7 +444,7 @@ export function PublicRepositoryPortal() {
                   <Input
                     value={globalQuery}
                     onChange={(e) => setGlobalQuery(e.target.value)}
-                    placeholder="Search global literature across millions of papers (PSU & PH prioritized)..."
+                    placeholder="Search global literature across millions of papers..."
                     disabled={Boolean(isScraperLockedForPublic)}
                     className="pl-12 pr-28 h-13 sm:h-14 text-sm sm:text-base rounded-2xl bg-card border-border/80 focus-visible:ring-brand shadow-xs"
                   />
@@ -534,13 +456,6 @@ export function PublicRepositoryPortal() {
                     {isGlobalLoading ? "Searching..." : "Search"}
                   </Button>
                 </div>
-
-                <p className="text-[11px] text-muted-foreground flex items-center justify-center gap-1.5 pt-1">
-                  <TrendingUp className="w-3.5 h-3.5 text-brand" />
-                  <span>
-                    Smart 3-Tier Ranking active: <strong>PSU papers</strong> &rarr; <strong>Philippine studies</strong> &rarr; <strong>International literature</strong>
-                  </span>
-                </p>
               </form>
             </div>
           )}
@@ -557,8 +472,8 @@ export function PublicRepositoryPortal() {
         {/* ==================================================== */}
         {searchMode === "repository" && (
           <div className="space-y-8">
-            {/* Top Bar for Results */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
+            {/* Top Bar for Results with Integrated Filters */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-border/60 pb-3">
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-brand" />
@@ -573,11 +488,70 @@ export function PublicRepositoryPortal() {
                 </p>
               </div>
 
-              {selectedSdg !== "all" && (
-                <Badge variant="outline" className="text-xs bg-brand/10 text-brand border-brand/30 self-start sm:self-auto">
-                  Focus: {selectedSdg}
-                </Badge>
-              )}
+              {/* FILTERS AT TOP-RIGHT OF PUBLICATIONS */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {/* Department Filter */}
+                <select
+                  value={selectedDept}
+                  onChange={(e) => setSelectedDept(e.target.value)}
+                  aria-label="Filter researches by department"
+                  className="h-8 px-2.5 rounded-lg text-xs bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground"
+                >
+                  <option value="all">All Departments</option>
+                  <option value="BSIT">BSIT (Information Technology)</option>
+                  <option value="BSBA">BSBA (Business Administration)</option>
+                  <option value="BEE">BEE (Elementary Education)</option>
+                  <option value="BTLED">BTLED (Technology & Livelihood)</option>
+                  <option value="BIT">BIT (Industrial Technology)</option>
+                  <option value="BSE">BSE (Secondary Education)</option>
+                  <option value="Non-Faculty">Non-Faculty</option>
+                </select>
+
+                {/* SDG Filter */}
+                <select
+                  value={selectedSdg}
+                  onChange={(e) => setSelectedSdg(e.target.value)}
+                  aria-label="Filter researches by UN Sustainable Development Goal"
+                  className="h-8 px-2.5 rounded-lg text-xs bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground max-w-[170px] truncate"
+                >
+                  <option value="all">All UN SDG Goals</option>
+                  {SDG_LIST.map((sdg) => (
+                    <option key={sdg} value={sdg}>
+                      {sdg}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Sort Order */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as any)}
+                  aria-label="Sort research publications order"
+                  className="h-8 px-2.5 rounded-lg text-xs bg-card dark:bg-[#3a3b3c] border border-border/80 text-foreground"
+                >
+                  <option value="citations">Highest Citations</option>
+                  <option value="recent">Most Recent Year</option>
+                  <option value="title">Title (A-Z)</option>
+                </select>
+
+                {(query || selectedSdg !== "all" || selectedDept !== "all") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setQuery("");
+                      setSelectedSdg("all");
+                      setSelectedDept("all");
+                      setSelectedYear("all");
+                      setHasRepoSearched(false);
+                      loadRepositoryShowcase();
+                    }}
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Reset
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* RESULTS LIST */}
@@ -831,9 +805,6 @@ export function PublicRepositoryPortal() {
                     {hasGlobalSearched ? `Global Search Results (${globalResults.length})` : "Global Academic Literature Search"}
                   </span>
                 </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Academic papers indexed globally with 3-Tier ranking: PSU &rarr; Philippines &rarr; International.
-                </p>
               </div>
             </div>
 
@@ -1050,16 +1021,26 @@ export function PublicRepositoryPortal() {
       {/* ---------------------------------------------------- */}
       {/* FOOTER                                               */}
       {/* ---------------------------------------------------- */}
-      <footer className="border-t border-border/60 bg-muted/20 py-8 px-4 sm:px-6 mt-12 text-center text-xs text-muted-foreground space-y-2">
-        <p className="font-semibold text-foreground">
-          Pangasinan State University — Institutional Research Repository
-        </p>
-        <p className="text-[11px] text-muted-foreground">
-          Asingan Campus • Commission on Higher Education (CHED) Accredited Repository Standards • United Nations SDGs Aligned
-        </p>
-        <p className="text-[11px] text-muted-foreground">
-          Researchers and the Research Coordinator may sign in using the top-right portal button to access research analytics and management tools.
-        </p>
+      <footer className="border-t border-border/60 bg-muted/20 py-8 px-4 sm:px-6 mt-12">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+          <div className="space-y-1 text-center md:text-left">
+            <p className="font-semibold text-foreground">
+              Pangasinan State University • Asingan Campus
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Institutional Research Publication Tracking System & Open-Access Repository
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center md:items-end gap-1 text-center md:text-right">
+            <p className="text-[11px] font-medium text-foreground">
+              Developed by Julius Oscar Moreno • PSU Asingan Campus
+            </p>
+            <p className="text-[10px] text-muted-foreground/80">
+              Aligned with CHED Institutional Standards & United Nations Sustainable Development Goals
+            </p>
+          </div>
+        </div>
       </footer>
     </div>
   );

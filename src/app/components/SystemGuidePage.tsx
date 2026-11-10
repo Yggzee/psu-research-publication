@@ -631,16 +631,16 @@ const researcherGuideCategories: GuideCategory[] = [
   {
     id: "sdg-radar",
     number: 4,
-    title: "SDG Radar",
+    title: "SDG Alignment",
     subtitle: "Understanding how campus publications align with the 17 United Nations Goals",
     icon: Target,
     narrativeParagraphs: [
-      "The 'SDG Radar' page shows how the published research of Pangasinan State University — Asingan Campus contributes to the 17 United Nations Sustainable Development Goals (SDGs). When you open this page, you see an overall visual radar chart paired with 17 color-coded cards—one for each global goal, such as SDG 3 (Good Health and Well-being), SDG 4 (Quality Education), SDG 8 (Decent Work and Economic Growth), SDG 9 (Industry, Innovation and Infrastructure), and SDG 13 (Climate Action). Each card displays the number of campus publications mapped to that goal.",
-      "Modern university accreditation and institutional evaluations look closely at how campus studies solve real community challenges. Instead of guessing which goals our campus covers, this page gives you a clear visual map of our strengths. When you click on any of the 17 goal cards, the list at the bottom of the page updates to show the exact PSU Asingan publications supporting that goal, along with a plain-English explanation of why each study fits.",
+      "The 'SDG Alignment' page shows how the published research of Pangasinan State University — Asingan Campus contributes to the 17 United Nations Sustainable Development Goals (SDGs). When you open this page, you see an overall visual radar chart paired with 17 color-coded cards—one for each global goal, such as SDG 3 (Good Health and Well-being), SDG 4 (Quality Education), SDG 8 (Decent Work and Economic Growth), SDG 9 (Industry, Innovation and Infrastructure), and SDG 13 (Climate Action). Each card displays the number of campus publications mapped to that goal.",
+      "Modern university accreditation and institutional evaluations look closely at how campus studies solve real community challenges. Instead of guessing which goals our campus covers, this page gives you a clear visual map of our strengths. When you click on any of the 17 goal cards, the list directly underneath in the same tab updates to show the exact PSU Asingan publications supporting that goal, along with a plain-English explanation of why each study fits.",
     ],
     simulationSection: {
       title: "Simulated UN SDG Goal Alignment Numbers",
-      subtitle: "How to read the goal cards and progress bars on the SDG Radar page",
+      subtitle: "How to read the goal cards and progress bars on the SDG Alignment page",
       visual: <SimulatedSDGRadarGraph />,
       numberExplanation: [
         "In this simulated example of 80 campus publications, 'SDG 4: Quality Education' shows '28 works' with a full bar—meaning 28 published studies on campus focus on teaching, learning, or curriculum improvement.",
@@ -990,11 +990,11 @@ const coordinatorGuideCategories: GuideCategory[] = [
   {
     id: "sdg-radar",
     number: 6,
-    title: "SDG Radar",
+    title: "SDG Alignment",
     subtitle: "Mapping campus research output across the 17 United Nations Sustainable Development Goals",
     icon: Target,
     narrativeParagraphs: [
-      "The 'SDG Radar' page visualizes how PSU Asingan's research portfolio supports the 17 United Nations Sustainable Development Goals. At the top is a radar chart showing the campus's overall coverage footprint, paired with 17 interactive goal cards—from SDG 1 (No Poverty) to SDG 17 (Partnerships for the Goals)—each displaying the exact number of campus publications aligned with that goal.",
+      "The 'SDG Alignment' page visualizes how PSU Asingan's research portfolio supports the 17 United Nations Sustainable Development Goals. At the top is a radar chart showing the campus's overall coverage footprint, paired with 17 interactive goal cards—from SDG 1 (No Poverty) to SDG 17 (Partnerships for the Goals)—each displaying the exact number of campus publications aligned with that goal.",
       "Accrediting bodies and university rankings require clear evidence of how campus research addresses sustainable development. By clicking any of the 17 goal cards on this page, you can immediately inspect the list of PSU Asingan publications supporting that goal along with the rationale for each classification, making it effortless to prepare SDG evidence portfolios.",
     ],
     simulationSection: {

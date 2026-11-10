@@ -46,28 +46,29 @@ export function ProfilePage() {
     if (user.role === "admin") {
       return {
         ...user,
-        name: user.name && !user.name.toLowerCase().includes("admin") ? user.name : "Sir Rodelio M. Garin",
+        name: user.name && !user.name.toLowerCase().includes("admin") ? user.name : "Rodelio M. Garin",
         email: user.email && !user.email.includes("admin@") ? user.email : "rodeliogarin@gmail.com",
-        department: user.department && !user.department.includes("Information Technology") ? user.department : "Campus Research Unit / BSIT",
+        department: user.department && !user.department.includes("Information Technology") ? user.department : "BSIT",
         scholarUrl: user.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
         googleScholarId: user.googleScholarId || "x6PdtN8AAAAJ",
-        instructorId: user.instructorId && user.instructorId !== "admin" ? user.instructorId : "PSU-002",
+        instructorId: user.instructorId && user.instructorId !== "admin" ? user.instructorId : "ASIN-00002",
       };
     }
     return user;
   });
 
-  const [isEditing, setIsEditing] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [idDigits, setIdDigits] = useState("00002");
   const [publications, setPublications] = useState<any[]>([]);
   const [loadingPubs, setLoadingPubs] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>("year");
   const [stats, setStats] = useState({ totalPublications: 0, totalCitations: 0 });
 
   const [formData, setFormData] = useState({
-    name: currentUser.name || "",
+    name: currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : ""),
     email: currentUser.email || "",
-    department: currentUser.department || "Campus Research Unit / BSIT",
+    department: currentUser.department || "BSIT",
     photoUrl: currentUser.photoUrl || "",
     scholarUrl: currentUser.scholarUrl || "",
     googleScholarId: currentUser.googleScholarId || "",
@@ -81,18 +82,19 @@ export function ProfilePage() {
       const isCoordinator =
         activeUser.role === "admin" ||
         (activeUser.name && activeUser.name.toLowerCase().includes("garin")) ||
+        activeUser.instructorId === "ASIN-00002" ||
         activeUser.instructorId === "PSU-002";
 
       // If Research Coordinator, guarantee default scholar credentials if missing
       const resolvedUser: SessionUser = isCoordinator
         ? {
             ...activeUser,
-            name: activeUser.name && !activeUser.name.toLowerCase().includes("admin") ? activeUser.name : "Sir Rodelio M. Garin",
+            name: activeUser.name && !activeUser.name.toLowerCase().includes("admin") ? activeUser.name : "Rodelio M. Garin",
             email: activeUser.email && !activeUser.email.includes("admin@") ? activeUser.email : "rodeliogarin@gmail.com",
-            department: activeUser.department && !activeUser.department.includes("Information Technology") ? activeUser.department : "Campus Research Unit / BSIT",
+            department: activeUser.department && !activeUser.department.includes("Information Technology") ? activeUser.department : "BSIT",
             scholarUrl: activeUser.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
             googleScholarId: activeUser.googleScholarId || "x6PdtN8AAAAJ",
-            instructorId: activeUser.instructorId && activeUser.instructorId !== "admin" ? activeUser.instructorId : "PSU-002",
+            instructorId: activeUser.instructorId && activeUser.instructorId !== "admin" ? activeUser.instructorId : "ASIN-00002",
           }
         : activeUser;
 
@@ -142,24 +144,29 @@ export function ProfilePage() {
   }, []);
 
   const handleOpenEdit = () => {
+    const rawId = currentUser.instructorId || "";
+    const match = rawId.match(/ASIN-(\d{5})/i) || rawId.match(/(\d{5})/);
+    setIdDigits(match ? match[1] : "00002");
     setFormData({
-      name: currentUser.name || "",
+      name: currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : ""),
       email: currentUser.email || "",
-      department: currentUser.department || "Campus Research Unit / BSIT",
+      department: currentUser.department || "BSIT",
       photoUrl: currentUser.photoUrl || "",
       scholarUrl: currentUser.scholarUrl || "",
       googleScholarId: currentUser.googleScholarId || "",
     });
-    setIsEditing(true);
+    setShowEditModal(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    const fullInstructorId = `ASIN-${idDigits.padStart(5, "0")}`;
     try {
       const res = await apiService.updateProfile({
         userId: currentUser.id,
         username: currentUser.username,
+        instructorId: fullInstructorId,
         name: formData.name,
         email: formData.email,
         department: formData.department,
@@ -172,13 +179,14 @@ export function ProfilePage() {
         const updated = updateCurrentUser({
           name: res.user.name,
           email: res.user.email,
+          instructorId: fullInstructorId,
           department: res.user.department,
           photoUrl: res.user.photoUrl,
           scholarUrl: res.user.scholarUrl,
           googleScholarId: res.user.googleScholarId,
         });
         if (updated) setCurrentUserState(updated);
-        setIsEditing(false);
+        setShowEditModal(false);
         toast.success("Profile updated successfully!");
         loadProfileAndPublications();
       } else {
@@ -188,13 +196,14 @@ export function ProfilePage() {
       const updated = updateCurrentUser({
         name: formData.name,
         email: formData.email,
+        instructorId: fullInstructorId,
         department: formData.department,
         photoUrl: formData.photoUrl,
         scholarUrl: formData.scholarUrl,
         googleScholarId: formData.googleScholarId,
       });
       if (updated) setCurrentUserState(updated);
-      setIsEditing(false);
+      setShowEditModal(false);
       toast.success("Profile saved locally!");
       loadProfileAndPublications();
     } finally {
@@ -237,7 +246,7 @@ export function ProfilePage() {
       ? "x6PdtN8AAAAJ"
       : undefined);
 
-  const effectiveName = isCoordinator ? "Sir Rodelio M. Garin" : currentUser.name;
+  const effectiveName = currentUser.name || (isCoordinator ? "Rodelio M. Garin" : "Researcher");
   const facultyPhoto = getFacultyPhoto(effectiveName) || currentUser.photoUrl;
 
   return (
@@ -252,33 +261,13 @@ export function ProfilePage() {
         }
         actions={
           <div className="flex items-center gap-2">
-            {effectiveScholarUrl && (
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="text-xs h-9 gap-1.5 border-brand/30 text-brand hover:bg-brand-soft"
-              >
-                <a
-                  href={effectiveScholarUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Open live Google Scholar Citations profile"
-                >
-                  <GraduationCap className="h-3.5 w-3.5 text-brand" />
-                  <span>Google Scholar</span>
-                  <ExternalLink className="h-3 w-3 opacity-60" />
-                </a>
-              </Button>
-            )}
-
             <Button
               size="sm"
-              onClick={isEditing ? () => setIsEditing(false) : handleOpenEdit}
+              onClick={handleOpenEdit}
               className="text-xs h-9 gap-1.5 bg-brand hover:bg-brand/90 text-white shadow-2xs"
             >
-              {isEditing ? <X className="h-3.5 w-3.5" /> : <Edit3 className="h-3.5 w-3.5" />}
-              <span>{isEditing ? "Cancel" : "Edit Profile"}</span>
+              <Edit3 className="h-3.5 w-3.5" />
+              <span>Edit Profile</span>
             </Button>
           </div>
         }
@@ -335,7 +324,7 @@ export function ProfilePage() {
                   <span className="flex items-center gap-1.5">
                     <ShieldCheck className="w-3.5 h-3.5 text-brand" />
                     <span className="font-mono">
-                      Instructor ID: {currentUser.instructorId || (isCoordinator ? "PSU-002" : "ASIN-00000")}
+                      Instructor ID: {currentUser.instructorId || (isCoordinator ? "ASIN-00002" : "ASIN-00000")}
                     </span>
                   </span>
                 </div>
@@ -357,36 +346,96 @@ export function ProfilePage() {
         </CardContent>
       </Card>
 
-      {/* 3. Inline Edit Form */}
-      {isEditing && (
-        <Card className="border-brand/40 shadow-xs">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between pb-3 border-b border-border/60 mb-5">
-              <h3 className="text-sm font-semibold text-foreground">Edit Profile Information</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsEditing(false)}
-                className="h-7 w-7 p-0 text-muted-foreground"
+      {/* 3. Pop-up Modal: Edit Profile Information */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-card text-foreground rounded-2xl shadow-xl border border-border max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-border/70">
+              <div>
+                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-brand" />
+                  <span>Edit Profile Information</span>
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Update your official researcher credentials, department affiliation, and Google Scholar profile.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg"
               >
-                <X className="h-4 w-4" />
-              </Button>
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div className="space-y-1.5">
-                <Label htmlFor="prof-name" className="text-xs font-medium">Full Legal / Academic Name *</Label>
+            <form onSubmit={handleSave} className="space-y-3.5 text-xs">
+              {/* Full Name */}
+              <div className="space-y-1">
+                <Label htmlFor="prof-name" className="text-xs font-semibold text-foreground">
+                  Full Legal / Academic Name *
+                </Label>
                 <Input
                   id="prof-name"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="e.g. Rodelio M. Garin"
                   className="h-9 text-xs"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="prof-email" className="text-xs font-medium">Email Address *</Label>
+              {/* Instructor ID with locked ASIN- prefix */}
+              <div className="space-y-1">
+                <Label htmlFor="prof-inst-id" className="text-xs font-semibold text-foreground">
+                  Instructor ID (Standard Format: ASIN-00000) *
+                </Label>
+                <div className="flex items-center rounded-lg border border-border/80 bg-muted/30 focus-within:ring-1 focus-within:ring-brand overflow-hidden">
+                  <span className="px-3 py-2 text-xs font-mono font-bold bg-muted/60 text-muted-foreground border-r border-border/80 select-none">
+                    ASIN-
+                  </span>
+                  <input
+                    id="prof-inst-id"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{5}"
+                    maxLength={5}
+                    value={idDigits}
+                    onChange={(e) => setIdDigits(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    placeholder="00000"
+                    className="flex-1 bg-transparent px-3 py-2 text-xs font-mono font-semibold text-foreground focus:outline-none tracking-widest"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Academic Department Dropdown */}
+              <div className="space-y-1">
+                <Label htmlFor="prof-dept" className="text-xs font-semibold text-foreground">
+                  Academic Department *
+                </Label>
+                <select
+                  id="prof-dept"
+                  required
+                  value={formData.department}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  className="w-full h-9 px-3 rounded-lg text-xs bg-card border border-border/80 text-foreground focus:ring-1 focus:ring-brand"
+                >
+                  <option value="BSIT">BSIT (Bachelor of Science in Information Technology)</option>
+                  <option value="BSBA">BSBA (Bachelor of Science in Business Administration)</option>
+                  <option value="BEE">BEE (Bachelor of Elementary Education)</option>
+                  <option value="BTLED">BTLED (Bachelor of Technology and Livelihood Education)</option>
+                  <option value="BIT">BIT (Bachelor of Industrial Technology)</option>
+                  <option value="BSE">BSE (Bachelor of Secondary Education)</option>
+                  <option value="Non-Faculty">Non-Faculty</option>
+                </select>
+              </div>
+
+              {/* Email Address */}
+              <div className="space-y-1">
+                <Label htmlFor="prof-email" className="text-xs font-semibold text-foreground">
+                  Email Address *
+                </Label>
                 <Input
                   id="prof-email"
                   type="email"
@@ -397,19 +446,11 @@ export function ProfilePage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="prof-dept" className="text-xs font-medium">Academic Department *</Label>
-                <Input
-                  id="prof-dept"
-                  required
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="h-9 text-xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="prof-photo" className="text-xs font-medium">Photo URL</Label>
+              {/* Photo URL */}
+              <div className="space-y-1">
+                <Label htmlFor="prof-photo" className="text-xs font-semibold text-foreground">
+                  Photo URL
+                </Label>
                 <Input
                   id="prof-photo"
                   type="url"
@@ -420,60 +461,65 @@ export function ProfilePage() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="prof-scholar-url" className="text-xs font-medium">Google Scholar Profile URL</Label>
-                <Input
-                  id="prof-scholar-url"
-                  placeholder="https://scholar.google.com/citations?user=..."
-                  value={formData.scholarUrl}
-                  onChange={(e) => setFormData({ ...formData, scholarUrl: e.target.value })}
-                  className="h-9 text-xs"
-                />
+              {/* Google Scholar URL & ID */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1">
+                  <Label htmlFor="prof-scholar-url" className="text-xs font-semibold text-foreground">
+                    Google Scholar Profile URL
+                  </Label>
+                  <Input
+                    id="prof-scholar-url"
+                    placeholder="https://scholar.google.com/citations?user=..."
+                    value={formData.scholarUrl}
+                    onChange={(e) => setFormData({ ...formData, scholarUrl: e.target.value })}
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="prof-scholar-id" className="text-xs font-semibold text-foreground">
+                    Google Scholar User ID
+                  </Label>
+                  <Input
+                    id="prof-scholar-id"
+                    placeholder="e.g. x6PdtN8AAAAJ"
+                    value={formData.googleScholarId}
+                    onChange={(e) => setFormData({ ...formData, googleScholarId: e.target.value })}
+                    className="h-9 text-xs"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="prof-scholar-id" className="text-xs font-medium">Google Scholar User ID</Label>
-                <Input
-                  id="prof-scholar-id"
-                  placeholder="e.g. x6PdtN8AAAAJ"
-                  value={formData.googleScholarId}
-                  onChange={(e) => setFormData({ ...formData, googleScholarId: e.target.value })}
-                  className="h-9 text-xs"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 md:col-span-2 pt-2">
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  size="sm"
-                  className="bg-brand hover:bg-brand/90 text-white text-xs gap-1.5"
-                >
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Saving Profile...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Save Changes</span>
-                    </>
-                  )}
-                </Button>
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-border/70">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setIsEditing(false)}
-                  className="text-xs"
+                  onClick={() => setShowEditModal(false)}
+                  disabled={saving}
+                  className="text-xs h-9 px-4"
                 >
                   Cancel
                 </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={saving}
+                  className="text-xs h-9 px-5 bg-brand hover:bg-brand/90 text-white font-semibold"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
+                </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       {/* 4. Metric Stats Row (Matching Researcher Profile) */}
