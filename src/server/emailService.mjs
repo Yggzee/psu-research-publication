@@ -70,55 +70,171 @@ function logEmail({ recipientEmail, recipientName, subject, emailType, verificat
 }
 
 /**
- * Generate standard HTML email container
+ * Generate bulletproof, highly professional HTML email container
+ * Designed specifically for Gmail (Web/iOS/Android), Outlook, Apple Mail, and Yahoo Mail
+ * Uses 100% inline table-based layout and inline CSS (never relies on stripped <style> classes).
  */
-function buildHtmlEmail({ title, preheader, bodyHtml, ctaText, ctaLink, footerNote }) {
+function buildHtmlEmail({
+  title,
+  badgeText = 'OFFICIAL INVITATION',
+  headline,
+  recipientName,
+  introParagraph,
+  metadataRows = [],
+  actionPrompt,
+  ctaText,
+  ctaLink,
+  securityNote = 'This secure activation link is valid for 7 days.',
+  footerNote,
+}) {
+  const metaHtml = metadataRows.length > 0 ? `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin: 24px 0 28px; border-collapse: separate; border-spacing: 0; overflow: hidden;">
+      ${metadataRows.map((row, idx) => `
+        <tr>
+          <td style="padding: 13px 18px; ${idx < metadataRows.length - 1 ? 'border-bottom: 1px solid #e2e8f0;' : ''} font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; width: 38%;">
+            ${row.label}
+          </td>
+          <td style="padding: 13px 18px; ${idx < metadataRows.length - 1 ? 'border-bottom: 1px solid #e2e8f0;' : ''} font-size: 14px; font-weight: 700; color: ${row.isCode ? '#0038a8' : '#0f172a'}; ${row.isCode ? "font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;" : ''}">
+            ${row.value}
+          </td>
+        </tr>
+      `).join('')}
+    </table>
+  ` : '';
+
   return `
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="supported-color-schemes" content="light" />
   <title>${title}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; margin: 0; padding: 24px 16px; color: #1f2937; }
-    .container { max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-    .header { background: linear-gradient(135deg, #0038A8 0%, #1e40af 100%); padding: 32px 24px; text-align: center; color: #ffffff; }
-    .header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-    .header p { margin: 6px 0 0; font-size: 14px; opacity: 0.9; }
-    .content { padding: 32px 28px; line-height: 1.6; font-size: 15px; }
-    .btn-container { text-align: center; margin: 30px 0; }
-    .btn { display: inline-block; background-color: #0038A8; color: #ffffff !important; font-weight: 600; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0, 56, 168, 0.3); }
-    .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0; }
-    .meta-item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-    .meta-item:last-child { margin-bottom: 0; }
-    .meta-label { color: #64748b; font-weight: 500; }
-    .meta-val { color: #0f172a; font-weight: 600; }
-    .footer { background: #f9fafb; padding: 20px 24px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb; }
-    .alt-link { word-break: break-all; font-size: 13px; color: #2563eb; }
-  </style>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Pangasinan State University</h1>
-      <p>Asingan Campus • Research & Publication Monitoring System</p>
-    </div>
-    <div class="content">
-      ${bodyHtml}
-      ${ctaLink && ctaText ? `
-        <div class="btn-container">
-          <a href="${ctaLink}" class="btn" target="_blank">${ctaText}</a>
-        </div>
-        <p style="font-size: 13px; color: #6b7280;">If the button above doesn't work, copy and paste this verification link into your web browser:</p>
-        <p><a href="${ctaLink}" class="alt-link">${ctaLink}</a></p>
-      ` : ''}
-    </div>
-    <div class="footer">
-      <p style="margin: 0 0 6px;"><strong>PSU Asingan Campus — Research and Innovation Office</strong></p>
-      <p style="margin: 0;">${footerNote || 'This is an automated system notification. If you did not expect this email, please contact the campus research coordinator.'}</p>
-    </div>
-  </div>
+<body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f1f5f9; width: 100%; margin: 0; padding: 36px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card Container (600px max) -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);">
+          
+          <!-- Top Accent Gold / Blue Brand Stripe -->
+          <tr>
+            <td style="background-color: #0038a8; height: 5px; font-size: 1px; line-height: 1px;">&nbsp;</td>
+          </tr>
+
+          <!-- Institutional Header -->
+          <tr>
+            <td style="background-color: #0b2559; padding: 28px 32px; text-align: left;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #93c5fd; margin-bottom: 4px;">
+                      Pangasinan State University • Asingan Campus
+                    </div>
+                    <div style="font-size: 21px; font-weight: 700; color: #ffffff; letter-spacing: -0.01em; margin: 0; line-height: 1.3;">
+                      Research Publication Tracking System
+                    </div>
+                    <div style="font-size: 12px; color: #cbd5e1; margin-top: 4px;">
+                      Office of the Campus Research Coordinator
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Body Content -->
+          <tr>
+            <td style="padding: 36px 32px 28px; background-color: #ffffff; color: #1e293b; font-size: 15px; line-height: 1.65;">
+              
+              <!-- Badge -->
+              <div style="margin-bottom: 18px;">
+                <span style="display: inline-block; background-color: #eff6ff; color: #0038a8; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; border-radius: 9999px; border: 1px solid #bfdbfe;">
+                  ${badgeText}
+                </span>
+              </div>
+
+              <!-- Greeting / Headline -->
+              <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 700; color: #0f172a; letter-spacing: -0.01em;">
+                ${headline || `Welcome, ${recipientName}!`}
+              </h2>
+
+              <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.65;">
+                ${introParagraph}
+              </p>
+
+              <!-- Metadata Summary Box -->
+              ${metaHtml}
+
+              ${actionPrompt ? `
+              <p style="margin: 0 0 24px; color: #334155; font-size: 14px; line-height: 1.6;">
+                ${actionPrompt}
+              </p>
+              ` : ''}
+
+              <!-- Bulletproof Centered CTA Button (Table-based for Gmail/Outlook) -->
+              ${ctaLink && ctaText ? `
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 28px 0;">
+                <tr>
+                  <td align="center">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+                      <tr>
+                        <td align="center" style="border-radius: 8px; background-color: #0038a8; box-shadow: 0 4px 12px rgba(0, 56, 168, 0.28);">
+                          <a href="${ctaLink}" target="_blank" style="display: inline-block; padding: 16px 38px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff !important; text-decoration: none; border-radius: 8px; border: 1px solid #0038a8; text-align: center;">
+                            ${ctaText} &rarr;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Security Expiration Notice -->
+              <p style="text-align: center; margin: 0 0 28px; font-size: 12px; color: #64748b;">
+                ${securityNote}
+              </p>
+              
+              <!-- Subtle Link Fallback Box -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px;">
+                <tr>
+                  <td style="font-size: 12px; color: #64748b; line-height: 1.5;">
+                    <strong style="color: #334155;">Button not clickable?</strong> Copy and paste this link into your browser:
+                    <div style="word-break: break-all; margin-top: 4px; font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-size: 11px; color: #0284c7;">
+                      ${ctaLink}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              ` : ''}
+
+            </td>
+          </tr>
+
+          <!-- Footer Information & Sign-off -->
+          <tr>
+            <td style="padding: 24px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #64748b; line-height: 1.6;">
+              <p style="margin: 0 0 4px; font-weight: 700; color: #1e293b; font-size: 13px;">
+                Sir Rodelio M. Garin
+              </p>
+              <p style="margin: 0 0 6px; color: #475569;">
+                Research Coordinator • Pangasinan State University, Asingan Campus
+              </p>
+              <p style="margin: 0 0 10px; font-size: 11px; color: #94a3b8;">
+                ${footerNote || 'This is an official automated notification from the PSU Asingan Research Publication Tracking System. If you did not expect this message, please contact the Research Coordinator.'}
+              </p>
+              <div style="font-size: 11px; color: #94a3b8; border-top: 1px dashed #cbd5e1; padding-top: 10px; margin-top: 10px;">
+                Developed by Julius Oscar Moreno • PSU Asingan Campus
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
   `.trim();
@@ -189,41 +305,25 @@ async function dispatchEmail({ to, toName, subject, html, emailType, token, link
  */
 export async function sendAdminInvitationEmail({ email, name, instructorId, department, token, baseUrl }) {
   const verificationLink = `${baseUrl}/verify-invitation?token=${encodeURIComponent(token)}`;
-  const subject = 'Invitation: Join PSU Research Publication System & Set Your Password';
-
-  const bodyHtml = `
-    <h2 style="margin-top: 0; color: #111827; font-size: 18px;">Welcome, ${name}!</h2>
-    <p>You have been registered by the Campus Research Administrator to the <strong>Pangasinan State University Research Publication Monitoring System</strong>.</p>
-    <p>To officially activate your profile and be recognized in our institutional research directory, please verify your email and set your preferred account password.</p>
-    
-    <div class="meta-box">
-      <div class="meta-item">
-        <span class="meta-label">Full Name:</span>
-        <span class="meta-val">${name}</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Instructor ID / Username:</span>
-        <span class="meta-val">${instructorId}</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Email Address:</span>
-        <span class="meta-val">${email}</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Department:</span>
-        <span class="meta-val">${department}</span>
-      </div>
-    </div>
-
-    <p>Please click the button below to confirm your email address and set your personal login password:</p>
-  `;
+  const subject = 'Official Invitation: Join PSU Asingan Research Publication Tracking System';
 
   const html = buildHtmlEmail({
     title: subject,
-    bodyHtml,
+    badgeText: 'OFFICIAL RESEARCHER INVITATION',
+    headline: `Welcome, ${name}!`,
+    recipientName: name,
+    introParagraph: 'You have been registered by Campus Research Coordinator Sir Rodelio M. Garin to the PSU Asingan Research Publication Tracking System. To activate your profile, claim your scholarly publications, and set your private account password, please verify your email below.',
+    metadataRows: [
+      { label: 'Full Name', value: name },
+      { label: 'Instructor ID', value: instructorId, isCode: true },
+      { label: 'Department', value: department || 'General Academic' },
+      { label: 'Registered Email', value: email },
+    ],
+    actionPrompt: 'Please click the button below to confirm your account and set your private login password:',
     ctaText: 'Activate Account & Set Password',
     ctaLink: verificationLink,
-    footerNote: 'This invitation was initiated by the PSU Asingan Campus Research Admin. This link expires in 7 days.',
+    securityNote: 'This secure activation link is valid for 7 days. If you did not expect this invitation, you may safely disregard this message.',
+    footerNote: 'This invitation was authorized by Campus Research Coordinator Sir Rodelio M. Garin.',
   });
 
   return dispatchEmail({
@@ -243,37 +343,25 @@ export async function sendAdminInvitationEmail({ email, name, instructorId, depa
  */
 export async function sendSelfRegisterVerificationEmail({ email, name, instructorId, token, baseUrl }) {
   const verificationLink = `${baseUrl}/verify-email?token=${encodeURIComponent(token)}`;
-  const subject = 'Verify your Email Address - PSU Research Publication System';
-
-  const bodyHtml = `
-    <h2 style="margin-top: 0; color: #111827; font-size: 18px;">Hello, ${name}!</h2>
-    <p>Thank you for registering for the <strong>PSU Research Publication Monitoring System</strong>.</p>
-    <p>Before your account can be reviewed and admitted by the Research Administrator, please confirm that you have access to this email address.</p>
-    
-    <div class="meta-box">
-      <div class="meta-item">
-        <span class="meta-label">Instructor ID / Username:</span>
-        <span class="meta-val">${instructorId}</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Registered Email:</span>
-        <span class="meta-val">${email}</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Verification Status:</span>
-        <span class="meta-val" style="color: #d97706;">Action Required</span>
-      </div>
-    </div>
-
-    <p>Click the button below to verify your email address:</p>
-  `;
+  const subject = 'Verify Your Email Address - PSU Asingan Research Publication Tracking System';
 
   const html = buildHtmlEmail({
     title: subject,
-    bodyHtml,
+    badgeText: 'EMAIL VERIFICATION',
+    headline: `Hello, ${name}!`,
+    recipientName: name,
+    introParagraph: 'Thank you for registering with the PSU Asingan Research Publication Tracking System. Before your account can be reviewed and admitted by Campus Research Coordinator Sir Rodelio M. Garin, please confirm that you have access to this email address.',
+    metadataRows: [
+      { label: 'Full Name', value: name },
+      { label: 'Instructor ID', value: instructorId, isCode: true },
+      { label: 'Registered Email', value: email },
+      { label: 'Status', value: 'Action Required • Awaiting Verification' },
+    ],
+    actionPrompt: 'Click the button below to verify your email address:',
     ctaText: 'Verify Email Address',
     ctaLink: verificationLink,
-    footerNote: 'Once verified, your account will be queued for administrator admission. You will be notified once admitted.',
+    securityNote: 'This verification link is valid for 7 days. Once verified, your account will be placed in the coordinator admission queue.',
+    footerNote: 'Once verified, your account will be reviewed by Campus Research Coordinator Sir Rodelio M. Garin.',
   });
 
   return dispatchEmail({
@@ -293,32 +381,23 @@ export async function sendSelfRegisterVerificationEmail({ email, name, instructo
  */
 export async function sendRegistrationApprovedEmail({ email, name, instructorId, baseUrl }) {
   const loginLink = `${baseUrl}/login`;
-  const subject = 'Registration Approved: Welcome to PSU Research Publication System';
-
-  const bodyHtml = `
-    <h2 style="margin-top: 0; color: #111827; font-size: 18px;">Congratulations, ${name}!</h2>
-    <p>Your registration for the <strong>PSU Research Publication Monitoring System</strong> has been reviewed and <strong style="color: #16a34a;">officially admitted</strong> by the Research Administrator.</p>
-    <p>Your profile is now recognized in the public faculty directory, and you can begin monitoring publications, claiming scholarly works, and viewing impact metrics.</p>
-
-    <div class="meta-box">
-      <div class="meta-item">
-        <span class="meta-label">Instructor ID / Username:</span>
-        <span class="meta-val">${instructorId}</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-label">Account Status:</span>
-        <span class="meta-val" style="color: #16a34a;">Active & Verified</span>
-      </div>
-    </div>
-
-    <p>You may now log in using your Instructor ID and the password you chose during registration:</p>
-  `;
+  const subject = 'Registration Approved: Welcome to PSU Asingan Research Publication Tracking System';
 
   const html = buildHtmlEmail({
     title: subject,
-    bodyHtml,
-    ctaText: 'Log In to System',
+    badgeText: 'REGISTRATION ADMITTED & ACTIVE',
+    headline: `Congratulations, ${name}!`,
+    recipientName: name,
+    introParagraph: 'Your researcher registration for the PSU Asingan Research Publication Tracking System has been reviewed and officially admitted by Campus Research Coordinator Sir Rodelio M. Garin. Your profile is now live in the institutional directory.',
+    metadataRows: [
+      { label: 'Full Name', value: name },
+      { label: 'Instructor ID', value: instructorId, isCode: true },
+      { label: 'Account Status', value: 'Active & Verified' },
+    ],
+    actionPrompt: 'You may now log in using your Instructor ID and the password you created during registration:',
+    ctaText: 'Log In to Research System',
     ctaLink: loginLink,
+    securityNote: 'For security, never share your account password or session credentials with anyone.',
     footerNote: 'Welcome to the PSU Asingan Campus Research Community!',
   });
 
