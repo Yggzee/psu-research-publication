@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/utils/adminSearchStore.ts"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 24"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_24
 ---
 
 # adminSearchStore.ts
@@ -23,6 +23,7 @@ tags:
 - [[apiService_1]] - `imports` [EXTRACTED]
 - [[initialDefaultState]] - `contains` [EXTRACTED]
 - [[loadPersistedState()]] - `contains` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[useAdminSearchStore()]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_24

@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/utils/aiChatHistoryStore.ts"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 27"
 location: "L146"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_27
 ---
 
 # clearAllChatSessions()
@@ -18,4 +18,4 @@ tags:
 - [[getCurrentUser()]] - `calls` [EXTRACTED]
 - [[setLocalChatSessions()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_27

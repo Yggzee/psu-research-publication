@@ -1,29 +1,43 @@
 # Project Guidelines — PSU Research Publication Tracking System
 
-## 1. Mandatory Turso Cloud & Render Deployment Synchronization
-Every feature addition, bug fix, or database change must work seamlessly not only on local SQLite (`data/research.db`) but also on the deployed **Render + Turso Cloud** production environment:
+This guide outlines core architectural requirements, terminology standards, and development workflows for the **PSU Asingan Research Publication Tracking System**. 
 
-- **Schema Parity (`src/server/db.mjs` & `src/server/turso.mjs`):**
-  - Never add a table or column to `src/server/db.mjs` without adding the exact same table/column definition and `ALTER TABLE ... ADD COLUMN` migration to `initTursoSchema()` in `src/server/turso.mjs`.
-- **Rehydration Parity:**
-  - Every new table must be added to the `tables` list in `rehydrateFromTurso()` (`src/server/turso.mjs`) and `/api/turso/sync` (`src/server/apiHandler.mjs`) so Render free-tier sleep cycles never lose data.
-- **Cold-Start Safety:**
-  - Startup scripts (such as orphan cleanup or deduplication) and API handlers must wait for `dbReadyPromise` (`src/server/db.mjs`) to resolve before reading/modifying the database.
-- **Render Production Build & Push:**
-  - Verify changes with `node --check` and `npm run build`, update `render.yaml` / `src/server/prod.mjs` if needed, and push commits to `origin/main` so Render auto-deploys.
+For AI agents and automated coding tools, detailed enforceable rules are codified in [AGENTS.md](../AGENTS.md) and modularly under [.agents/rules/](../.agents/rules/).
 
-## 2. Mandatory System Terminology & ID Rules
-- **Researchers & Researcher:** Always call the collection **"Researchers"** (never "Roster" or "Faculty Roster") and each individual **"Researcher"**.
-- **Faculty vs. Non-Faculty Scope:** Only show the Faculty/Non-Faculty mark on `ResearchersPage.tsx` and `ResearcherProfile.tsx` formatted as **`Faculty (<Department>)`** (e.g., `Faculty (BSIT)`) or **`Non-Faculty`**. Everywhere else in the system, call them **Researcher / Researchers**.
-- **Instructor ID (`ASIN-00000`):** Always call the ID **"Instructor ID"**. Both Faculty and Non-Faculty use the `ASIN-00000` format, with **`ASIN-`** locked/non-editable and only the **5 numeric digits (`00000`)** editable in invitation channels.
-- **Research Coordinator:** Always call Sir Rodelio M. Garin **"Research Coordinator"** with a single clean role badge (no duplicate/conflicting administrator titles).
-- **Publications:** Always call indexed/retrieved works **"Publications"**, with **"My Publications"**, **"My Published Research"**, and **"Add Publication"** on the researcher's page (no ongoing/unpublished research option).
+---
 
-## 3. UI & Design Guidelines
-- **No Emojis:** Never use emojis in any component, alert, badge, or button. Always use icons from `lucide-react`.
-- **No Redundant Action Buttons:** Never place two or more buttons on the same page that perform the exact same action or navigate to the exact same page (e.g., duplicate "Back to Public Search" buttons). Keep strictly one button per distinct action.
-- **System Visual Guide Parity (`SystemGuidePage.tsx`):** Whenever a workspace page, button, badge, or chart changes, update `src/app/components/SystemGuidePage.tsx` (`/guide`) in lockstep.
-- **Proactive Rule Capture:** Whenever the user introduces a new rule or a preference that looks like a project-wide rule, always ask if it should be added to `AGENTS.md`.
-- **Pre-Change Breakdown & Plan Explanation:** Before working on any error, bug fix, or feature request, always give the user a clear breakdown of the issue and explain what files and logic will be changed before making edits.
-- **Mandatory Security, SEO & Accessibility Audit on Major Changes / New Features:** Whenever making major changes or adding a new feature, verify all web security headers (`src/server/securityHeaders.mjs`), static crawler/security files (`public/robots.txt` and `public/.well-known/security.txt`), SEO/OpenGraph tags (`index.html`), and WCAG AA `4.5:1` color contrast in both Light Mode and Dark Mode.
-- **Responsive & Structured Layouts:** Use Tailwind CSS flexbox and grid layouts aligned with the existing PSU institutional theme.
+## 1. Cloud Architecture & Zero-Cost Infrastructure
+- **100% Free-Tier Mandate:** The entire system runs exclusively on free-tier services:
+  - **Hosting:** Render Free Tier (`src/server/prod.mjs`, Node.js runtime).
+  - **Persistence:** Turso Cloud Free Tier SQLite (`@libsql/client`) paired with local SQLite WAL-mode cache.
+  - **Scholarly APIs:** OpenAlex & CrossRef with polite email headers; direct Google Scholar scraping with an Apify free quota circuit breaker.
+- **Turso Cloud Synchronization:**
+  - Database schema changes in `src/server/db.mjs` must be synchronized with `initTursoSchema()` and `columnMigrations` in `src/server/turso.mjs`.
+  - Every table must be registered in `rehydrateFromTurso()` and `/api/turso/sync`.
+  - Database writes must execute through `runInTransaction()` or `db.prepare().run()`, waiting for `dbReadyPromise`.
+
+---
+
+## 2. Standardized System Terminology & ID Invariants
+- **Researchers:** Always refer to individuals as **"Researcher"** and the group as **"Researchers"** (never "Faculty Roster").
+- **Faculty vs. Non-Faculty:** On the Researchers page and profiles, display classification badges as **`Faculty (<Department>)`** or **`Non-Faculty`**. Everywhere else, use **Researcher / Researchers**.
+- **Instructor ID (`ASIN-00000`):** Always formatted with a locked/non-editable `ASIN-` prefix followed by 5 editable digits (`00000`).
+- **Research Coordinator:** Sir Rodelio M. Garin's official title is **"Research Coordinator"** (displayed without "Sir" in his personalized profile view).
+- **Publications:** Always refer to scholarly items as **"Publications"** (published works only).
+- **SDG Alignment & Goals:** Always refer to SDG analytics as **"SDG Alignment"** and individual targets as **"SDG Goals"** (never "Radar" or "Matrix").
+- **Proponent Attribution:** Maintain `"Developed by Julius Oscar Moreno • PSU Asingan Campus"` in the public repository footer.
+
+---
+
+## 3. UI, UX & Accessibility Standards
+- **No Emojis:** Use `lucide-react` icons exclusively.
+- **Single Distinct Actions:** No redundant buttons that navigate to the exact same destination.
+- **Facebook Dark Mode:** Elevated card background (`#242526`), canvas background (`#18191a`), borders (`#3e4042`), and high-contrast text (`#e4e6eb`).
+- **Visual Guide Sync:** Keep `/guide` (`SystemGuidePage.tsx`) updated whenever UI elements, badges, or buttons change.
+- **Security & Accessibility:** Enforce HSTS, CSP, COOP, CORP, robots.txt, security.txt, and WCAG AA `4.5:1` contrast.
+
+---
+
+## 4. Developer Tooling
+- **Windows PowerShell:** Always use `npm.cmd` (e.g., `npm.cmd run build`) to bypass PowerShell script execution restrictions (`PSSecurityException`).
+- **Knowledge Graphing:** Knowledge graphs are updated locally via `graphify update .` and `graphify cluster-only . --no-label` with zero LLM API cost.

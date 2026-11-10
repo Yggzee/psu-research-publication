@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/CampusAIChatHistory.tsx"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 27"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_27
 ---
 
 # CampusAIChatHistory.tsx
@@ -41,7 +41,10 @@ tags:
 - [[getLocalChatSessions()]] - `imports` [EXTRACTED]
 - [[index.ts]] - `imports_from` [EXTRACTED]
 - [[input.tsx]] - `imports_from` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 - [[routes.tsx]] - `imports_from` [EXTRACTED]
 - [[src_app_assets_mascot_ai]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_27

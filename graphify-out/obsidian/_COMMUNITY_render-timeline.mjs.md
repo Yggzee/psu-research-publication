@@ -1,13 +1,13 @@
 ---
 type: community
-cohesion: 0.22
-members: 11
+cohesion: 0.20
+members: 12
 ---
 
 # render-timeline.mjs
 
-**Cohesion:** 0.22 - loosely connected
-**Members:** 11 nodes
+**Cohesion:** 0.20 - loosely connected
+**Members:** 12 nodes
 
 ## Members
 - [[Drawer()]] - code - src/app/components/ui/drawer.tsx
@@ -21,6 +21,7 @@ members: 11
 - [[DrawerTitle()]] - code - src/app/components/ui/drawer.tsx
 - [[DrawerTrigger()]] - code - src/app/components/ui/drawer.tsx
 - [[drawer.tsx]] - code - src/app/components/ui/drawer.tsx
+- [[ref_vaul]] - concept
 
 ## Live Query (requires Dataview plugin)
 
@@ -31,10 +32,11 @@ SORT file.name ASC
 
 ## Connections to other communities
 - 7 edges to [[_COMMUNITY_generated-validators.mjs]]
-- 1 edge to [[_COMMUNITY_render-architecture.mjs]]
+- 1 edge to [[_COMMUNITY_compileWorkflowInternal]]
+- 1 edge to [[_COMMUNITY_Community 9]]
 
 ## Top bridge nodes
-- [[drawer.tsx]] - degree 12, connects to 2 communities
+- [[drawer.tsx]] - degree 14, connects to 3 communities
 - [[DrawerContent()]] - degree 4, connects to 1 community
 - [[DrawerOverlay()]] - degree 3, connects to 1 community
 - [[DrawerDescription()]] - degree 2, connects to 1 community

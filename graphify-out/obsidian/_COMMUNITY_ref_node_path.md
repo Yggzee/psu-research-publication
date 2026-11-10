@@ -1,13 +1,13 @@
 ---
 type: community
-cohesion: 0.17
-members: 21
+cohesion: 0.16
+members: 22
 ---
 
 # ref_node_path
 
-**Cohesion:** 0.17 - loosely connected
-**Members:** 21 nodes
+**Cohesion:** 0.16 - loosely connected
+**Members:** 22 nodes
 
 ## Members
 - [[CRC_TABLE]] - code - src/app/utils/excelExportUtils.ts
@@ -27,6 +27,7 @@ members: 21
 - [[exportResearchMatrixToExcel()]] - code - src/app/utils/excelExportUtils.ts
 - [[exportSinglePublicationToExcel()]] - code - src/app/utils/excelExportUtils.ts
 - [[formatAllAuthors()]] - code - src/app/utils/excelExportUtils.ts
+- [[ref_xlsx_js_style]] - concept
 - [[sanitizeFileSegment()]] - code - src/app/utils/excelExportUtils.ts
 - [[tableHeaderStyle]] - code - src/app/utils/excelExportUtils.ts
 - [[thinBorder]] - code - src/app/utils/excelExportUtils.ts
@@ -44,6 +45,6 @@ SORT file.name ASC
 - 3 edges to [[_COMMUNITY_compileWorkflowInternal]]
 
 ## Top bridge nodes
-- [[excelExportUtils.ts]] - degree 24, connects to 2 communities
+- [[excelExportUtils.ts]] - degree 25, connects to 2 communities
 - [[exportPerResearcherReportsByDepartment()]] - degree 9, connects to 1 community
 - [[exportSinglePublicationToExcel()]] - degree 6, connects to 1 community

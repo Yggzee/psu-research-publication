@@ -32,6 +32,9 @@ tags:
 - [[button.tsx]] - `imports_from` [EXTRACTED]
 - [[card.tsx]] - `imports_from` [EXTRACTED]
 - [[chartUtils.ts]] - `imports_from` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 - [[themeContext.tsx]] - `imports_from` [EXTRACTED]
 - [[useTheme()]] - `imports` [EXTRACTED]
 

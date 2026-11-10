@@ -1,13 +1,13 @@
 ---
 type: community
-cohesion: 0.42
-members: 9
+cohesion: 0.36
+members: 10
 ---
 
 # createRouter
 
-**Cohesion:** 0.42 - moderately connected
-**Members:** 9 nodes
+**Cohesion:** 0.36 - loosely connected
+**Members:** 10 nodes
 
 ## Members
 - [[buildHtmlEmail()]] - code - src/server/emailService.mjs
@@ -16,6 +16,7 @@ members: 9
 - [[getAppBaseUrl()]] - code - src/server/emailService.mjs
 - [[isSmtpConfigured]] - code - src/server/emailService.mjs
 - [[logEmail()]] - code - src/server/emailService.mjs
+- [[ref_nodemailer]] - concept
 - [[sendAdminInvitationEmail()]] - code - src/server/emailService.mjs
 - [[sendRegistrationApprovedEmail()]] - code - src/server/emailService.mjs
 - [[sendSelfRegisterVerificationEmail()]] - code - src/server/emailService.mjs
@@ -32,7 +33,7 @@ SORT file.name ASC
 - 2 edges to [[_COMMUNITY_visual-check.mjs]]
 
 ## Top bridge nodes
-- [[emailService.mjs]] - degree 11, connects to 2 communities
+- [[emailService.mjs]] - degree 12, connects to 2 communities
 - [[sendAdminInvitationEmail()]] - degree 5, connects to 1 community
 - [[sendRegistrationApprovedEmail()]] - degree 5, connects to 1 community
 - [[sendSelfRegisterVerificationEmail()]] - degree 5, connects to 1 community

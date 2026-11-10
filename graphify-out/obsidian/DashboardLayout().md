@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/DashboardLayout.tsx"
 type: "code"
-community: "check-update.mjs"
+community: "Community 27"
 location: "L109"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/check-updatemjs
+  - community/Community_27
 ---
 
 # DashboardLayout()
@@ -26,4 +26,4 @@ tags:
 - [[setCurrentUser()]] - `calls` [EXTRACTED]
 - [[useTheme()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/check-updatemjs
+#graphify/code #graphify/EXTRACTED #community/Community_27

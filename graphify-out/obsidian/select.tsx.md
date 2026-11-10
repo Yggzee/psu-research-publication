@@ -30,6 +30,9 @@ tags:
 - [[SelectTrigger()]] - `contains` [EXTRACTED]
 - [[SelectValue()]] - `contains` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_radix_ui_react_select]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/render-erdmjs

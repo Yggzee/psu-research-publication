@@ -1,0 +1,22 @@
+---
+source_file: ""
+type: "concept"
+community: "Community 9"
+tags:
+  - graphify/concept
+  - graphify/EXTRACTED
+  - community/Community_9
+---
+
+# ref_class_variance_authority
+
+## Connections
+- [[alert.tsx]] - `imports_from` [EXTRACTED]
+- [[badge.tsx]] - `imports_from` [EXTRACTED]
+- [[button.tsx]] - `imports_from` [EXTRACTED]
+- [[navigation-menu.tsx]] - `imports_from` [EXTRACTED]
+- [[sidebar.tsx]] - `imports_from` [EXTRACTED]
+- [[toggle-group.tsx]] - `imports_from` [EXTRACTED]
+- [[toggle.tsx]] - `imports_from` [EXTRACTED]
+
+#graphify/concept #graphify/EXTRACTED #community/Community_9

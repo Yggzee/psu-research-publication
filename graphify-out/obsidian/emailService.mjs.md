@@ -20,6 +20,7 @@ tags:
 - [[getAppBaseUrl()]] - `contains` [EXTRACTED]
 - [[isSmtpConfigured]] - `contains` [EXTRACTED]
 - [[logEmail()]] - `contains` [EXTRACTED]
+- [[ref_nodemailer]] - `imports_from` [EXTRACTED]
 - [[sendAdminInvitationEmail()]] - `contains` [EXTRACTED]
 - [[sendRegistrationApprovedEmail()]] - `contains` [EXTRACTED]
 - [[sendSelfRegisterVerificationEmail()]] - `contains` [EXTRACTED]

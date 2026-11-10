@@ -1,13 +1,13 @@
 ---
 type: community
 cohesion: 0.16
-members: 33
+members: 34
 ---
 
 # render-class.mjs
 
 **Cohesion:** 0.16 - loosely connected
-**Members:** 33 nodes
+**Members:** 34 nodes
 
 ## Members
 - [[activeCitationSyncJobs]] - code - src/server/apiHandler.mjs
@@ -28,6 +28,7 @@ members: 33
 - [[getActiveApifyTokenRow()]] - code - src/server/apiHandler.mjs
 - [[handleApiRequest()]] - code - src/server/apiHandler.mjs
 - [[hasWordMatch()]] - code - src/server/apiHandler.mjs
+- [[hashPassword()]] - code - src/server/authHelper.mjs
 - [[inferCitingPaperYear()]] - code - src/server/apiHandler.mjs
 - [[isCallerAdmin()]] - code - src/server/authHelper.mjs
 - [[isCallerPublicationOwner()]] - code - src/server/authHelper.mjs
@@ -52,17 +53,17 @@ SORT file.name ASC
 ```
 
 ## Connections to other communities
-- 20 edges to [[_COMMUNITY_visual-check.mjs]]
 - 19 edges to [[_COMMUNITY_commandDeliver]]
-- 11 edges to [[_COMMUNITY_archify.mjs]]
+- 16 edges to [[_COMMUNITY_visual-check.mjs]]
+- 11 edges to [[_COMMUNITY_YAYTP6L5.js]]
+- 9 edges to [[_COMMUNITY_archify.mjs]]
 - 9 edges to [[_COMMUNITY_createRouter]]
-- 6 edges to [[_COMMUNITY_YAYTP6L5.js]]
 - 4 edges to [[_COMMUNITY_i18n.mjs]]
-- 1 edge to [[_COMMUNITY_brand-marks.mjs]]
+- 1 edge to [[_COMMUNITY_Community 32]]
 
 ## Top bridge nodes
 - [[apiHandler.mjs]] - degree 71, connects to 7 communities
 - [[handleApiRequest()]] - degree 46, connects to 5 communities
+- [[runInTransaction()]] - degree 6, connects to 2 communities
 - [[authHelper.mjs]] - degree 17, connects to 1 community
 - [[matchesResearcher()_1]] - degree 10, connects to 1 community
-- [[syncSinglePublicationCitations()]] - degree 7, connects to 1 community

@@ -17,5 +17,6 @@ tags:
 - [[PageHeaderProps]] - `contains` [EXTRACTED]
 - [[badge.tsx]] - `imports_from` [EXTRACTED]
 - [[index.ts]] - `re_exports` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/render-erdmjs

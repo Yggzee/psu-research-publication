@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/App.tsx"
 type: "code"
-community: "audio.mjs"
+community: "compileWorkflowInternal"
 location: "L5"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/audiomjs
+  - community/compileWorkflowInternal
 ---
 
 # App()
@@ -16,4 +16,4 @@ tags:
 - [[ThemeProvider()]] - `calls` [EXTRACTED]
 - [[main.tsx]] - `imports` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/audiomjs
+#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal

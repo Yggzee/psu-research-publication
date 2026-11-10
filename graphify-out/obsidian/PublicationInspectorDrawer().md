@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/PublicationInspectorDrawer.tsx"
 type: "code"
-community: "tts.mjs"
+community: "Community 27"
 location: "L66"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/ttsmjs
+  - community/Community_27
 ---
 
 # PublicationInspectorDrawer()
@@ -32,4 +32,4 @@ tags:
 - [[TabsList()]] - `calls` [EXTRACTED]
 - [[TabsTrigger()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/ttsmjs
+#graphify/code #graphify/EXTRACTED #community/Community_27

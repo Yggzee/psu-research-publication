@@ -23,6 +23,9 @@ tags:
 - [[SheetTitle()]] - `contains` [EXTRACTED]
 - [[SheetTrigger()]] - `contains` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_radix_ui_react_dialog]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[sidebar.tsx]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 

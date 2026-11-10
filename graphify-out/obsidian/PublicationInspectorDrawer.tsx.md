@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/PublicationInspectorDrawer.tsx"
 type: "code"
-community: "tts.mjs"
+community: "Community 27"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/ttsmjs
+  - community/Community_27
 ---
 
 # PublicationInspectorDrawer.tsx
@@ -32,6 +32,10 @@ tags:
 - [[apiService_1]] - `imports` [EXTRACTED]
 - [[badge.tsx]] - `imports_from` [EXTRACTED]
 - [[button.tsx]] - `imports_from` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_react_router]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 - [[tabs.tsx]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/ttsmjs
+#graphify/code #graphify/EXTRACTED #community/Community_27

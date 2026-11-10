@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/utils/researchStore.ts"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 27"
 location: "L181"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_27
 ---
 
 # getCurrentUser()
@@ -46,4 +46,4 @@ tags:
 - [[routes.tsx]] - `imports` [EXTRACTED]
 - [[updateCurrentUser()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_27

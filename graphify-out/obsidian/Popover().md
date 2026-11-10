@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/popover.tsx"
 type: "code"
-community: "render-architecture.mjs"
+community: "Community 28"
 location: "L8"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-architecturemjs
+  - community/Community_28
 ---
 
 # Popover()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[popover.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-architecturemjs
+#graphify/code #graphify/EXTRACTED #community/Community_28

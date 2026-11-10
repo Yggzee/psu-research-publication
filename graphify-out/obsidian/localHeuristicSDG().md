@@ -1,12 +1,12 @@
 ---
 source_file: "src/server/aiService.mjs"
 type: "code"
-community: "archify.mjs"
+community: "visual-check.mjs"
 location: "L540"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/archifymjs
+  - community/visual-checkmjs
 ---
 
 # localHeuristicSDG()
@@ -20,4 +20,4 @@ tags:
 - [[db.mjs]] - `imports` [EXTRACTED]
 - [[handleApiRequest()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/archifymjs
+#graphify/code #graphify/EXTRACTED #community/visual-checkmjs

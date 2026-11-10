@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/breadcrumb.tsx"
 type: "code"
-community: "generated-validators.mjs"
+community: "ProfilePage.tsx"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/generated-validatorsmjs
+  - community/ProfilePagetsx
 ---
 
 # breadcrumb.tsx
@@ -20,6 +20,9 @@ tags:
 - [[BreadcrumbPage()]] - `contains` [EXTRACTED]
 - [[BreadcrumbSeparator()]] - `contains` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_radix_ui_react_slot]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/generated-validatorsmjs
+#graphify/code #graphify/EXTRACTED #community/ProfilePagetsx

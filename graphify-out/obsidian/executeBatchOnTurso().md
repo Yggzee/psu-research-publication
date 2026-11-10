@@ -1,12 +1,12 @@
 ---
 source_file: "src/server/turso.mjs"
 type: "code"
-community: "visual-check.mjs"
+community: "YAYTP6L5.js"
 location: "L61"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/visual-checkmjs
+  - community/YAYTP6L5js
 ---
 
 # executeBatchOnTurso()
@@ -17,4 +17,4 @@ tags:
 - [[runInTransaction()]] - `calls` [EXTRACTED]
 - [[turso.mjs]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/visual-checkmjs
+#graphify/code #graphify/EXTRACTED #community/YAYTP6L5js

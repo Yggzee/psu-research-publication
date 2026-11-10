@@ -31,10 +31,11 @@ SORT file.name ASC
 
 ## Connections to other communities
 - 4 edges to [[_COMMUNITY_generated-validators.mjs]]
-- 1 edge to [[_COMMUNITY_render-architecture.mjs]]
+- 2 edges to [[_COMMUNITY_compileWorkflowInternal]]
+- 1 edge to [[_COMMUNITY_Community 9]]
 
 ## Top bridge nodes
-- [[chart.tsx]] - degree 12, connects to 2 communities
+- [[chart.tsx]] - degree 14, connects to 3 communities
 - [[ChartLegendContent()]] - degree 4, connects to 1 community
 - [[ChartTooltipContent()]] - degree 4, connects to 1 community
 - [[ChartContainer()]] - degree 3, connects to 1 community

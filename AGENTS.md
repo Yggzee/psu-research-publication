@@ -4,8 +4,8 @@ React + Vite + Tailwind CSS project with a Node.js + SQLite/Turso backend, deplo
 
 ## Development & Production Servers
 
-- **Local Development (`npm run dev`):** Runs Vite with the embedded `/api/*` backend middleware on `$PORT` (default `8443`).
-- **Production (`npm run build` && `npm start`):** Builds the frontend to `dist/` and runs `node src/server/prod.mjs` on Render with Turso Cloud SQLite persistence.
+- **Local Development (`npm.cmd run dev`):** Runs Vite with the embedded `/api/*` backend middleware on `$PORT` (default `8443`).
+- **Production (`npm.cmd run build` && `npm.cmd start`):** Builds the frontend to `dist/` and runs `node src/server/prod.mjs` on Render with Turso Cloud SQLite persistence.
 
 ## Key Files
 
@@ -21,88 +21,48 @@ React + Vite + Tailwind CSS project with a Node.js + SQLite/Turso backend, deplo
 - `Dockerfile` & `render.yaml` - Render cloud deployment configuration (Docker & Node runtime)
 - `vite.config.ts` - Vite dev & build configuration
 
-## Mandatory Turso Cloud & Render Deployment Rules
+---
 
-Whenever you add a new feature, modify backend logic, or change the database schema, you **MUST** keep **Turso (`src/server/turso.mjs`)** and **Render (`src/server/prod.mjs` / `render.yaml`)** updated in lockstep to prevent data loss or production bugs:
+## Active Modular Agent Rules (`.agents/rules/`)
 
-1. **Database Schema & Column Sync (`db.mjs` + `turso.mjs`):**
-   - Every time you add a new table or column in `src/server/db.mjs`, you **MUST** also add:
-     - The updated `CREATE TABLE IF NOT EXISTS` definition in `initTursoSchema()` inside `src/server/turso.mjs`.
-     - An idempotent `ALTER TABLE <table_name> ADD COLUMN <col_def>` entry in `columnMigrations` inside `src/server/turso.mjs` so existing Turso Cloud tables migrate automatically on startup.
-2. **Cold-Start Rehydration Sync (`turso.mjs` + `apiHandler.mjs`):**
-   - Every time you create a new table, you **MUST** add its name to the `tables` array in both:
-     - `rehydrateFromTurso()` in `src/server/turso.mjs` (so Render restores the table when waking from free-tier sleep).
-     - `POST /api/turso/sync` in `src/server/apiHandler.mjs`.
-3. **Write & Transaction Replication:**
-   - Always execute database writes (`INSERT`, `UPDATE`, `DELETE`, `REPLACE`) using `db.prepare(...).run(...)` or inside `runInTransaction(...)` from `src/server/db.mjs` (never raw `db.exec()` for data writes) so changes replicate automatically to Turso Cloud.
-   - Any startup database job or incoming API request must wait for `await dbReadyPromise` from `src/server/db.mjs` so Render cold-starts never race with Turso rehydration.
-4. **Render Production Compatibility & Auto-Deploy (`prod.mjs` + `render.yaml`):**
-   - Ensure any new packages, environment variables, or routes work cleanly with `npm run build` and `node src/server/prod.mjs` (update `render.yaml` if new environment variable keys are introduced).
-   - After verifying changes locally (`node --check` / `npm run build`), always commit and `git push origin main` so the deployed Render server stays updated automatically.
-5. **No Emojis in UI:**
-   - Do not use emojis anywhere in the application UI; always use `lucide-react` icons.
+All system rules are organized into modular, `always_on` rule files in `.agents/rules/`. Always adhere strictly to them:
 
-## Mandatory System Terminology & ID Rules
+1. **[Turso Cloud & Render Deployment](.agents/rules/turso-render.md)**
+   - Schema & migration parity between `db.mjs` and `turso.mjs` (`initTursoSchema` and `columnMigrations`).
+   - Cold-start rehydration sync in `turso.mjs` and `apiHandler.mjs` (`POST /api/turso/sync`).
+   - Database writes via `runInTransaction` / `db.prepare().run()`, waiting on `dbReadyPromise`.
+   - Render production compatibility (`npm.cmd run build`) and auto-deploy (`git push origin main`).
 
-Always enforce the following standardized terminology and formatting across all pages, components, modals, and notifications:
+2. **[System Terminology & ID Invariants](.agents/rules/terminology.md)**
+   - **Researchers** (group) & **Researcher** (individual) across the entire system.
+   - Classification badge: **`Faculty (<Department>)`** or **`Non-Faculty`** (on Researchers page & profile only).
+   - Instructor ID: **`ASIN-00000`** format with locked non-editable `ASIN-` prefix and 5 editable digits.
+   - Research Coordinator: **Sir Rodelio M. Garin** (single badge; "Rodelio M. Garin" without "Sir" in personal profile).
+   - Publications: **"Publications"** (published works only, no ongoing/unpublished research).
+   - SDG Analytics: **"SDG Alignment"** (tab/feature) and **"SDG Goals"** (individual targets).
+   - Proponent Attribution: `"Developed by Julius Oscar Moreno • PSU Asingan Campus"` in public footer.
 
-1. **Collection of Researchers:**
-   - Always refer to the list or group of people as **"Researchers"** (never use "Roster", "Faculty Roster", "Institutional Faculty Roster", or "Faculty Researchers").
-2. **Individual Person ("Researcher"):**
-   - Always refer to each person as **"Researcher"** (singular) or **"Researchers"** (plural) across the entire system.
-3. **Faculty vs. Non-Faculty Mark (Researchers Page & Profile Only):**
-   - Outside of the Researchers page (`src/app/components/ResearchersPage.tsx`), Researcher Profile (`src/app/components/ResearcherProfile.tsx`), and the classification selector when inviting a researcher, never label or separate users as "Faculty", "Teaching Instructors", or "Non-Teaching Staff" — always call them **Researcher / Researchers**.
-   - On the Researchers page and Researcher Profile only, display their classification badge as:
-     - **`Faculty (<Department>)`** (e.g., `Faculty (BSIT)`, `Faculty (BSBA)`) for faculty researchers.
-     - **`Non-Faculty`** for non-faculty researchers.
-4. **Instructor ID (`ASIN-00000` Format):**
-   - Always call their identifier **"Instructor ID"** (never "Employee ID" or "Instructor / Employee ID").
-   - Both Faculty and Non-Faculty use the exact same format: **`ASIN-00000`** (`ASIN-` prefix followed by 5 digits).
-   - In all invitation channels (**"Ask for Invitation"** modal on `LoginScreen.tsx` and **"Invite Researcher"** form in `AdminPage.tsx`), the **`ASIN-`** prefix must be locked/non-editable and only the **5 numeric digits (`00000`)** are editable.
-5. **Research Coordinator (Sir Rodelio M. Garin):**
-   - Always refer to Sir Rodelio M. Garin's role as **"Research Coordinator"** (never "Campus Research Administrator", "Research Administrator", "Campus Research Coordinator", or "System Administrator").
-   - Avoid displaying multiple or redundant title badges next to his name; show at most a single **"Research Coordinator"** badge.
-6. **Publications (Published Works Only):**
-   - Refer to all retrieved and indexed scholarly works as **"Publications"** (never "Papers" or "Scholarly Works").
-   - On the researcher's publications page (`InstructorPublicationsPage.tsx`), use **"My Publications"** (page header), **"My Published Research"** (Tab 1), **"Institutional Repository"** (Tab 2), and **"Add Publication"** (action button/modal). Do not include an option to add ongoing/in-progress unpublished research.
-7. **SDG Alignment & Goals:**
-   - Always refer to SDG analytics as **"SDG Alignment"** (tab/feature name) and individual targets as **"SDG Goals"** (never use "SDG Radar" or "SDG Matrix").
-8. **Proponent Attribution:**
-   - Always maintain the proponent developer credit in the public repository footer: `"Developed by Julius Oscar Moreno • PSU Asingan Campus"`.
+3. **[UI & UX Design Rules](.agents/rules/ui-design.md)**
+   - **No Emojis** anywhere in UI; always use `lucide-react` icons.
+   - **No Redundant / Duplicate Action Buttons** on the same page.
+   - **System Visual Guide Parity:** Synchronize `SystemGuidePage.tsx` (`/guide`) on every UI change.
+   - **Facebook Dark Mode:** `#18191a` background, `#242526` surface, `#3a3b3c` input, `#e4e6eb` text, `#2d88ff` blue.
+   - **Pre-Change Breakdown:** Provide clear issue breakdown and file plan before writing code.
+   - **Web Security, SEO & Accessibility Audit:** HSTS, CSP, COOP, robots.txt, and WCAG AA contrast.
 
-## Mandatory UI & Workflow Rules
+4. **[Infrastructure & Tooling Rules](.agents/rules/tooling-infrastructure.md)**
+   - **100% Free-Tier & Zero-Cost:** Never introduce paid external APIs, vector databases, or LLM tokens.
+   - **Windows PowerShell:** Always execute scripts via `npm.cmd` to bypass `npm.ps1` execution policies.
+   - **Pre-Task Workspace Skill Evaluation:** Inspect `.agents/skills` on every user prompt.
+   - **Zero-Cost Knowledge Graphing:** Maintain `.graphifyignore` and run Graphify in AST-only mode.
 
-1. **No Redundant / Duplicate Action Buttons:**
-   - Never place multiple buttons or links on the same page that perform the exact same action or navigate to the exact same destination (for example, having multiple "Back to Public Search", "Return to Dashboard", or duplicate pagination/help buttons on a single screen). Each distinct action or navigation target must have only **one** button on the page.
-2. **Keep the System Visual Guide (`SystemGuidePage.tsx`) Synchronized:**
-   - Whenever you add, rename, or modify a page, button, badge, or workflow in the workspace, you **MUST** also update `src/app/components/SystemGuidePage.tsx` (`/guide`) so its visual button replicas, simulated charts, and plain-language narrative explanations always match the live workspace.
-3. **Proactive `AGENTS.md` Rule Confirmation:**
-   - Every time we come up with a new rule, or the user states a requirement or preference that looks like a system-wide rule, **always ask the user if that rule should be added to `AGENTS.md`**.
-4. **Facebook-Style Dark Mode Readability (`src/styles/theme.css`):**
-   - Always maintain the Facebook Dark Mode surface and text hierarchy (`#18191a` page background, `#242526` elevated cards/sidebar, `#3a3b3c` inputs/muted surfaces, `#3e4042` borders, `#e4e6eb` primary text, `#b0b3b8` secondary text, and `#2d88ff` accent blue) so dark mode is never pitch-black or hard to read.
-5. **Pre-Change Breakdown & Plan Explanation Before Working:**
-   - Before working on any bug fix, error, or feature request, **always provide a clear breakdown of the error/issue and explain what files and logic will be changed** before making edits.
-6. **Mandatory Security, SEO & Accessibility Audit on Major Changes / New Features:**
-   - Whenever making major changes or adding a new feature to the system, **always verify all web security, SEO, and accessibility protections**:
-     - **HTTP Security Headers (`src/server/securityHeaders.mjs`):** Verify `Strict-Transport-Security` (HSTS), `Content-Security-Policy` (CSP with `upgrade-insecure-requests` and `frame-ancestors 'self'`), `X-Frame-Options`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy`, `Cross-Origin-Opener-Policy` (COOP), `Cross-Origin-Resource-Policy` (CORP), and `Cross-Origin-Embedder-Policy` (COEP) are applied on all responses and compatible with any new assets or endpoints.
-     - **Crawler & Security Policies (`public/robots.txt`, `public/.well-known/security.txt`, `src/server/prod.mjs`):** Verify `/robots.txt` and `/.well-known/security.txt` resolve as `text/plain; charset=UTF-8` and missing non-HTML extensions return `404` instead of `index.html`.
-     - **SEO & Social Metadata (`index.html`):** Ensure meta description, OpenGraph (`og:*`), Twitter Card, and canonical tags remain intact.
-     - **WCAG AA Color Contrast:** Ensure all text elements maintain at least a `4.5:1` contrast ratio in both Light Mode and Dark Mode.
-7. **Mandatory 100% Free-Tier & Zero-Cost Infrastructure:**
-   - The entire system (development, runtime, deployment, search, and indexing) must always run exclusively on **100% free services and open-access public protocols**:
-     - **Hosting & Compute:** Render Free Tier (`src/server/prod.mjs`, Node.js runtime).
-     - **Persistence:** Turso Cloud Free Tier SQLite (`@libsql/client`) paired with local SQLite WAL-mode cache.
-     - **Scholarly Data Retrieval:** Free open-access academic APIs (**OpenAlex** and **CrossRef**) with polite headers, alongside direct/cached Google Scholar scraping and Apify free credits with the $1.00 quota circuit breaker.
-     - **Search & Intelligence:** Local in-memory algorithms, regex concept dictionaries, and SQLite composite indexes.
-     - **Strict Prohibition:** Never introduce paid external APIs, paid vector database services, paid LLM tokens, or cloud services that incur billing charges. Every feature must remain 100% free-to-run.
-8. **Pre-Task Workspace Skill Evaluation (`.agents/skills`):**
-   - At the start of every user prompt, proactively inspect the available workspace skills in `.agents/skills` (e.g., `grill-me`, `frontend-design`, `web-search`, `golang-data-structures`, etc.) to determine if any skill applies directly to the user's request.
-   - If a relevant skill exists (such as `/grill-me` for requirements alignment and design interviews, `frontend-design` for distinctive UI/UX design, or `web-search` for external discovery), activate and execute that skill first before proceeding with code changes or actual implementation work.
-9. **Windows PowerShell Command Tooling (`npm.cmd`):**
-   - When executing npm scripts via terminal commands in Windows PowerShell environments, always use `npm.cmd` (e.g., `npm.cmd run build`) rather than `npm` to avoid `npm.ps1` execution policy restrictions (`PSSecurityException`).
-10. **Zero-Cost Knowledge Graphing (`graphify`):**
-   - The knowledge graph must remain 100% free and run on local AST parsing without external LLM API keys. Maintain `.graphifyignore` to exclude non-code documents, images, and vaults from requiring semantic extraction. Always use `graphify update .`, `graphify .`, or `graphify cluster-only . --no-label`.
+5. **[Knowledge Graphing (`graphify`)](.agents/rules/graphify.md)**
+   - Consult `graphify-out/graph.json` via `graphify query`, `path`, or `explain`.
+   - Run `graphify update .` and `graphify cluster-only . --no-label` after file modifications.
 
-## Project Guidelines
+---
 
-Read and always follow the instructions in the [project guidelines](guidelines/Guidelines.md) unless the user requests otherwise.
+## Project Documentation
+
+- [Project Guidelines](guidelines/Guidelines.md) - High-level project specifications and architectural guidelines.
+- [Roadmap & Enhancements](docs/roadmap.md) - Future feature ideas, background automations, and zero-cost hosting notes.

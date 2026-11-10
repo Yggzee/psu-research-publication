@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/dropdown-menu.tsx"
 type: "code"
-community: "UKSIWDDN.js"
+community: "generated-validators.mjs"
 location: "L111"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/UKSIWDDNjs
+  - community/generated-validatorsmjs
 ---
 
 # DropdownMenuRadioGroup()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[dropdown-menu.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/UKSIWDDNjs
+#graphify/code #graphify/EXTRACTED #community/generated-validatorsmjs

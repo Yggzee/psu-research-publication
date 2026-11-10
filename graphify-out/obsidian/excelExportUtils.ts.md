@@ -32,6 +32,7 @@ tags:
 - [[facultyUtils.ts]] - `imports_from` [EXTRACTED]
 - [[formatAllAuthors()]] - `contains` [EXTRACTED]
 - [[matchesResearcher()]] - `imports` [EXTRACTED]
+- [[ref_xlsx_js_style]] - `imports_from` [EXTRACTED]
 - [[sanitizeFileSegment()]] - `contains` [EXTRACTED]
 - [[tableHeaderStyle]] - `contains` [EXTRACTED]
 - [[thinBorder]] - `contains` [EXTRACTED]

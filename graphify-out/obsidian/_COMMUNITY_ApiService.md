@@ -1,13 +1,13 @@
 ---
 type: community
-cohesion: 0.11
-members: 24
+cohesion: 0.10
+members: 26
 ---
 
 # ApiService
 
-**Cohesion:** 0.11 - loosely connected
-**Members:** 24 nodes
+**Cohesion:** 0.10 - loosely connected
+**Members:** 26 nodes
 
 ## Members
 - [[AlertDialog()]] - code - src/app/components/ui/alert-dialog.tsx
@@ -34,6 +34,8 @@ members: 24
 - [[buttonVariants]] - code - src/app/components/ui/button.tsx
 - [[calendar.tsx]] - code - src/app/components/ui/calendar.tsx
 - [[pagination.tsx]] - code - src/app/components/ui/pagination.tsx
+- [[ref_radix_ui_react_alert_dialog]] - concept
+- [[ref_react_day_picker]] - concept
 
 ## Live Query (requires Dataview plugin)
 
@@ -44,12 +46,12 @@ SORT file.name ASC
 
 ## Connections to other communities
 - 18 edges to [[_COMMUNITY_generated-validators.mjs]]
-- 6 edges to [[_COMMUNITY_compileWorkflowInternal]]
-- 3 edges to [[_COMMUNITY_render-architecture.mjs]]
+- 11 edges to [[_COMMUNITY_compileWorkflowInternal]]
+- 3 edges to [[_COMMUNITY_Community 9]]
 
 ## Top bridge nodes
-- [[alert-dialog.tsx]] - degree 15, connects to 3 communities
-- [[pagination.tsx]] - degree 13, connects to 3 communities
-- [[calendar.tsx]] - degree 5, connects to 3 communities
+- [[alert-dialog.tsx]] - degree 17, connects to 3 communities
+- [[pagination.tsx]] - degree 15, connects to 3 communities
+- [[calendar.tsx]] - degree 8, connects to 3 communities
 - [[buttonVariants]] - degree 9, connects to 1 community
 - [[PaginationLink()]] - degree 5, connects to 1 community

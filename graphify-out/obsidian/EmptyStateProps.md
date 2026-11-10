@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/common/EmptyState.tsx"
 type: "code"
-community: "compileWorkflowInternal"
+community: "render-erd.mjs"
 location: "L4"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/render-erdmjs
 ---
 
 # EmptyStateProps
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[EmptyState.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/render-erdmjs

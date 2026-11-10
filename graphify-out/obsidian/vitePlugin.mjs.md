@@ -1,12 +1,12 @@
 ---
 source_file: "src/server/vitePlugin.mjs"
 type: "code"
-community: "brand-marks.mjs"
+community: "Community 32"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/brand-marksmjs
+  - community/Community_32
 ---
 
 # vitePlugin.mjs
@@ -16,4 +16,4 @@ tags:
 - [[sqliteApiPlugin()]] - `contains` [EXTRACTED]
 - [[vite.config.ts]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/brand-marksmjs
+#graphify/code #graphify/EXTRACTED #community/Community_32

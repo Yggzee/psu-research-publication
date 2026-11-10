@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/avatar.tsx"
 type: "code"
-community: "check-update.mjs"
+community: "render-erd.mjs"
 location: "L24"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/check-updatemjs
+  - community/render-erdmjs
 ---
 
 # AvatarImage()
@@ -19,4 +19,4 @@ tags:
 - [[avatar.tsx]] - `contains` [EXTRACTED]
 - [[cn()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/check-updatemjs
+#graphify/code #graphify/EXTRACTED #community/render-erdmjs

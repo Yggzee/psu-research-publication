@@ -63,6 +63,9 @@ tags:
 - [[VerifyInvitationPage.tsx]] - `imports_from` [EXTRACTED]
 - [[getCurrentUser()]] - `imports` [EXTRACTED]
 - [[isAuthenticated()]] - `imports` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_react_router]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 - [[researchStore.ts]] - `imports_from` [EXTRACTED]
 - [[router]] - `contains` [EXTRACTED]
 

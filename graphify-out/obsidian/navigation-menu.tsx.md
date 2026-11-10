@@ -22,6 +22,10 @@ tags:
 - [[NavigationMenuViewport()]] - `contains` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
 - [[navigationMenuTriggerStyle]] - `contains` [EXTRACTED]
+- [[ref_class_variance_authority]] - `imports_from` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_radix_ui_react_navigation_menu]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/extract-audio-datapy

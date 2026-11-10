@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/DashboardLayout.tsx"
 type: "code"
-community: "check-update.mjs"
+community: "Community 27"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/check-updatemjs
+  - community/Community_27
 ---
 
 # DashboardLayout.tsx
@@ -37,10 +37,13 @@ tags:
 - [[clearCurrentUser()]] - `imports` [EXTRACTED]
 - [[getCurrentUser()]] - `imports` [EXTRACTED]
 - [[instructorNavigationCategories]] - `contains` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_react_router]] - `imports_from` [EXTRACTED]
 - [[researchStore.ts]] - `imports_from` [EXTRACTED]
 - [[routes.tsx]] - `imports_from` [EXTRACTED]
 - [[src_app_assets_psu_book_logo]] - `imports_from` [EXTRACTED]
 - [[themeContext.tsx]] - `imports_from` [EXTRACTED]
 - [[useTheme()]] - `imports` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/check-updatemjs
+#graphify/code #graphify/EXTRACTED #community/Community_27

@@ -29,6 +29,9 @@ tags:
 - [[MenubarSubTrigger()]] - `contains` [EXTRACTED]
 - [[MenubarTrigger()]] - `contains` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_radix_ui_react_menubar]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/render-lifecyclemjs

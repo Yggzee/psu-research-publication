@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/alert.tsx"
 type: "code"
-community: "finalize.mjs"
+community: "Community 9"
 location: "L22"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/finalizemjs
+  - community/Community_9
 ---
 
 # Alert()
@@ -16,4 +16,4 @@ tags:
 - [[alertVariants]] - `calls` [EXTRACTED]
 - [[cn()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/finalizemjs
+#graphify/code #graphify/EXTRACTED #community/Community_9

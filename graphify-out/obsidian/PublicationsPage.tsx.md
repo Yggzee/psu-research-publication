@@ -47,6 +47,10 @@ tags:
 - [[index.ts]] - `imports_from` [EXTRACTED]
 - [[input.tsx]] - `imports_from` [EXTRACTED]
 - [[matchesResearcher()]] - `imports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_react_router]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 - [[routes.tsx]] - `imports_from` [EXTRACTED]
 - [[select.tsx]] - `imports_from` [EXTRACTED]
 

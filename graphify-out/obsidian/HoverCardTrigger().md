@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/hover-card.tsx"
 type: "code"
-community: "render-architecture.mjs"
+community: "Community 9"
 location: "L14"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-architecturemjs
+  - community/Community_9
 ---
 
 # HoverCardTrigger()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[hover-card.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-architecturemjs
+#graphify/code #graphify/EXTRACTED #community/Community_9

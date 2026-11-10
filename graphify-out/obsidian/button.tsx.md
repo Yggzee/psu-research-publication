@@ -47,6 +47,9 @@ tags:
 - [[carousel.tsx]] - `imports_from` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
 - [[pagination.tsx]] - `imports_from` [EXTRACTED]
+- [[ref_class_variance_authority]] - `imports_from` [EXTRACTED]
+- [[ref_radix_ui_react_slot]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[sidebar.tsx]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 

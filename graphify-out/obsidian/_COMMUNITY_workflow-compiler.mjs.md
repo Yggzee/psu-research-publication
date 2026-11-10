@@ -33,10 +33,12 @@ SORT file.name ASC
 ## Connections to other communities
 - 8 edges to [[_COMMUNITY_dataflow-compiler.mjs]]
 - 8 edges to [[_COMMUNITY_generated-validators.mjs]]
-- 1 edge to [[_COMMUNITY_render-architecture.mjs]]
+- 2 edges to [[_COMMUNITY_compileWorkflowInternal]]
+- 1 edge to [[_COMMUNITY_check-update.mjs]]
+- 1 edge to [[_COMMUNITY_Community 9]]
 
 ## Top bridge nodes
-- [[sheet.tsx]] - degree 13, connects to 3 communities
+- [[sheet.tsx]] - degree 16, connects to 5 communities
 - [[Sidebar()]] - degree 8, connects to 2 communities
 - [[SheetContent()]] - degree 6, connects to 2 communities
 - [[SheetDescription()]] - degree 4, connects to 2 communities

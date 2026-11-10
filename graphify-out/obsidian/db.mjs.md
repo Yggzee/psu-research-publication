@@ -12,8 +12,8 @@ tags:
 # db.mjs
 
 ## Connections
-- [[__dirname_2]] - `contains` [EXTRACTED]
-- [[__filename_2]] - `contains` [EXTRACTED]
+- [[__dirname_3]] - `contains` [EXTRACTED]
+- [[__filename_3]] - `contains` [EXTRACTED]
 - [[aiService.mjs]] - `imports_from` [EXTRACTED]
 - [[apiHandler.mjs]] - `imports_from` [EXTRACTED]
 - [[auditAndSyncResearcherCitations()]] - `contains` [EXTRACTED]
@@ -41,7 +41,7 @@ tags:
 - [[ref_node_sqlite]] - `imports_from` [EXTRACTED]
 - [[ref_node_url]] - `imports_from` [EXTRACTED]
 - [[rehydrateFromTurso()]] - `imports` [EXTRACTED]
-- [[rootEnvPath_1]] - `contains` [EXTRACTED]
+- [[rootEnvPath_2]] - `contains` [EXTRACTED]
 - [[runInTransaction()]] - `contains` [EXTRACTED]
 - [[turso.mjs]] - `imports_from` [EXTRACTED]
 - [[tursoSyncWithTimeout()]] - `contains` [EXTRACTED]

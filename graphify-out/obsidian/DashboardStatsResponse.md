@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/services/api.service.ts"
 type: "code"
-community: "render-sequence.mjs"
+community: "Community 24"
 location: "L4"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-sequencemjs
+  - community/Community_24
 ---
 
 # DashboardStatsResponse
@@ -17,4 +17,4 @@ tags:
 - [[ReportsPage.tsx]] - `imports` [EXTRACTED]
 - [[api.service.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-sequencemjs
+#graphify/code #graphify/EXTRACTED #community/Community_24

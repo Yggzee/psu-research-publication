@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/InstructorPublicationsPage.tsx"
 type: "code"
-community: "render-erd.mjs"
+community: "compileWorkflowInternal"
 location: "L42"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-erdmjs
+  - community/compileWorkflowInternal
 ---
 
 # InstructorPublicationsPage()
@@ -30,4 +30,4 @@ tags:
 - [[getCurrentUser()]] - `calls` [EXTRACTED]
 - [[routes.tsx]] - `imports` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-erdmjs
+#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal

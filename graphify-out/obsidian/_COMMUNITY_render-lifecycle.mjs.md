@@ -1,13 +1,13 @@
 ---
 type: community
 cohesion: 0.12
-members: 17
+members: 18
 ---
 
 # render-lifecycle.mjs
 
 **Cohesion:** 0.12 - loosely connected
-**Members:** 17 nodes
+**Members:** 18 nodes
 
 ## Members
 - [[Menubar()]] - code - src/app/components/ui/menubar.tsx
@@ -27,6 +27,7 @@ members: 17
 - [[MenubarSubTrigger()]] - code - src/app/components/ui/menubar.tsx
 - [[MenubarTrigger()]] - code - src/app/components/ui/menubar.tsx
 - [[menubar.tsx]] - code - src/app/components/ui/menubar.tsx
+- [[ref_radix_ui_react_menubar]] - concept
 
 ## Live Query (requires Dataview plugin)
 
@@ -37,10 +38,11 @@ SORT file.name ASC
 
 ## Connections to other communities
 - 12 edges to [[_COMMUNITY_generated-validators.mjs]]
-- 1 edge to [[_COMMUNITY_render-architecture.mjs]]
+- 2 edges to [[_COMMUNITY_compileWorkflowInternal]]
+- 1 edge to [[_COMMUNITY_Community 9]]
 
 ## Top bridge nodes
-- [[menubar.tsx]] - degree 18, connects to 2 communities
+- [[menubar.tsx]] - degree 21, connects to 3 communities
 - [[MenubarContent()]] - degree 3, connects to 1 community
 - [[Menubar()]] - degree 2, connects to 1 community
 - [[MenubarCheckboxItem()]] - degree 2, connects to 1 community

@@ -36,6 +36,8 @@ tags:
 - [[checkbox.tsx]] - `imports_from` [EXTRACTED]
 - [[dialog.tsx]] - `imports_from` [EXTRACTED]
 - [[input.tsx]] - `imports_from` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[researchStore.ts]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/check-updatemjs

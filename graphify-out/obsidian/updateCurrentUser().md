@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/utils/researchStore.ts"
 type: "code"
-community: "render-erd.mjs"
+community: "check-update.mjs"
 location: "L200"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-erdmjs
+  - community/check-updatemjs
 ---
 
 # updateCurrentUser()
@@ -18,4 +18,4 @@ tags:
 - [[researchStore.ts]] - `contains` [EXTRACTED]
 - [[setCurrentUser()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-erdmjs
+#graphify/code #graphify/EXTRACTED #community/check-updatemjs

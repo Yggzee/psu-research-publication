@@ -1,13 +1,13 @@
 ---
 type: community
 cohesion: 0.12
-members: 16
+members: 17
 ---
 
 # cn
 
 **Cohesion:** 0.12 - loosely connected
-**Members:** 16 nodes
+**Members:** 17 nodes
 
 ## Members
 - [[ContextMenu()]] - code - src/app/components/ui/context-menu.tsx
@@ -26,6 +26,7 @@ members: 16
 - [[ContextMenuSubTrigger()]] - code - src/app/components/ui/context-menu.tsx
 - [[ContextMenuTrigger()]] - code - src/app/components/ui/context-menu.tsx
 - [[context-menu.tsx]] - code - src/app/components/ui/context-menu.tsx
+- [[ref_radix_ui_react_context_menu]] - concept
 
 ## Live Query (requires Dataview plugin)
 
@@ -36,10 +37,11 @@ SORT file.name ASC
 
 ## Connections to other communities
 - 10 edges to [[_COMMUNITY_generated-validators.mjs]]
-- 1 edge to [[_COMMUNITY_render-architecture.mjs]]
+- 2 edges to [[_COMMUNITY_compileWorkflowInternal]]
+- 1 edge to [[_COMMUNITY_Community 9]]
 
 ## Top bridge nodes
-- [[context-menu.tsx]] - degree 17, connects to 2 communities
+- [[context-menu.tsx]] - degree 20, connects to 3 communities
 - [[ContextMenuCheckboxItem()]] - degree 2, connects to 1 community
 - [[ContextMenuContent()]] - degree 2, connects to 1 community
 - [[ContextMenuItem()]] - degree 2, connects to 1 community

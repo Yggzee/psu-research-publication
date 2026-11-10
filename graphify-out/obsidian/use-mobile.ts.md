@@ -12,6 +12,7 @@ tags:
 # use-mobile.ts
 
 ## Connections
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[sidebar.tsx]] - `imports_from` [EXTRACTED]
 - [[useIsMobile()]] - `contains` [EXTRACTED]
 

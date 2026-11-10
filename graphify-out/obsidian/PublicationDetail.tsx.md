@@ -34,6 +34,11 @@ tags:
 - [[getResearchRecords()]] - `imports` [EXTRACTED]
 - [[input.tsx]] - `imports_from` [EXTRACTED]
 - [[parseAuthorsList()]] - `contains` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_react_router]] - `imports_from` [EXTRACTED]
+- [[ref_recharts]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 - [[researchStore.ts]] - `imports_from` [EXTRACTED]
 - [[routes.tsx]] - `imports_from` [EXTRACTED]
 

@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/avatar.tsx"
 type: "code"
-community: "check-update.mjs"
+community: "render-erd.mjs"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/check-updatemjs
+  - community/render-erdmjs
 ---
 
 # avatar.tsx
@@ -18,6 +18,8 @@ tags:
 - [[DashboardLayout.tsx]] - `imports_from` [EXTRACTED]
 - [[ProfilePage.tsx]] - `imports_from` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
+- [[ref_radix_ui_react_avatar]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/check-updatemjs
+#graphify/code #graphify/EXTRACTED #community/render-erdmjs

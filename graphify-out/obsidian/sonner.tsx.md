@@ -1,17 +1,20 @@
 ---
 source_file: "src/app/components/ui/sonner.tsx"
 type: "code"
-community: "render-tree.mjs"
+community: "compileWorkflowInternal"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-treemjs
+  - community/compileWorkflowInternal
 ---
 
 # sonner.tsx
 
 ## Connections
 - [[Toaster()]] - `contains` [EXTRACTED]
+- [[ref_next_themes]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-treemjs
+#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal

@@ -27,6 +27,9 @@ tags:
 - [[UseCarouselParameters]] - `contains` [EXTRACTED]
 - [[button.tsx]] - `imports_from` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
+- [[ref_embla_carousel_react]] - `imports_from` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[useCarousel()]] - `contains` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 

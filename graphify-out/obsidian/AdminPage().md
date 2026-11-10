@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/AdminPage.tsx"
 type: "code"
-community: "render-erd.mjs"
+community: "check-update.mjs"
 location: "L97"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-erdmjs
+  - community/check-updatemjs
 ---
 
 # AdminPage()
@@ -47,4 +47,4 @@ tags:
 - [[routes.tsx]] - `imports` [EXTRACTED]
 - [[saveManagedResearchers()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-erdmjs
+#graphify/code #graphify/EXTRACTED #community/check-updatemjs

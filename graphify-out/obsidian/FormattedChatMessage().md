@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/common/FormattedChatMessage.tsx"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 27"
 location: "L94"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_27
 ---
 
 # FormattedChatMessage()
@@ -19,4 +19,4 @@ tags:
 - [[FormattedChatMessage.tsx]] - `contains` [EXTRACTED]
 - [[parseInline()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_27

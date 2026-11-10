@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/scroll-area.tsx"
 type: "code"
-community: "render-architecture.mjs"
+community: "Community 31"
 location: "L31"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-architecturemjs
+  - community/Community_31
 ---
 
 # ScrollBar()
@@ -16,4 +16,4 @@ tags:
 - [[cn()]] - `calls` [EXTRACTED]
 - [[scroll-area.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-architecturemjs
+#graphify/code #graphify/EXTRACTED #community/Community_31

@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/common/PageTabs.tsx"
 type: "code"
-community: "render-erd.mjs"
+community: "compileWorkflowInternal"
 location: "L19"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-erdmjs
+  - community/compileWorkflowInternal
 ---
 
 # PageTabs()
@@ -27,4 +27,4 @@ tags:
 - [[SettingsPage()]] - `calls` [EXTRACTED]
 - [[SettingsPage.tsx]] - `imports` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-erdmjs
+#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal

@@ -15,5 +15,6 @@ tags:
 - [[Collapsible()]] - `contains` [EXTRACTED]
 - [[CollapsibleContent()]] - `contains` [EXTRACTED]
 - [[CollapsibleTrigger()]] - `contains` [EXTRACTED]
+- [[ref_radix_ui_react_collapsible]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/heygenmjs

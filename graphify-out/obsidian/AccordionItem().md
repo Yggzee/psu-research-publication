@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/accordion.tsx"
 type: "code"
-community: "generated-validators.mjs"
+community: "Community 16"
 location: "L15"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/generated-validatorsmjs
+  - community/Community_16
 ---
 
 # AccordionItem()
@@ -15,4 +15,4 @@ tags:
 - [[accordion.tsx]] - `contains` [EXTRACTED]
 - [[cn()]] - `calls` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/generated-validatorsmjs
+#graphify/code #graphify/EXTRACTED #community/Community_16

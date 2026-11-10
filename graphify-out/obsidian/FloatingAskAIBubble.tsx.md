@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/FloatingAskAIBubble.tsx"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 27"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_27
 ---
 
 # FloatingAskAIBubble.tsx
@@ -41,6 +41,10 @@ tags:
 - [[index.ts]] - `imports_from` [EXTRACTED]
 - [[input.tsx]] - `imports_from` [EXTRACTED]
 - [[persistChatSession()]] - `imports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_react_router]] - `imports_from` [EXTRACTED]
+- [[ref_sonner]] - `imports_from` [EXTRACTED]
 - [[src_app_assets_mascot_ai]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_27

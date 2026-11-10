@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/services/api.service.ts"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 24"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_24
 ---
 
 # api.service.ts
@@ -74,4 +74,4 @@ tags:
 - [[researchStore.ts]] - `imports_from` [EXTRACTED]
 - [[useResearchers.ts]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_24

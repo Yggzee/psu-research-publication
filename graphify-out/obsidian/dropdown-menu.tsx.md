@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/dropdown-menu.tsx"
 type: "code"
-community: "UKSIWDDN.js"
+community: "generated-validators.mjs"
 location: "L1"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/UKSIWDDNjs
+  - community/generated-validatorsmjs
 ---
 
 # dropdown-menu.tsx
@@ -28,6 +28,9 @@ tags:
 - [[DropdownMenuSubTrigger()]] - `contains` [EXTRACTED]
 - [[DropdownMenuTrigger()]] - `contains` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_radix_ui_react_dropdown_menu]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/UKSIWDDNjs
+#graphify/code #graphify/EXTRACTED #community/generated-validatorsmjs

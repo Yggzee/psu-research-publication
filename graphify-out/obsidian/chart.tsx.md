@@ -22,6 +22,8 @@ tags:
 - [[THEMES]] - `contains` [EXTRACTED]
 - [[cn()]] - `imports` [EXTRACTED]
 - [[getPayloadConfigFromPayload()]] - `contains` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
+- [[ref_recharts]] - `imports_from` [EXTRACTED]
 - [[useChart()]] - `contains` [EXTRACTED]
 - [[utils.ts]] - `imports_from` [EXTRACTED]
 

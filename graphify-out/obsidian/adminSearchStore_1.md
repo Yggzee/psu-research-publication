@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/utils/adminSearchStore.ts"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 24"
 location: "L253"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_24
 ---
 
 # adminSearchStore
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[adminSearchStore.ts]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_24

@@ -13,5 +13,6 @@ tags:
 
 ## Connections
 - [[AspectRatio()]] - `contains` [EXTRACTED]
+- [[ref_radix_ui_react_aspect_ratio]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/path-semanticsmjs

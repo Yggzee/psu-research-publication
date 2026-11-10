@@ -17,6 +17,7 @@ tags:
 - [[api.service.ts]] - `imports_from` [EXTRACTED]
 - [[apiService_1]] - `imports` [EXTRACTED]
 - [[mockData.ts]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 - [[useResearcher()]] - `contains` [EXTRACTED]
 - [[useResearchers()]] - `contains` [EXTRACTED]
 

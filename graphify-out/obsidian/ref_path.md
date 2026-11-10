@@ -1,11 +1,11 @@
 ---
 source_file: ""
 type: "concept"
-community: "brand-marks.mjs"
+community: "Community 32"
 tags:
   - graphify/concept
   - graphify/EXTRACTED
-  - community/brand-marksmjs
+  - community/Community_32
 ---
 
 # ref_path
@@ -13,4 +13,4 @@ tags:
 ## Connections
 - [[vite.config.ts]] - `imports_from` [EXTRACTED]
 
-#graphify/concept #graphify/EXTRACTED #community/brand-marksmjs
+#graphify/concept #graphify/EXTRACTED #community/Community_32

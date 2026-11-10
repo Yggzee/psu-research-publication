@@ -83,15 +83,16 @@ SORT file.name ASC
 ```
 
 ## Connections to other communities
-- 21 edges to [[_COMMUNITY_compileWorkflowInternal]]
-- 7 edges to [[_COMMUNITY_render-erd.mjs]]
+- 14 edges to [[_COMMUNITY_compileWorkflowInternal]]
+- 6 edges to [[_COMMUNITY_Community 24]]
+- 6 edges to [[_COMMUNITY_render-erd.mjs]]
 - 5 edges to [[_COMMUNITY_check-update.mjs]]
+- 4 edges to [[_COMMUNITY_Community 27]]
 - 1 edge to [[_COMMUNITY_render-sequence.mjs]]
-- 1 edge to [[_COMMUNITY_tts.mjs]]
 
 ## Top bridge nodes
-- [[ApiService]] - degree 87, connects to 5 communities
-- [[useResearchers.ts]] - degree 7, connects to 1 community
+- [[ApiService]] - degree 87, connects to 6 communities
+- [[useResearchers.ts]] - degree 8, connects to 2 communities
 - [[Publication]] - degree 5, connects to 1 community
 - [[Researcher]] - degree 5, connects to 1 community
 - [[mockData.ts]] - degree 4, connects to 1 community

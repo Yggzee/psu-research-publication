@@ -1,11 +1,11 @@
 ---
 source_file: ""
 type: "concept"
-community: "audio.mjs"
+community: "compileWorkflowInternal"
 tags:
   - graphify/concept
   - graphify/EXTRACTED
-  - community/audiomjs
+  - community/compileWorkflowInternal
 ---
 
 # src_styles_index
@@ -13,4 +13,4 @@ tags:
 ## Connections
 - [[main.tsx]] - `imports_from` [EXTRACTED]
 
-#graphify/concept #graphify/EXTRACTED #community/audiomjs
+#graphify/concept #graphify/EXTRACTED #community/compileWorkflowInternal

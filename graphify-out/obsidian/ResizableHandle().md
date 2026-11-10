@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/resizable.tsx"
 type: "code"
-community: "render-architecture.mjs"
+community: "Community 30"
 location: "L31"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-architecturemjs
+  - community/Community_30
 ---
 
 # ResizableHandle()
@@ -15,4 +15,4 @@ tags:
 - [[cn()]] - `calls` [EXTRACTED]
 - [[resizable.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-architecturemjs
+#graphify/code #graphify/EXTRACTED #community/Community_30

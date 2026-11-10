@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/tabs.tsx"
 type: "code"
-community: "tts.mjs"
+community: "Community 27"
 location: "L37"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/ttsmjs
+  - community/Community_27
 ---
 
 # TabsTrigger()
@@ -17,4 +17,4 @@ tags:
 - [[cn()]] - `calls` [EXTRACTED]
 - [[tabs.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/ttsmjs
+#graphify/code #graphify/EXTRACTED #community/Community_27

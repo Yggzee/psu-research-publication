@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/PublicationInspectorDrawer.tsx"
 type: "code"
-community: "compileWorkflowInternal"
+community: "Community 27"
 location: "L23"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/compileWorkflowInternal
+  - community/Community_27
 ---
 
 # InspectedPublication
@@ -20,4 +20,4 @@ tags:
 - [[PublicationsPage.tsx]] - `imports` [EXTRACTED]
 - [[SDGImpactMatrix.tsx]] - `imports` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal
+#graphify/code #graphify/EXTRACTED #community/Community_27

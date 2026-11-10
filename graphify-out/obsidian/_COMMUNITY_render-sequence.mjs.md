@@ -1,20 +1,19 @@
 ---
 type: community
-cohesion: 0.16
-members: 21
+cohesion: 0.17
+members: 20
 ---
 
 # render-sequence.mjs
 
-**Cohesion:** 0.16 - loosely connected
-**Members:** 21 nodes
+**Cohesion:** 0.17 - loosely connected
+**Members:** 20 nodes
 
 ## Members
 - [[DEPARTMENTS_1]] - code - src/app/utils/chartUtils.ts
 - [[DEPARTMENT_COLORS]] - code - src/app/utils/chartUtils.ts
 - [[Dashboard()]] - code - src/app/components/Dashboard.tsx
 - [[Dashboard.tsx]] - code - src/app/components/Dashboard.tsx
-- [[DashboardStatsResponse]] - code - src/app/services/api.service.ts
 - [[Department]] - code - src/app/utils/chartUtils.ts
 - [[DepartmentLegend()]] - code - src/app/components/DepartmentLegend.tsx
 - [[DepartmentLegend.tsx]] - code - src/app/components/DepartmentLegend.tsx
@@ -40,13 +39,15 @@ SORT file.name ASC
 ```
 
 ## Connections to other communities
-- 26 edges to [[_COMMUNITY_compileWorkflowInternal]]
-- 11 edges to [[_COMMUNITY_render-erd.mjs]]
+- 25 edges to [[_COMMUNITY_compileWorkflowInternal]]
+- 10 edges to [[_COMMUNITY_render-erd.mjs]]
+- 2 edges to [[_COMMUNITY_Community 24]]
 - 1 edge to [[_COMMUNITY_geometry.mjs]]
+- 1 edge to [[_COMMUNITY_Community 27]]
 
 ## Top bridge nodes
-- [[Dashboard.tsx]] - degree 23, connects to 3 communities
+- [[Dashboard.tsx]] - degree 26, connects to 4 communities
 - [[chartUtils.ts]] - degree 16, connects to 2 communities
 - [[Dashboard()]] - degree 11, connects to 2 communities
 - [[DEPARTMENT_COLORS]] - degree 6, connects to 2 communities
-- [[DashboardStatsResponse]] - degree 4, connects to 2 communities
+- [[RoleAwareDashboard()]] - degree 3, connects to 2 communities

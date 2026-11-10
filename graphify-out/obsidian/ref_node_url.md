@@ -1,11 +1,11 @@
 ---
 source_file: ""
 type: "concept"
-community: "visual-check.mjs"
+community: "YAYTP6L5.js"
 tags:
   - graphify/concept
   - graphify/EXTRACTED
-  - community/visual-checkmjs
+  - community/YAYTP6L5js
 ---
 
 # ref_node_url
@@ -16,4 +16,4 @@ tags:
 - [[prod.mjs]] - `imports_from` [EXTRACTED]
 - [[turso.mjs]] - `imports_from` [EXTRACTED]
 
-#graphify/concept #graphify/EXTRACTED #community/visual-checkmjs
+#graphify/concept #graphify/EXTRACTED #community/YAYTP6L5js

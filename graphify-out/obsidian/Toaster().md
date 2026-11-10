@@ -1,12 +1,12 @@
 ---
 source_file: "src/app/components/ui/sonner.tsx"
 type: "code"
-community: "render-tree.mjs"
+community: "compileWorkflowInternal"
 location: "L7"
 tags:
   - graphify/code
   - graphify/EXTRACTED
-  - community/render-treemjs
+  - community/compileWorkflowInternal
 ---
 
 # Toaster()
@@ -14,4 +14,4 @@ tags:
 ## Connections
 - [[sonner.tsx]] - `contains` [EXTRACTED]
 
-#graphify/code #graphify/EXTRACTED #community/render-treemjs
+#graphify/code #graphify/EXTRACTED #community/compileWorkflowInternal

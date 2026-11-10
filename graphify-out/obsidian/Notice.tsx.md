@@ -16,5 +16,7 @@ tags:
 - [[NoticeProps]] - `contains` [EXTRACTED]
 - [[NoticeVariant]] - `contains` [EXTRACTED]
 - [[index.ts]] - `re_exports` [EXTRACTED]
+- [[ref_lucide_react]] - `imports_from` [EXTRACTED]
+- [[ref_react]] - `imports_from` [EXTRACTED]
 
 #graphify/code #graphify/EXTRACTED #community/check-updatemjs

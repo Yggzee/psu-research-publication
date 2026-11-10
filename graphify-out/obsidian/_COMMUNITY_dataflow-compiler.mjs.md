@@ -1,13 +1,13 @@
 ---
 type: community
-cohesion: 0.08
-members: 38
+cohesion: 0.07
+members: 40
 ---
 
 # dataflow-compiler.mjs
 
-**Cohesion:** 0.08 - loosely connected
-**Members:** 38 nodes
+**Cohesion:** 0.07 - loosely connected
+**Members:** 40 nodes
 
 ## Members
 - [[Separator()]] - code - src/app/components/ui/separator.tsx
@@ -40,6 +40,8 @@ members: 38
 - [[TooltipContent()]] - code - src/app/components/ui/tooltip.tsx
 - [[TooltipProvider()]] - code - src/app/components/ui/tooltip.tsx
 - [[TooltipTrigger()]] - code - src/app/components/ui/tooltip.tsx
+- [[ref_radix_ui_react_separator]] - concept
+- [[ref_radix_ui_react_tooltip]] - concept
 - [[separator.tsx]] - code - src/app/components/ui/separator.tsx
 - [[sidebar.tsx]] - code - src/app/components/ui/sidebar.tsx
 - [[sidebarMenuButtonVariants]] - code - src/app/components/ui/sidebar.tsx
@@ -58,13 +60,14 @@ SORT file.name ASC
 
 ## Connections to other communities
 - 29 edges to [[_COMMUNITY_generated-validators.mjs]]
+- 11 edges to [[_COMMUNITY_compileWorkflowInternal]]
 - 8 edges to [[_COMMUNITY_workflow-compiler.mjs]]
-- 6 edges to [[_COMMUNITY_compileWorkflowInternal]]
-- 4 edges to [[_COMMUNITY_render-architecture.mjs]]
+- 5 edges to [[_COMMUNITY_Community 9]]
+- 1 edge to [[_COMMUNITY_ProfilePage.tsx]]
 
 ## Top bridge nodes
-- [[sidebar.tsx]] - degree 50, connects to 4 communities
-- [[tooltip.tsx]] - degree 7, connects to 2 communities
-- [[separator.tsx]] - degree 4, connects to 2 communities
+- [[sidebar.tsx]] - degree 54, connects to 5 communities
+- [[tooltip.tsx]] - degree 9, connects to 3 communities
+- [[separator.tsx]] - degree 6, connects to 3 communities
 - [[SidebarTrigger()]] - degree 4, connects to 2 communities
 - [[skeleton.tsx]] - degree 4, connects to 2 communities
