@@ -42,7 +42,21 @@ import {
   Layers,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
+  Lock,
+  Unlock,
+  CheckCircle2,
+  Shield,
+  Info,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./ui/dialog";
 import {
   LineChart,
   Line,
@@ -76,6 +90,46 @@ function parseAuthorsList(raw: unknown): string[] {
     .map((a) => a.trim())
     .filter(Boolean);
 }
+
+const ALL_SDG_OPTIONS = [
+  "SDG 1: No Poverty",
+  "SDG 2: Zero Hunger",
+  "SDG 3: Good Health and Well-being",
+  "SDG 4: Quality Education",
+  "SDG 5: Gender Equality",
+  "SDG 6: Clean Water and Sanitation",
+  "SDG 7: Affordable and Clean Energy",
+  "SDG 8: Decent Work and Economic Growth",
+  "SDG 9: Industry, Innovation and Infrastructure",
+  "SDG 10: Reduced Inequalities",
+  "SDG 11: Sustainable Cities and Communities",
+  "SDG 12: Responsible Consumption and Production",
+  "SDG 13: Climate Action",
+  "SDG 14: Life Below Water",
+  "SDG 15: Life on Land",
+  "SDG 16: Peace, Justice and Strong Institutions",
+  "SDG 17: Partnerships for the Goals",
+];
+
+const SDG_COLORS: Record<string, string> = {
+  "SDG 1": "#E5243B",
+  "SDG 2": "#DDA63A",
+  "SDG 3": "#4C9F38",
+  "SDG 4": "#C5192D",
+  "SDG 5": "#FF3A21",
+  "SDG 6": "#26BDE2",
+  "SDG 7": "#FCC30B",
+  "SDG 8": "#A21942",
+  "SDG 9": "#FD6925",
+  "SDG 10": "#DD1367",
+  "SDG 11": "#FD9D24",
+  "SDG 12": "#BF8B2E",
+  "SDG 13": "#3F7E44",
+  "SDG 14": "#0A97D9",
+  "SDG 15": "#56C02B",
+  "SDG 16": "#00689D",
+  "SDG 17": "#19486A",
+};
 
 export function PublicationDetail() {
   const { id } = useParams();
@@ -119,6 +173,13 @@ export function PublicationDetail() {
     publication_level: "International",
     url: "",
   });
+
+  // Manual SDG Override Mode
+  const [isEditingSDG, setIsEditingSDG] = useState(false);
+  const [primarySDGChoice, setPrimarySDGChoice] = useState("");
+  const [secondarySDGChoice, setSecondarySDGChoice] = useState("None");
+  const [sdgRationaleInput, setSdgRationaleInput] = useState("");
+  const [isSavingSDG, setIsSavingSDG] = useState(false);
 
   const loadData = async (isRefresh = false) => {
     if (!id) return;
@@ -199,14 +260,18 @@ export function PublicationDetail() {
         title: publication.title,
         abstract: publication.abstract,
         journal: publication.journal,
+        doi: publication.doi,
       });
 
       if (res?.success) {
         toast.success("SDG Check updated via AI Evaluation!", { id: "reclassify-detail" });
+        const validTags = [res.sdg.primarySDG, res.sdg.secondarySDG].filter(Boolean);
         setPublication((prev: any) => ({
           ...prev,
-          sdg_tags: [res.sdg.primarySDG, res.sdg.secondarySDG].filter(Boolean),
+          sdg_tags: validTags.length > 0 ? validTags : ["Pending Review"],
           sdg_rationale: res.sdg.rationale,
+          sdg_source: res.sdg.source || "auto",
+          sdg_evidence: res.sdg.evidence ? (typeof res.sdg.evidence === "string" ? res.sdg.evidence : JSON.stringify(res.sdg.evidence)) : prev.sdg_evidence,
           ched_priority: res.sdg.chedPriority,
           journal_indexing: res.audit?.indexing || prev.journal_indexing,
         }));
@@ -215,6 +280,65 @@ export function PublicationDetail() {
       toast.error(`Classification error: ${err.message}`, { id: "reclassify-detail" });
     } finally {
       setIsClassifying(false);
+    }
+  };
+
+  const handleOpenEditSDG = () => {
+    const rawTags = publication?.sdg_tags || publication?.sdgTags;
+    let list: string[] = [];
+    try {
+      list = Array.isArray(rawTags) ? rawTags : JSON.parse(rawTags || "[]");
+    } catch {
+      list = rawTags ? [rawTags] : [];
+    }
+    const pSdg = list[0] && list[0] !== "Pending Review" ? list[0] : ALL_SDG_OPTIONS[3]; // default SDG 4 in picker
+    const sSdg = list[1] && list[1] !== "Pending Review" ? list[1] : "None";
+    setPrimarySDGChoice(pSdg);
+    setSecondarySDGChoice(sSdg);
+    setSdgRationaleInput(publication?.sdg_rationale || "");
+    setIsEditingSDG(true);
+  };
+
+  const handleSaveSDGOverride = async () => {
+    if (!publication?.id) return;
+    setIsSavingSDG(true);
+    try {
+      const newTags = [primarySDGChoice, secondarySDGChoice].filter(
+        (s) => s && s !== "None"
+      );
+      await apiService.updatePublication(publication.id, {
+        sdg_tags: newTags.length > 0 ? newTags : ["Pending Review"],
+        sdg_rationale: sdgRationaleInput || "Manually assigned and verified by Research Coordinator.",
+        sdg_source: "manual_override",
+      });
+      setPublication((prev: any) => ({
+        ...prev,
+        sdg_tags: newTags.length > 0 ? newTags : ["Pending Review"],
+        sdg_rationale: sdgRationaleInput || "Manually assigned and verified by Research Coordinator.",
+        sdg_source: "manual_override",
+      }));
+      setIsEditingSDG(false);
+      toast.success("SDG alignment saved and locked as verified!");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update SDG alignment");
+    } finally {
+      setIsSavingSDG(false);
+    }
+  };
+
+  const handleUnlockSDG = async () => {
+    if (!publication?.id) return;
+    try {
+      await apiService.updatePublication(publication.id, {
+        sdg_source: "auto",
+      });
+      setPublication((prev: any) => ({
+        ...prev,
+        sdg_source: "auto",
+      }));
+      toast.success("SDG alignment unlocked for automated evaluation.");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to unlock SDG");
     }
   };
 
@@ -320,7 +444,27 @@ export function PublicationDetail() {
           return [rawSdgTags];
         }
       })()
-    : ["SDG 4: Quality Education"];
+    : ["Pending Review"];
+
+  const rawEvidence = publication.sdg_evidence;
+  let evidenceObj: any = null;
+  if (rawEvidence) {
+    try {
+      evidenceObj = typeof rawEvidence === "object" ? rawEvidence : JSON.parse(rawEvidence);
+    } catch {
+      evidenceObj = null;
+    }
+  }
+
+  const isPendingReview =
+    sdgList.length === 0 ||
+    sdgList.every((s) => s === "Pending Review" || s === "General Research");
+
+  const getSdgColor = (sdgName: string) => {
+    const m = sdgName.match(/\bSDG\s*(\d{1,2})\b/i);
+    if (!m) return "#10b981";
+    return SDG_COLORS[`SDG ${m[1]}`] || "#10b981";
+  };
 
   const rawRationale = publication.sdg_rationale || publication.sdgRationale;
   let rationalesMap: Record<string, string> | null = null;
@@ -1333,62 +1477,186 @@ export function PublicationDetail() {
               <div className="flex items-center gap-2">
                 <Target className="w-4 h-4 text-emerald-600" />
                 <CardTitle className="text-base font-bold">
-                  UN SDG Check & CHED Alignment
+                  UN SDG Alignment & Evidence Audit
                 </CardTitle>
               </div>
               <CardDescription className="text-xs mt-0.5">
-                AI Sustainable Development Goals evaluation
+                AI Sustainable Development Goals evaluation with academic text evidence audit
               </CardDescription>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleReclassifySDG}
-              disabled={isClassifying}
-              className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
-            >
-              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-              {isClassifying ? "Analyzing..." : "Re-evaluate AI"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleOpenEditSDG}
+                className="text-xs h-8 gap-1.5 border-border/80 text-foreground hover:bg-muted/50"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>Edit SDG</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleReclassifySDG}
+                disabled={isClassifying}
+                className="text-xs h-8 gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300"
+              >
+                <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                {isClassifying ? "Analyzing..." : "Re-evaluate AI"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-3">
-              {sdgList.map((sdg, idx) => {
-                const tailoredWhy = getRationaleForSDG(sdg);
-                return (
-                  <div
-                    key={sdg}
-                    className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold text-white ${
-                          idx === 0 ? "bg-emerald-600" : "bg-blue-600"
-                        }`}
-                      >
-                        {idx === 0 ? "Primary SDG" : "Secondary SDG"}
-                      </span>
-                      <span className="text-sm font-bold text-foreground">
-                        {sdg}
-                      </span>
-                    </div>
-                    {tailoredWhy ? (
-                      <p className="text-xs text-muted-foreground leading-relaxed italic">
-                        "{tailoredWhy}"
-                      </p>
-                    ) : (
-                      rawRationale &&
-                      !rawRationale.startsWith("{") &&
-                      idx === 0 && (
-                        <p className="text-xs text-muted-foreground leading-relaxed italic">
-                          "{rawRationale}"
-                        </p>
-                      )
-                    )}
-                  </div>
-                );
-              })}
+            {/* Coordinator Lock Alert */}
+            {publication.sdg_source === "manual_override" && (
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs">
+                <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-medium">
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  <span>Coordinator Verified & Locked (Protected from automated batch reclassification)</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleUnlockSDG}
+                  className="h-6 text-[11px] px-2 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/10 gap-1"
+                >
+                  <Unlock className="w-3 h-3" />
+                  Unlock
+                </Button>
+              </div>
+            )}
+
+            {/* Evidence Audit Strip */}
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <Badge variant="outline" className="gap-1 border-border/80">
+                {publication.sdg_source === "openalex_ml" ? (
+                  <>
+                    <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                    <span>OpenAlex ML Model</span>
+                  </>
+                ) : publication.sdg_source === "gemini_ml" ? (
+                  <>
+                    <Sparkles className="w-3 h-3 text-purple-500" />
+                    <span>Gemini AI Classifier</span>
+                  </>
+                ) : publication.sdg_source === "manual_override" ? (
+                  <>
+                    <UserCheck className="w-3 h-3 text-indigo-500" />
+                    <span>Coordinator Verified</span>
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-3 h-3 text-blue-500" />
+                    <span>Deep Lexicon Heuristic</span>
+                  </>
+                )}
+              </Badge>
+
+              {evidenceObj?.confidence && (
+                <Badge
+                  variant="outline"
+                  className={`gap-1 ${
+                    evidenceObj.confidence === "High" || parseInt(evidenceObj.confidence) >= 70
+                      ? "text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                      : evidenceObj.confidence === "Pending"
+                      ? "text-amber-700 dark:text-amber-300 border-amber-500/30"
+                      : "text-blue-700 dark:text-blue-300 border-blue-500/30"
+                  }`}
+                >
+                  <Shield className="w-3 h-3" />
+                  <span>Confidence: {evidenceObj.confidence}</span>
+                </Badge>
+              )}
+
+              <span className="text-muted-foreground text-[10px]">
+                {evidenceObj?.abstractExamined
+                  ? `Analyzed Title & Abstract (${evidenceObj.wordsExamined || 0} words)`
+                  : "Title Analyzed (No abstract indexed)"}
+              </span>
             </div>
+
+            {/* Pending Review State */}
+            {isPendingReview ? (
+              <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                    SDG Classification Pending Review
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+                  The automated classifier requires higher academic evidence density (score &lt; 2.5) to reliably classify this publication without hallucinating. Assign an SDG manually to confirm institutional alignment.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOpenEditSDG}
+                  className="text-xs h-7 mt-1 border-amber-500/40 text-amber-900 dark:text-amber-200 hover:bg-amber-500/15"
+                >
+                  <Edit3 className="w-3 h-3 mr-1" />
+                  Assign SDG Manually
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sdgList
+                  .filter((sdg) => sdg !== "Pending Review")
+                  .map((sdg, idx) => {
+                    const tailoredWhy = getRationaleForSDG(sdg);
+                    const sdgColor = getSdgColor(sdg);
+                    return (
+                      <div
+                        key={sdg}
+                        className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-xs"
+                            style={{ backgroundColor: sdgColor }}
+                          >
+                            {idx === 0 ? "Primary SDG" : "Secondary SDG"}
+                          </span>
+                          <span className="text-sm font-bold text-foreground">
+                            {sdg}
+                          </span>
+                        </div>
+                        {tailoredWhy ? (
+                          <p className="text-xs text-muted-foreground leading-relaxed italic">
+                            "{tailoredWhy}"
+                          </p>
+                        ) : (
+                          rawRationale &&
+                          !rawRationale.startsWith("{") &&
+                          idx === 0 && (
+                            <p className="text-xs text-muted-foreground leading-relaxed italic">
+                              "{rawRationale}"
+                            </p>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+
+            {/* Matched Concepts */}
+            {evidenceObj?.matchedKeywords && Array.isArray(evidenceObj.matchedKeywords) && evidenceObj.matchedKeywords.length > 0 && (
+              <div className="pt-2 border-t border-border/40 space-y-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Matched Evidence Concepts
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {evidenceObj.matchedKeywords
+                    .flatMap((k: any) => k.matches || [])
+                    .slice(0, 10)
+                    .map((word: string, i: number) => (
+                      <Badge key={i} variant="secondary" className="text-[10px] font-mono px-2 py-0">
+                        {word}
+                      </Badge>
+                    ))}
+                </div>
+              </div>
+            )}
 
             <div className="pt-2 border-t border-border/50">
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
@@ -1441,6 +1709,96 @@ export function PublicationDetail() {
           </CardContent>
         </Card>
       )}
+      {/* Manual SDG Override Dialog */}
+      <Dialog open={isEditingSDG} onOpenChange={setIsEditingSDG}>
+        <DialogContent className="max-w-lg bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <Target className="w-5 h-5 text-emerald-600" />
+              Manual UN SDG Alignment Override
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Manually assign primary and secondary UN Sustainable Development Goals for this publication. Manual assignments are locked against automated batch background sweeps.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Primary UN SDG Goal <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={primarySDGChoice}
+                onChange={(e) => setPrimarySDGChoice(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="Pending Review">Pending Review (Unassigned)</option>
+                {ALL_SDG_OPTIONS.map((sdg) => (
+                  <option key={sdg} value={sdg}>
+                    {sdg}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Secondary UN SDG Goal (Optional)
+              </label>
+              <select
+                value={secondarySDGChoice}
+                onChange={(e) => setSecondarySDGChoice(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="None">None (Single Alignment)</option>
+                {ALL_SDG_OPTIONS.filter((s) => s !== primarySDGChoice).map((sdg) => (
+                  <option key={sdg} value={sdg}>
+                    {sdg}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Institutional Justification & Rationale
+              </label>
+              <textarea
+                value={sdgRationaleInput}
+                onChange={(e) => setSdgRationaleInput(e.target.value)}
+                rows={3}
+                placeholder="Explain how this research advances the selected UN Sustainable Development Goal(s)..."
+                className="w-full rounded-md border border-input bg-background p-2.5 text-xs text-foreground shadow-xs focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring resize-none leading-relaxed"
+              />
+              <span className="text-[10px] text-muted-foreground block">
+                This rationale appears in the institutional repository, SDG matrix, and accreditation exports.
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditingSDG(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSaveSDGOverride}
+              disabled={isSavingSDG}
+              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              {isSavingSDG ? "Saving & Locking..." : "Save & Lock SDG"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

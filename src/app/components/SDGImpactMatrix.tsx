@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router";
 import {
   Target,
   Sparkles,
@@ -16,6 +17,7 @@ import {
   Info,
   ArrowRight,
   Eye,
+  AlertTriangle,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
 import { Button } from "./ui/button";
@@ -245,6 +247,29 @@ export function SDGImpactMatrix() {
           </div>
         }
       />
+
+      {/* Pending Review Notice */}
+      {Boolean(stats?.pendingReviewCount && stats.pendingReviewCount > 0) && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <span className="font-semibold">
+                {stats?.pendingReviewCount} Publication{Number(stats?.pendingReviewCount) > 1 ? "s" : ""} Pending SDG Review
+              </span>
+              <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 mt-0.5 leading-relaxed">
+                These publications had low academic text evidence and were held from automatic assignment to avoid hallucinated SDG tags.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/publications"
+            className="inline-flex items-center justify-center text-xs font-semibold px-3 py-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-950 dark:text-amber-100 transition-colors shrink-0 self-start sm:self-auto"
+          >
+            Review Publications
+          </Link>
+        </div>
+      )}
 
       {/* 2. Key Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">

@@ -1065,7 +1065,7 @@ export async function scrapeGoogleScholarProfile(profileUrlOrId) {
 /**
  * Reconstruct readable abstract text from OpenAlex inverted index
  */
-function reconstructOpenAlexAbstract(invertedIndex) {
+export function reconstructOpenAlexAbstract(invertedIndex) {
   if (!invertedIndex || typeof invertedIndex !== 'object') return '';
   const wordPairs = [];
   for (const [word, positions] of Object.entries(invertedIndex)) {
@@ -1077,6 +1077,47 @@ function reconstructOpenAlexAbstract(invertedIndex) {
   }
   wordPairs.sort((a, b) => a[0] - b[0]);
   return wordPairs.map((p) => p[1]).join(' ');
+}
+
+/**
+ * Fetch publication abstract and peer-reviewed SDG tags from OpenAlex
+ */
+export async function fetchOpenAlexAbstractAndSDGs(doi = '', title = '') {
+  try {
+    const cleanDoi = String(doi || '').replace(/^https?:\/\/doi\.org\//i, '').trim();
+    let url = '';
+    if (cleanDoi) {
+      url = `https://api.openalex.org/works/doi:${cleanDoi}?mailto=research@psu.edu.ph`;
+    } else if (title && title.trim().length > 10) {
+      const cleanTitle = title.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      url = `https://api.openalex.org/works?search=${encodeURIComponent(cleanTitle)}&per-page=1&mailto=research@psu.edu.ph`;
+    }
+    if (!url) return null;
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'PSU-Asingan-Research-Portal/1.0 (mailto:research@psu.edu.ph)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const work = cleanDoi ? data : (data.results && data.results[0]);
+    if (!work) return null;
+
+    const abstract = reconstructOpenAlexAbstract(work.abstract_inverted_index) || '';
+    const sdgs = Array.isArray(work.sustainable_development_goals) ? work.sustainable_development_goals : [];
+
+    return {
+      abstract,
+      sdgs: sdgs.map(s => ({
+        id: s.id,
+        name: s.display_name,
+        score: s.score,
+      })),
+      doi: work.doi || cleanDoi || '',
+    };
+  } catch (err) {
+    return null;
+  }
 }
 
 /**

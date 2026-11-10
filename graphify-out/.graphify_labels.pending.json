@@ -1,10 +1,7 @@
 {
-  "9": "utils.ts",
-  "16": "accordion.tsx",
-  "24": "api.service.ts",
-  "27": "CampusAIChatHistory.tsx",
-  "28": "popover.tsx",
-  "30": "resizable.tsx",
-  "31": "scroll-area.tsx",
-  "32": "vite.config.ts"
+  "9": "toggle-group.tsx",
+  "16": "dropdown-menu.tsx",
+  "20": "App.tsx",
+  "24": "adminSearchStore.ts",
+  "28": "utils.ts"
 }

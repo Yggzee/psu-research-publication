@@ -2664,12 +2664,14 @@ export async function handleApiRequest(req, res) {
 
       if (!sdgTagsJson) {
         try {
-          const sdgResult = await classifyPublicationSDG(sanitized.title, sanitized.abstract || '', sanitized.journal || '');
-          sdgTagsJson = JSON.stringify([sdgResult.primarySDG, sdgResult.secondarySDG].filter(Boolean));
-          sdgRationale = sdgResult.rationale;
-          chedPriority = sdgResult.chedPriority;
+          const sdgResult = await classifyPublicationSDG(sanitized.title, sanitized.abstract || '', sanitized.journal || '', data.doi || '');
+          const validTags = [sdgResult.primarySDG, sdgResult.secondarySDG].filter(Boolean);
+          sdgTagsJson = JSON.stringify(validTags.length > 0 ? validTags : ['Pending Review']);
+          sdgRationale = sdgResult.rationale || 'Pending coordinator verification.';
+          chedPriority = sdgResult.chedPriority || '';
         } catch {
-          sdgTagsJson = JSON.stringify(['SDG 4: Quality Education']);
+          sdgTagsJson = JSON.stringify(['Pending Review']);
+          sdgRationale = 'Classification pending coordinator verification.';
         }
       }
 
@@ -2821,6 +2823,30 @@ export async function handleApiRequest(req, res) {
           updates.push('research_status = ?');
           values.push(data.researchStatus);
         }
+      }
+
+      if (data.sdg_tags !== undefined || data.sdgTags !== undefined) {
+        const rawTags = data.sdg_tags !== undefined ? data.sdg_tags : data.sdgTags;
+        let tagsArray = [];
+        try {
+          tagsArray = Array.isArray(rawTags) ? rawTags : (typeof rawTags === 'string' ? (rawTags.startsWith('[') ? JSON.parse(rawTags) : [rawTags]) : []);
+        } catch {
+          tagsArray = [String(rawTags)];
+        }
+        updates.push('sdg_tags = ?');
+        values.push(JSON.stringify(tagsArray));
+        updates.push('sdg_source = ?');
+        values.push(data.sdg_source || data.sdgSource || 'manual_override');
+      }
+      if (data.sdg_rationale !== undefined || data.sdgRationale !== undefined) {
+        const rat = data.sdg_rationale !== undefined ? data.sdg_rationale : data.sdgRationale;
+        updates.push('sdg_rationale = ?');
+        values.push(typeof rat === 'object' ? JSON.stringify(rat) : String(rat));
+      }
+      if (data.sdg_evidence !== undefined || data.sdgEvidence !== undefined) {
+        const evi = data.sdg_evidence !== undefined ? data.sdg_evidence : data.sdgEvidence;
+        updates.push('sdg_evidence = ?');
+        values.push(typeof evi === 'object' ? JSON.stringify(evi) : String(evi));
       }
 
       const editableTextFields = [
@@ -3179,8 +3205,8 @@ export async function handleApiRequest(req, res) {
           id, title, authors, journal, year, citations, abstract, url, cited_by_link,
           owner_id, owner_name, source, approval_status, research_status, is_public,
           keywords, issn_isbn, volume_issue, publication_date, publication_level, doi, journal_indexing,
-          sdg_tags, sdg_rationale, ched_priority, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped', 'approved', 'Published', 1, ?, ?, ?, ?, 'International', ?, ?, ?, ?, ?, ?)
+          sdg_tags, sdg_rationale, ched_priority, sdg_source, sdg_evidence, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped', 'approved', 'Published', 1, ?, ?, ?, ?, 'International', ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       const updatePub = db.prepare(`
@@ -3190,7 +3216,11 @@ export async function handleApiRequest(req, res) {
             keywords = COALESCE(?, keywords), issn_isbn = COALESCE(?, issn_isbn),
             volume_issue = COALESCE(?, volume_issue), publication_date = COALESCE(?, publication_date),
             doi = COALESCE(?, doi),
-            sdg_tags = COALESCE(sdg_tags, ?), sdg_rationale = COALESCE(sdg_rationale, ?), ched_priority = COALESCE(ched_priority, ?)
+            sdg_tags = CASE WHEN sdg_source = 'manual_override' THEN sdg_tags ELSE COALESCE(sdg_tags, ?) END,
+            sdg_rationale = CASE WHEN sdg_source = 'manual_override' THEN sdg_rationale ELSE COALESCE(sdg_rationale, ?) END,
+            ched_priority = COALESCE(ched_priority, ?),
+            sdg_source = CASE WHEN sdg_source = 'manual_override' THEN sdg_source ELSE COALESCE(sdg_source, ?) END,
+            sdg_evidence = CASE WHEN sdg_source = 'manual_override' THEN sdg_evidence ELSE COALESCE(sdg_evidence, ?) END
         WHERE id = ?
       `);
 
@@ -3215,25 +3245,16 @@ export async function handleApiRequest(req, res) {
           const year = parseInt(item.year, 10) || new Date().getFullYear();
           const audit = auditJournalReputation(item.journal || '');
 
-          const fallbackAbstract =
-            item.abstract && item.abstract.trim().length > 20
-              ? item.abstract.trim()
-              : `This research study titled "${title}", authored by ${authorsArr.join(', ')} and published in ${item.journal || 'an academic journal'} (${year}), presents empirical findings and methodologies advancing institutional research in ${researcher.department || 'applied sciences and education'}.`;
+          const actualAbstract = item.abstract && item.abstract.trim().length > 20 ? item.abstract.trim() : '';
+          const fallbackAbstract = actualAbstract || `This research study titled "${title}", authored by ${authorsArr.join(', ')} and published in ${item.journal || 'an academic journal'} (${year}), presents empirical findings and methodologies advancing institutional research in ${researcher.department || 'applied sciences and education'}.`;
 
-          const tLower = `${title} ${fallbackAbstract}`.toLowerCase();
-          let sdgTagsJson = JSON.stringify(['SDG 4: Quality Education']);
-          let sdgRationaleJson = JSON.stringify({
-            'SDG 4: Quality Education': 'Advances academic instruction, curriculum development, and educational research.',
-          });
-          let chedPrio = 'Education and Teacher Training';
-          if (tLower.includes('3d') || tLower.includes('polymer') || tLower.includes('manufactur') || tLower.includes('system') || tLower.includes('software') || tLower.includes('network')) {
-            sdgTagsJson = JSON.stringify(['SDG 9: Industry, Innovation and Infrastructure', 'SDG 4: Quality Education']);
-            sdgRationaleJson = JSON.stringify({
-              'SDG 9: Industry, Innovation and Infrastructure': 'Advances technological innovation, engineering systems, and applied computing.',
-              'SDG 4: Quality Education': 'Supports academic research and technical capacity building.',
-            });
-            chedPrio = 'Information Technology, Engineering, and Innovation';
-          }
+          const sdgClassified = localHeuristicSDG(title, actualAbstract, item.keywords || '');
+          const validTags = [sdgClassified.primarySDG, sdgClassified.secondarySDG].filter(Boolean);
+          const sdgTagsJson = JSON.stringify(validTags.length > 0 ? validTags : ['Pending Review']);
+          const sdgRationaleJson = sdgClassified.rationale || 'Pending coordinator verification.';
+          const chedPrio = sdgClassified.chedPriority || '';
+          const sdgSource = sdgClassified.source || 'auto';
+          const sdgEvidenceJson = JSON.stringify(sdgClassified.evidence || null);
 
           if (existing) {
             updatePub.run(
@@ -3250,6 +3271,8 @@ export async function handleApiRequest(req, res) {
               sdgTagsJson,
               sdgRationaleJson,
               chedPrio,
+              sdgSource,
+              sdgEvidenceJson,
               existing.id
             );
             if (citations > 0) pubIdsToSyncCitations.push(existing.id);
@@ -3277,6 +3300,8 @@ export async function handleApiRequest(req, res) {
               sdgTagsJson,
               sdgRationaleJson,
               chedPrio,
+              sdgSource,
+              sdgEvidenceJson,
               now
             );
             allExistingPubs.push({ id: newId, title, citations, url: item.url, cited_by_link: item.citedByLink });
@@ -4477,17 +4502,20 @@ export async function handleApiRequest(req, res) {
 
     // 2. Classify Single Publication (SDG + Journal Reputation)
     if (pathname === '/api/ai/classify-sdg' && method === 'POST') {
-      const { publicationId, title, abstract, journal } = await readJsonBody();
+      const { publicationId, title, abstract, journal, doi } = await readJsonBody();
       let targetTitle = title;
       let targetAbstract = abstract;
       let targetJournal = journal;
+      let targetDoi = doi || '';
+      let existingPub = null;
 
       if (publicationId) {
-        const pub = db.prepare('SELECT * FROM publications WHERE id = ?').get(publicationId);
-        if (pub) {
-          targetTitle = pub.title;
-          targetAbstract = pub.abstract;
-          targetJournal = pub.journal;
+        existingPub = db.prepare('SELECT * FROM publications WHERE id = ?').get(publicationId);
+        if (existingPub) {
+          targetTitle = existingPub.title;
+          targetAbstract = existingPub.abstract;
+          targetJournal = existingPub.journal;
+          targetDoi = existingPub.doi || targetDoi;
         }
       }
 
@@ -4495,26 +4523,53 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'Publication title is required' });
       }
 
-      const sdgResult = await classifyPublicationSDG(targetTitle, targetAbstract, targetJournal);
+      const sdgResult = await classifyPublicationSDG(targetTitle, targetAbstract, targetJournal, targetDoi);
       const auditResult = auditJournalReputation(targetJournal);
-      const tagsJson = JSON.stringify([sdgResult.primarySDG, sdgResult.secondarySDG]);
+      const tags = [sdgResult.primarySDG, sdgResult.secondarySDG].filter(Boolean);
+      const tagsJson = JSON.stringify(tags);
+      const evidenceJson = JSON.stringify(sdgResult.evidence || null);
 
-      if (publicationId) {
-        db.prepare(`
-          UPDATE publications
-          SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?,
-              journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?
-          WHERE id = ?
-        `).run(
-          tagsJson,
-          sdgResult.rationale,
-          sdgResult.chedPriority,
-          auditResult.indexing,
-          auditResult.jc3Points,
-          auditResult.nbc461Points,
-          auditResult.isPredatory,
-          publicationId
-        );
+      if (publicationId && existingPub) {
+        const shouldUpdateAbstract = sdgResult.recoveredAbstract && (!existingPub.abstract || existingPub.abstract.length < 50);
+        if (shouldUpdateAbstract) {
+          db.prepare(`
+            UPDATE publications
+            SET sdg_tags = ?, sdg_rationale = ?, sdg_source = ?, sdg_evidence = ?, ched_priority = ?,
+                journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?,
+                abstract = ?
+            WHERE id = ?
+          `).run(
+            tagsJson,
+            sdgResult.rationale,
+            sdgResult.source || 'auto',
+            evidenceJson,
+            sdgResult.chedPriority,
+            auditResult.indexing,
+            auditResult.jc3Points,
+            auditResult.nbc461Points,
+            auditResult.isPredatory,
+            sdgResult.recoveredAbstract,
+            publicationId
+          );
+        } else {
+          db.prepare(`
+            UPDATE publications
+            SET sdg_tags = ?, sdg_rationale = ?, sdg_source = ?, sdg_evidence = ?, ched_priority = ?,
+                journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?
+            WHERE id = ?
+          `).run(
+            tagsJson,
+            sdgResult.rationale,
+            sdgResult.source || 'auto',
+            evidenceJson,
+            sdgResult.chedPriority,
+            auditResult.indexing,
+            auditResult.jc3Points,
+            auditResult.nbc461Points,
+            auditResult.isPredatory,
+            publicationId
+          );
+        }
       }
 
       return sendJson(200, {
@@ -4528,34 +4583,62 @@ export async function handleApiRequest(req, res) {
     // 3. Batch Classify All Unclassified Publications
     if (pathname === '/api/ai/batch-classify-sdg' && method === 'POST') {
       const unclassified = db.prepare(`
-        SELECT id, title, abstract, journal 
+        SELECT id, title, abstract, journal, doi
         FROM publications 
-        WHERE sdg_tags IS NULL OR sdg_tags = '' OR sdg_tags = '[]'
+        WHERE (sdg_tags IS NULL OR sdg_tags = '' OR sdg_tags = '[]' OR sdg_tags = '["General Research"]')
+          AND (sdg_source IS NULL OR sdg_source != 'manual_override')
         LIMIT 60
       `).all();
 
       let processed = 0;
       for (const pub of unclassified) {
         try {
-          const sdgResult = await classifyPublicationSDG(pub.title, pub.abstract, pub.journal);
+          const sdgResult = await classifyPublicationSDG(pub.title, pub.abstract, pub.journal, pub.doi);
           const auditResult = auditJournalReputation(pub.journal);
-          const tagsJson = JSON.stringify([sdgResult.primarySDG, sdgResult.secondarySDG]);
+          const tags = [sdgResult.primarySDG, sdgResult.secondarySDG].filter(Boolean);
+          const tagsJson = JSON.stringify(tags);
+          const evidenceJson = JSON.stringify(sdgResult.evidence || null);
 
-          db.prepare(`
-            UPDATE publications
-            SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?,
-                journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?
-            WHERE id = ?
-          `).run(
-            tagsJson,
-            sdgResult.rationale,
-            sdgResult.chedPriority,
-            auditResult.indexing,
-            auditResult.jc3Points,
-            auditResult.nbc461Points,
-            auditResult.isPredatory,
-            pub.id
-          );
+          const shouldUpdateAbstract = sdgResult.recoveredAbstract && (!pub.abstract || pub.abstract.length < 50);
+          if (shouldUpdateAbstract) {
+            db.prepare(`
+              UPDATE publications
+              SET sdg_tags = ?, sdg_rationale = ?, sdg_source = ?, sdg_evidence = ?, ched_priority = ?,
+                  journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?,
+                  abstract = ?
+              WHERE id = ?
+            `).run(
+              tagsJson,
+              sdgResult.rationale,
+              sdgResult.source || 'auto',
+              evidenceJson,
+              sdgResult.chedPriority,
+              auditResult.indexing,
+              auditResult.jc3Points,
+              auditResult.nbc461Points,
+              auditResult.isPredatory,
+              sdgResult.recoveredAbstract,
+              pub.id
+            );
+          } else {
+            db.prepare(`
+              UPDATE publications
+              SET sdg_tags = ?, sdg_rationale = ?, sdg_source = ?, sdg_evidence = ?, ched_priority = ?,
+                  journal_indexing = ?, jc3_points = ?, nbc461_points = ?, is_predatory_flag = ?
+              WHERE id = ?
+            `).run(
+              tagsJson,
+              sdgResult.rationale,
+              sdgResult.source || 'auto',
+              evidenceJson,
+              sdgResult.chedPriority,
+              auditResult.indexing,
+              auditResult.jc3Points,
+              auditResult.nbc461Points,
+              auditResult.isPredatory,
+              pub.id
+            );
+          }
           processed++;
         } catch (err) {
           console.warn(`[Batch Classify] Failed for pub ${pub.id}:`, err.message);
@@ -4821,23 +4904,26 @@ export async function handleApiRequest(req, res) {
       const sdgCounts = {};
       ALL_SDGS.forEach(sdg => { sdgCounts[sdg] = { count: 0, papers: [] }; });
 
+      const pendingReviewPapers = [];
+
       pubs.forEach(p => {
         let tags = [];
         try {
-          tags = JSON.parse(p.sdg_tags || '[]');
+          const parsed = JSON.parse(p.sdg_tags || '[]');
+          tags = Array.isArray(parsed) ? parsed : [p.sdg_tags];
         } catch {
-          tags = [];
+          tags = p.sdg_tags ? [p.sdg_tags] : [];
         }
 
-        // If unclassified, apply fast on-the-fly heuristic for real-time reporting
+        // If unclassified, apply deep 17-SDG lexical heuristic (with confidence check)
         if (tags.length === 0) {
-          const text = `${p.title} ${p.abstract || ''}`.toLowerCase();
-          if (text.includes('fracture') || text.includes('acetabular') || text.includes('health') || text.includes('medical') || text.includes('covid')) tags.push('SDG 3: Good Health and Well-being');
-          else if (text.includes('education') || text.includes('learn') || text.includes('student') || text.includes('math') || text.includes('statistic')) tags.push('SDG 4: Quality Education');
-          else if (text.includes('agri') || text.includes('crop') || text.includes('soil')) tags.push('SDG 2: Zero Hunger');
-          else if (text.includes('austerity') || text.includes('resources management')) tags.push('SDG 12: Responsible Consumption and Production');
-          else if (text.includes('graduate') || text.includes('career') || text.includes('employment')) tags.push('SDG 8: Decent Work and Economic Growth');
-          else tags.push('SDG 9: Industry, Innovation and Infrastructure');
+          const classified = localHeuristicSDG(p.title || '', p.abstract || '', '');
+          if (classified && classified.primarySDG && classified.primarySDG !== 'Pending Review') {
+            tags.push(classified.primarySDG);
+            if (classified.secondarySDG && classified.secondarySDG !== 'Pending Review') {
+              tags.push(classified.secondarySDG);
+            }
+          }
         }
 
         let authorsArr = [];
@@ -4900,6 +4986,7 @@ export async function handleApiRequest(req, res) {
           nbc461Points: p.nbc461_points || 5.0,
         };
 
+        let hasMatchedAnySDG = false;
         tags.forEach(t => {
           const tagNum = extractSDGNum(t);
           const matchKey = ALL_SDGS.find(s => {
@@ -4911,6 +4998,7 @@ export async function handleApiRequest(req, res) {
           });
 
           if (matchKey) {
+            hasMatchedAnySDG = true;
             sdgCounts[matchKey].count += 1;
             const tailoredRationale = getTailoredRationale(matchKey);
             sdgCounts[matchKey].papers.push({
@@ -4919,6 +5007,10 @@ export async function handleApiRequest(req, res) {
             });
           }
         });
+
+        if (!hasMatchedAnySDG) {
+          pendingReviewPapers.push(paperItem);
+        }
       });
 
       const radarData = ALL_SDGS.map(sdg => {
@@ -4935,7 +5027,9 @@ export async function handleApiRequest(req, res) {
 
       return sendJson(200, {
         radarData,
-        totalClassified: pubs.length,
+        totalClassified: pubs.length - pendingReviewPapers.length,
+        pendingReviewCount: pendingReviewPapers.length,
+        pendingReviewPapers,
         chedPriorities: [
           { priority: 'Food Security & Agriculture', count: pubs.filter(p => (p.ched_priority || '').includes('Food') || (p.title || '').toLowerCase().includes('crop')).length },
           { priority: 'Smart Education & Pedagogy', count: pubs.filter(p => (p.ched_priority || '').includes('Education') || (p.title || '').toLowerCase().includes('learn')).length },

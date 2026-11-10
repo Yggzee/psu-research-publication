@@ -45,6 +45,8 @@ import {
   ExternalLink,
   KeyRound,
   BarChart3,
+  AlertTriangle,
+  Lock,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -637,6 +639,7 @@ const researcherGuideCategories: GuideCategory[] = [
     narrativeParagraphs: [
       "The 'SDG Alignment' page shows how the published research of Pangasinan State University — Asingan Campus contributes to the 17 United Nations Sustainable Development Goals (SDGs). When you open this page, you see an overall visual radar chart paired with 17 color-coded cards—one for each global goal, such as SDG 3 (Good Health and Well-being), SDG 4 (Quality Education), SDG 8 (Decent Work and Economic Growth), SDG 9 (Industry, Innovation and Infrastructure), and SDG 13 (Climate Action). Each card displays the number of campus publications mapped to that goal.",
       "Modern university accreditation and institutional evaluations look closely at how campus studies solve real community challenges. Instead of guessing which goals our campus covers, this page gives you a clear visual map of our strengths. When you click on any of the 17 goal cards, the list directly underneath in the same tab updates to show the exact PSU Asingan publications supporting that goal, along with a plain-English explanation of why each study fits.",
+      "To ensure high academic fidelity and prevent hallucinated or mistaken tags, the system uses a 3-Tier classification architecture: First, it references peer-reviewed OpenAlex machine learning models; second, it conducts deep lexical analysis across both the title and full abstract using word-boundary matching and negative exclusions; third, if text evidence is insufficient, it holds the paper as 'Pending Review' rather than making incorrect assumptions. Research Coordinators can also manually assign and lock any SDG alignment using the 'Edit SDG' modal on the publication details page.",
     ],
     simulationSection: {
       title: "Simulated UN SDG Goal Alignment Numbers",
@@ -659,6 +662,39 @@ const researcherGuideCategories: GuideCategory[] = [
         ),
         explanation:
           "Click any of the 17 goal cards to filter the publication list below and see every campus study that supports that specific United Nations goal.",
+      },
+      {
+        label: "Edit SDG / Manual Override",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-border bg-card text-foreground text-xs font-medium shadow-xs">
+            <Edit3 className="w-3 h-3 text-emerald-600" />
+            <span>Edit SDG</span>
+          </span>
+        ),
+        explanation:
+          "Allows Research Coordinators to manually assign primary and secondary UN SDGs with custom justification, locking the alignment against automated batch changes.",
+      },
+      {
+        label: "Pending Review Safeguard",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-semibold">
+            <AlertTriangle className="w-3 h-3" />
+            <span>Pending Review</span>
+          </span>
+        ),
+        explanation:
+          "Indicates a study where academic text density was insufficient to reliably assign an SDG without hallucinating. The paper is held safely for coordinator verification.",
+      },
+      {
+        label: "Coordinator Locked Badge",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold">
+            <Lock className="w-3 h-3" />
+            <span>Coordinator Verified</span>
+          </span>
+        ),
+        explanation:
+          "Protects human-verified classifications from being overwritten by background AI batch reclassification sweeps.",
       },
     ],
   },

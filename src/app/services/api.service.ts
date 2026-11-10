@@ -678,9 +678,18 @@ class ApiService {
     title?: string;
     abstract?: string;
     journal?: string;
+    doi?: string;
   }): Promise<{
     success: boolean;
-    sdg: { primarySDG: string; secondarySDG: string; rationale: string; chedPriority: string };
+    publicationId?: string;
+    sdg: {
+      primarySDG: string;
+      secondarySDG?: string;
+      rationale: string;
+      chedPriority: string;
+      source?: string;
+      evidence?: any;
+    };
     audit: { indexing: string; jc3Points?: number; nbc461Points: number; isPredatory: number; confidence: string };
   }> {
     return this.request('/ai/classify-sdg', {
@@ -834,6 +843,8 @@ export interface SDGStatsResponse {
     papers: SDGPaperItem[];
   }>;
   totalClassified: number;
+  pendingReviewCount?: number;
+  pendingReviewPapers?: SDGPaperItem[];
   chedPriorities: Array<{
     priority: string;
     count: number;

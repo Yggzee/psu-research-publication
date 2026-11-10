@@ -13,6 +13,7 @@ import {
   ArrowUpRight,
   FileSpreadsheet,
   User,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
@@ -105,7 +106,11 @@ export function PublicationInspectorDrawer({
           return [rawSdgTags];
         }
       })()
-    : ["SDG 4: Quality Education", "SDG 9: Industry, Innovation and Infrastructure"];
+    : ["Pending Review"];
+
+  const isPendingReview =
+    sdgList.length === 0 ||
+    sdgList.every((s) => s === "Pending Review" || s === "General Research");
 
   const rawRationale = publication.sdg_rationale || publication.sdgRationale;
   let rationalesMap: Record<string, string> | null = null;
@@ -401,51 +406,67 @@ export function PublicationInspectorDrawer({
               {/* SDG Badges & Tailored Explanations */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mapped UN Goals & Alignment Explanations</h4>
-                <div className="grid grid-cols-1 gap-3">
-                  {sdgList.map((sdg, idx) => {
-                    const tailoredWhy = getRationaleForSDG(sdg);
-                    return (
-                      <div
-                        key={sdg}
-                        className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-card space-y-2.5 shadow-xs"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 ${idx === 0 ? "bg-emerald-600" : "bg-blue-600"}`}>
-                            {idx === 0 ? "1st" : "2nd"}
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold text-foreground">{sdg}</p>
-                            <p className="text-[11px] text-muted-foreground">
-                              {idx === 0 ? "Primary Institutional Alignment" : "Secondary Alignment"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {tailoredWhy ? (
-                          <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-xs">
-                            <span className="font-semibold text-emerald-800 dark:text-emerald-300 block mb-1">
-                              Why this research belongs to {sdg.split(":")[0]}:
-                            </span>
-                            <p className="text-emerald-950/90 dark:text-emerald-100/90 leading-relaxed italic">
-                              "{tailoredWhy}"
-                            </p>
-                          </div>
-                        ) : (
-                          rawRationale && !rawRationale.startsWith("{") && idx === 0 && (
-                            <div className="p-3 rounded-lg bg-muted/40 border border-border/50 text-xs">
-                              <span className="font-semibold text-foreground block mb-1">
-                                Evaluation Rationale:
-                              </span>
-                              <p className="text-muted-foreground leading-relaxed italic">
-                                "{rawRationale}"
-                              </p>
+                {isPendingReview ? (
+                  <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-500/5 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        SDG Classification Pending Review
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-800/90 dark:text-amber-300/90 leading-relaxed">
+                      This publication requires higher academic evidence density to prevent misclassification. You can assign the UN SDG manually on the Publication Detail page.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {sdgList
+                      .filter((sdg) => sdg !== "Pending Review")
+                      .map((sdg, idx) => {
+                        const tailoredWhy = getRationaleForSDG(sdg);
+                        return (
+                          <div
+                            key={sdg}
+                            className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-card space-y-2.5 shadow-xs"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 ${idx === 0 ? "bg-emerald-600" : "bg-blue-600"}`}>
+                                {idx === 0 ? "1st" : "2nd"}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold text-foreground">{sdg}</p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {idx === 0 ? "Primary Institutional Alignment" : "Secondary Alignment"}
+                                </p>
+                              </div>
                             </div>
-                          )
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+
+                            {tailoredWhy ? (
+                              <div className="p-3 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-xs">
+                                <span className="font-semibold text-emerald-800 dark:text-emerald-300 block mb-1">
+                                  Why this research belongs to {sdg.split(":")[0]}:
+                                </span>
+                                <p className="text-emerald-950/90 dark:text-emerald-100/90 leading-relaxed italic">
+                                  "{tailoredWhy}"
+                                </p>
+                              </div>
+                            ) : (
+                              rawRationale && !rawRationale.startsWith("{") && idx === 0 && (
+                                <div className="p-3 rounded-lg bg-muted/40 border border-border/50 text-xs">
+                                  <span className="font-semibold text-foreground block mb-1">
+                                    Evaluation Rationale:
+                                  </span>
+                                  <p className="text-muted-foreground leading-relaxed italic">
+                                    "{rawRationale}"
+                                  </p>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
 
               {/* CHED Priority */}

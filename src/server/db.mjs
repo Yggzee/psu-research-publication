@@ -219,6 +219,8 @@ export function initDatabase() {
   // Intelligence & Capstone Innovations Migrations
   try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_tags TEXT`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_rationale TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_source TEXT DEFAULT 'auto'`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_evidence TEXT`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN journal_indexing TEXT`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN is_predatory_flag INTEGER DEFAULT 0`); } catch {}
   try { db.exec(`ALTER TABLE publications ADD COLUMN nbc461_points REAL DEFAULT 0.0`); } catch {}
@@ -469,23 +471,26 @@ export function migrateResearcherPasswordsToScrypt(dbInstance = db) {
 export function autoBackfillMissingSDGs() {
   try {
     const unclassified = db.prepare(`
-      SELECT id, title, abstract FROM publications
+      SELECT id, title, abstract, journal, doi FROM publications
       WHERE (sdg_tags IS NULL OR sdg_tags = '' OR sdg_tags = '[]' OR sdg_tags = '["General Research"]')
       AND approval_status = 'approved'
+      AND (sdg_source IS NULL OR sdg_source != 'manual_override')
     `).all();
 
     if (unclassified.length > 0) {
       console.log(`[SDG Backfill] Auto-classifying ${unclassified.length} publications...`);
       for (const pub of unclassified) {
         const classified = localHeuristicSDG(pub.title || '', pub.abstract || '');
-        const tags = JSON.stringify([classified.primarySDG, ...(classified.secondarySDG ? [classified.secondarySDG] : [])]);
+        const tags = JSON.stringify([classified.primarySDG, ...(classified.secondarySDG ? [classified.secondarySDG] : [])].filter(Boolean));
         const rationale = classified.rationale || '';
         const ched = classified.chedPriority || '';
+        const evidenceJson = JSON.stringify(classified.evidence || null);
+        const source = classified.source || 'auto';
         db.prepare(`
           UPDATE publications
-          SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?
+          SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?, sdg_source = ?, sdg_evidence = ?
           WHERE id = ?
-        `).run(tags, rationale, ched, pub.id);
+        `).run(tags, rationale, ched, source, evidenceJson, pub.id);
       }
       console.log(`[SDG Backfill] Finished auto-classifying ${unclassified.length} publications.`);
     }
