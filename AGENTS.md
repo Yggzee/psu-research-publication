@@ -65,6 +65,10 @@ Always enforce the following standardized terminology and formatting across all 
 6. **Publications (Published Works Only):**
    - Refer to all retrieved and indexed scholarly works as **"Publications"** (never "Papers" or "Scholarly Works").
    - On the researcher's publications page (`InstructorPublicationsPage.tsx`), use **"My Publications"** (page header), **"My Published Research"** (Tab 1), **"Institutional Repository"** (Tab 2), and **"Add Publication"** (action button/modal). Do not include an option to add ongoing/in-progress unpublished research.
+7. **SDG Alignment & Goals:**
+   - Always refer to SDG analytics as **"SDG Alignment"** (tab/feature name) and individual targets as **"SDG Goals"** (never use "SDG Radar" or "SDG Matrix").
+8. **Proponent Attribution:**
+   - Always maintain the proponent developer credit in the public repository footer: `"Developed by Julius Oscar Moreno • PSU Asingan Campus"`.
 
 ## Mandatory UI & Workflow Rules
 
@@ -94,6 +98,10 @@ Always enforce the following standardized terminology and formatting across all 
 8. **Pre-Task Workspace Skill Evaluation (`.agents/skills`):**
    - At the start of every user prompt, proactively inspect the available workspace skills in `.agents/skills` (e.g., `grill-me`, `frontend-design`, `web-search`, `golang-data-structures`, etc.) to determine if any skill applies directly to the user's request.
    - If a relevant skill exists (such as `/grill-me` for requirements alignment and design interviews, `frontend-design` for distinctive UI/UX design, or `web-search` for external discovery), activate and execute that skill first before proceeding with code changes or actual implementation work.
+9. **Windows PowerShell Command Tooling (`npm.cmd`):**
+   - When executing npm scripts via terminal commands in Windows PowerShell environments, always use `npm.cmd` (e.g., `npm.cmd run build`) rather than `npm` to avoid `npm.ps1` execution policy restrictions (`PSSecurityException`).
+10. **Zero-Cost Knowledge Graphing (`graphify`):**
+   - The knowledge graph must remain 100% free and run on local AST parsing without external LLM API keys. Maintain `.graphifyignore` to exclude non-code documents, images, and vaults from requiring semantic extraction. Always use `graphify update .`, `graphify .`, or `graphify cluster-only . --no-label`.
 
 ## Project Guidelines
 

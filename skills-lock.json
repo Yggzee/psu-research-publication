@@ -31,6 +31,12 @@
       "skillPath": "skills/media-use/SKILL.md",
       "computedHash": "21a106fab9589a7df99fe9b6d1564a0552f8f8cb00b69dbd21e1133a78c1b5cc"
     },
+    "prompt-master": {
+      "source": "nidhinjs/prompt-master",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "57fbc33ae5c317b5fac21249202b29173ebf5b3eeb58ffc681879d5420e228b2"
+    },
     "web-search": {
       "source": "101-skills/superpowers",
       "sourceType": "github",

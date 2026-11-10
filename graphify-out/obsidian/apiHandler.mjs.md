@@ -1,0 +1,87 @@
+---
+source_file: "src/server/apiHandler.mjs"
+type: "code"
+community: "render-class.mjs"
+location: "L1"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/render-classmjs
+---
+
+# apiHandler.mjs
+
+## Connections
+- [[LoginAttemptTracker]] - `imports` [EXTRACTED]
+- [[activeCitationSyncJobs]] - `contains` [EXTRACTED]
+- [[aiService.mjs]] - `imports_from` [EXTRACTED]
+- [[applySecurityHeaders()]] - `imports` [EXTRACTED]
+- [[askCampusIntelligence()]] - `imports` [EXTRACTED]
+- [[attachTokenUsage()]] - `contains` [EXTRACTED]
+- [[auditJournalReputation()]] - `imports` [EXTRACTED]
+- [[authHelper.mjs]] - `re_exports` [EXTRACTED]
+- [[authenticateCaller()]] - `imports` [EXTRACTED]
+- [[calculateSynergy()]] - `imports` [EXTRACTED]
+- [[canCallerAccessPublication()]] - `imports` [EXTRACTED]
+- [[canCallerModifyPublication()]] - `imports` [EXTRACTED]
+- [[canCallerModifyResearcher()]] - `imports` [EXTRACTED]
+- [[classifyPublicationSDG()]] - `imports` [EXTRACTED]
+- [[cleanDuplicates.mjs]] - `imports_from` [EXTRACTED]
+- [[cleanupOrphanedPublications()]] - `contains` [EXTRACTED]
+- [[computePublicationCitationYears()]] - `contains` [EXTRACTED]
+- [[db]] - `imports` [EXTRACTED]
+- [[db.mjs]] - `imports_from` [EXTRACTED]
+- [[dbReadyPromise]] - `imports` [EXTRACTED]
+- [[deduplicateDatabase()]] - `imports` [EXTRACTED]
+- [[deleteResearcherPublications()]] - `contains` [EXTRACTED]
+- [[emailService.mjs]] - `imports_from` [EXTRACTED]
+- [[enqueuePublicationCitationSync()]] - `contains` [EXTRACTED]
+- [[enrichBatchWithCrossRef()]] - `imports` [EXTRACTED]
+- [[enrichPaperWithCrossRef()]] - `imports` [EXTRACTED]
+- [[fetchApifyTokenUsage()]] - `contains` [EXTRACTED]
+- [[fetchCitingPapersFromOpenAlex()]] - `imports` [EXTRACTED]
+- [[filterPublicationsForCaller()]] - `imports` [EXTRACTED]
+- [[getActiveApifyTokenRow()]] - `contains` [EXTRACTED]
+- [[getAppBaseUrl()]] - `imports` [EXTRACTED]
+- [[handleApiRequest()]] - `contains` [EXTRACTED]
+- [[hashPassword()]] - `imports` [EXTRACTED]
+- [[inferCitingPaperYear()]] - `contains` [EXTRACTED]
+- [[isCallerAdmin()]] - `imports` [EXTRACTED]
+- [[isCallerPublicationOwner()]] - `imports` [EXTRACTED]
+- [[isInitialsToken()]] - `imports` [EXTRACTED]
+- [[isTursoConfigured]] - `imports` [EXTRACTED]
+- [[levenshteinDistance()]] - `imports` [EXTRACTED]
+- [[localHeuristicSDG()]] - `imports` [EXTRACTED]
+- [[loginAttemptTracker_1]] - `imports` [EXTRACTED]
+- [[matchAuthorName()]] - `imports` [EXTRACTED]
+- [[matchesResearcher()_1]] - `imports` [EXTRACTED]
+- [[normalizeTitle()_1]] - `imports` [EXTRACTED]
+- [[prod.mjs]] - `imports_from` [EXTRACTED]
+- [[pushTableToTurso()]] - `imports` [EXTRACTED]
+- [[rateLimiter]] - `imports` [EXTRACTED]
+- [[rateLimiter.mjs]] - `imports_from` [EXTRACTED]
+- [[recalculateAllResearcherStats()]] - `contains` [EXTRACTED]
+- [[ref_node_crypto]] - `imports_from` [EXTRACTED]
+- [[rehydrateFromTurso()]] - `imports` [EXTRACTED]
+- [[runInTransaction()]] - `imports` [EXTRACTED]
+- [[sanitizePublicationInput()]] - `imports` [EXTRACTED]
+- [[sanitizeResearcherInput()]] - `imports` [EXTRACTED]
+- [[scholarScraper.mjs]] - `imports_from` [EXTRACTED]
+- [[scrapeGoogleScholarCitations()]] - `imports` [EXTRACTED]
+- [[scrapeGoogleScholarDirect()]] - `imports` [EXTRACTED]
+- [[scrapeGoogleScholarProfile()]] - `imports` [EXTRACTED]
+- [[searchOpenAlexAndCrossRef()]] - `imports` [EXTRACTED]
+- [[securityHeaders.mjs]] - `imports_from` [EXTRACTED]
+- [[sendAdminInvitationEmail()]] - `imports` [EXTRACTED]
+- [[sendRegistrationApprovedEmail()]] - `imports` [EXTRACTED]
+- [[sendSelfRegisterVerificationEmail()]] - `imports` [EXTRACTED]
+- [[signSessionToken()]] - `imports` [EXTRACTED]
+- [[syncSinglePublicationCitations()]] - `contains` [EXTRACTED]
+- [[syncedPublicationsCache]] - `contains` [EXTRACTED]
+- [[turso.mjs]] - `imports_from` [EXTRACTED]
+- [[updateResearcherStats()]] - `contains` [EXTRACTED]
+- [[verifyPassword()]] - `imports` [EXTRACTED]
+- [[verifySessionToken()]] - `imports` [EXTRACTED]
+- [[vitePlugin.mjs]] - `dynamic_import` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/render-classmjs
