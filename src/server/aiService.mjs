@@ -775,6 +775,107 @@ export const UN_SDG_DEFINITIONS = [
 ];
 
 /**
+ * Helper to build unique, paper-tailored analytical rationale for an SDG match
+ */
+export function buildDynamicSDGRationale(sdg, title, abstract = '', matchedKeywords = []) {
+  const cleanTitle = (title || '').replace(/^\[.*?\]\s*/, '').replace(/["']/g, '').trim();
+  const shortTitle = cleanTitle.length > 75 ? cleanTitle.slice(0, 72) + '...' : cleanTitle;
+  const rawTerms = Array.isArray(matchedKeywords)
+    ? matchedKeywords.map(m => String(m).replace(/\s*\([^)]*\)/g, '').trim()).filter(Boolean)
+    : [];
+  const uniqueTerms = Array.from(new Set(rawTerms)).slice(0, 3);
+  const kwList = uniqueTerms.join(', ');
+
+  const sdgNumMatch = String(sdg || '').match(/\bSDG\s*(\d{1,2})\b/i);
+  const num = sdgNumMatch ? parseInt(sdgNumMatch[1], 10) : 0;
+
+  if (num === 4) {
+    if (kwList) {
+      return `Investigates educational intervention focusing on ${kwList} in "${shortTitle}", contributing directly to instructional quality, pedagogical methods, and student learning outcomes.`;
+    }
+    return `Advances Quality Education by providing classroom interventions, curriculum strategies, and measurable learning competencies in "${shortTitle}".`;
+  }
+
+  if (num === 9) {
+    if (kwList) {
+      return `Introduces technological and infrastructure innovations involving ${kwList} in "${shortTitle}", strengthening regional technical capacity, applied computing, and system development.`;
+    }
+    return `Fosters Industry, Innovation, and Infrastructure by demonstrating technical methodologies, software architectures, and automated tools in "${shortTitle}".`;
+  }
+
+  if (num === 3) {
+    if (kwList) {
+      return `Addresses healthcare protocols and clinical well-being through analysis of ${kwList} in "${shortTitle}", supporting community health safety and medical preparedness.`;
+    }
+    return `Promotes Good Health and Well-being by contributing empirical findings, clinical safety measures, and health outcomes in "${shortTitle}".`;
+  }
+
+  if (num === 8) {
+    if (kwList) {
+      return `Strengthens economic productivity and graduate career outcomes through investigation of ${kwList} in "${shortTitle}", supporting workforce readiness and professional training.`;
+    }
+    return `Supports Decent Work and Economic Growth by enhancing workforce competencies, degree program relevance, and regional employment skills in "${shortTitle}".`;
+  }
+
+  if (num === 2) {
+    if (kwList) {
+      return `Contributes to agricultural sustainability and food supply resilience by examining ${kwList} in "${shortTitle}", supporting regional crop yield and farming efficiency.`;
+    }
+    return `Advances Zero Hunger by optimizing agricultural practices, post-harvest methodologies, and regional food security in "${shortTitle}".`;
+  }
+
+  if (num === 12) {
+    if (kwList) {
+      return `Encourages responsible resource management and sustainable consumption through investigation of ${kwList} in "${shortTitle}", minimizing institutional waste.`;
+    }
+    return `Supports Responsible Consumption and Production by promoting cost-effective operational practices and sustainable resource utilization in "${shortTitle}".`;
+  }
+
+  if (num === 13) {
+    if (kwList) {
+      return `Contributes to environmental resilience and climate adaptation by addressing ${kwList} in "${shortTitle}", strengthening regional ecological protection.`;
+    }
+    return `Advances Climate Action by providing environmental monitoring and sustainable ecological interventions in "${shortTitle}".`;
+  }
+
+  if (num === 1) {
+    return `Focuses on socio-economic interventions and vulnerability reduction in "${shortTitle}", supporting institutional programs for community poverty alleviation.`;
+  }
+  if (num === 5) {
+    return `Promotes gender equity and inclusive participation through analytical investigation in "${shortTitle}", addressing gender balance and equality in practice.`;
+  }
+  if (num === 6) {
+    return `Contributes to clean water access, quality monitoring, and sanitation management through research findings in "${shortTitle}".`;
+  }
+  if (num === 7) {
+    return `Develops energy efficiency applications, renewable technologies, or power conservation solutions in "${shortTitle}".`;
+  }
+  if (num === 10) {
+    return `Helps bridge social, learning, or demographic inequalities by evaluating targeted interventions in "${shortTitle}".`;
+  }
+  if (num === 11) {
+    return `Contributes to sustainable municipal planning, community resilience, and local regional development in "${shortTitle}".`;
+  }
+  if (num === 14) {
+    return `Protects aquatic and marine ecosystems through scientific monitoring, water biology, or aquaculture management in "${shortTitle}".`;
+  }
+  if (num === 15) {
+    return `Supports terrestrial biodiversity, sustainable soil management, and regional ecological conservation in "${shortTitle}".`;
+  }
+  if (num === 16) {
+    return `Promotes institutional transparency, justice, and effective governance through systematic inquiry in "${shortTitle}".`;
+  }
+  if (num === 17) {
+    return `Fosters multi-stakeholder partnerships and collaborative research networks for sustainable goals in "${shortTitle}".`;
+  }
+
+  if (kwList) {
+    return `Demonstrates verified institutional research contributing to ${sdg} through academic investigation of ${kwList} in "${shortTitle}".`;
+  }
+  return `Advances ${sdg} through verified institutional research and academic development in "${shortTitle}".`;
+}
+
+/**
  * High-Precision Academic Classifier for UN Sustainable Development Goals (SDGs 1-17)
  * Employs Title Weighting (3x), Abstract Weighting (1x), Whole-Word Boundary Regex,
  * Negative Keyword Exclusion, and Strict Confidence Thresholding (Zero Hallucination).
@@ -879,11 +980,13 @@ export function localHeuristicSDG(title = '', abstract = '', keywordsText = '') 
     : null;
   const secondarySDG = secondaryItem ? secondaryItem.sdg : null;
 
+  const primaryTerms = (scored[0].matchedKeywords || []).map(m => m.replace(/\s*\([^)]*\)/g, ''));
   const rationales = {
-    [primarySDG]: scored[0].rationale,
+    [primarySDG]: buildDynamicSDGRationale(primarySDG, title, abstract, primaryTerms),
   };
   if (secondarySDG && secondaryItem) {
-    rationales[secondarySDG] = secondaryItem.rationale;
+    const secondaryTerms = (secondaryItem.matchedKeywords || []).map(m => m.replace(/\s*\([^)]*\)/g, ''));
+    rationales[secondarySDG] = buildDynamicSDGRationale(secondarySDG, title, abstract, secondaryTerms);
   }
 
   return {
@@ -998,8 +1101,8 @@ Abstract: "${cleanAbstract ? cleanAbstract.slice(0, 1500) : 'N/A'}"
 Identify:
 1. The most accurate Primary UN SDG (Format: "SDG X: Name" from the 17 official UN SDGs, or "Pending Review" if insufficient information)
 2. An appropriate Secondary UN SDG (Format: "SDG Y: Name" or null)
-3. "primaryRationale": A 1-sentence explanation of why this research advances the Primary SDG.
-4. "secondaryRationale": A 1-sentence explanation of why this research advances the Secondary SDG (or empty if none).
+3. "primaryRationale": A unique, paper-specific 1-sentence analytical explanation detailing how the specific findings, methodologies, or interventions in this paper directly advance the Primary SDG (DO NOT use generic boilerplate).
+4. "secondaryRationale": A unique, paper-specific 1-sentence analytical explanation for the Secondary SDG (or empty if none).
 5. The corresponding Philippine CHED / DOST Research Priority.
 
 Respond with ONLY raw valid JSON:
@@ -1308,6 +1411,7 @@ CRITICAL INSTRUCTIONS (USER PREFERENCE):
 3. NO FORMAL FILLER: Never start with "Greetings! I am the PSU Asingan Academic Intelligence Assistant...". Get straight to the answer.
 4. CITATIONS: Only cite research papers (using [Ref X]) if the user's question is explicitly asking about research papers, authors, topics, or study results. DO NOT cite random research papers when answering general questions about how points or system features work.
 5. NO ASTERISK CLUTTER: Do not bold numbers or over-wrap terms in asterisks.
+6. STRICT PSU ASINGAN GROUNDING: All [Ref X] publications in the context below are verified academic studies published by PSU Asingan faculty and researchers. When asked what topics, themes, or subjects our publications cover, describe ONLY the topics of our campus's actual publications. Never discuss or hallucinate external topics from external papers (such as dark matter, nanofibrous membranes, prawns, or pyrolysis) unless specifically and directly asked.
 
 CURRENT USER & SYSTEM CONTEXT:
 - ${userContextLine}
@@ -1409,7 +1513,17 @@ USER QUESTION: "${trimmedQ}"`;
       };
     }
 
-    // 4. Local RAG Retrieval & Synthesis
+    // 4. Check if question asks about research topics or repository subjects
+    if (/\b(topics?|themes?|areas? of research|what.*(study|studies|papers?|publications?).*about|research.*cover|anong.*(topic|topics|aral|pinag-aaralan))\b/i.test(qLower)) {
+      const pubTitles = (publications || []).slice(0, 10).map((p, i) => `[Ref ${i + 1}] "${p.title}" (${p.year || 'N/A'}) by ${Array.isArray(p.authors) ? p.authors.join(', ') : p.authors || 'PSU Faculty'}`);
+      return {
+        answer: `Our verified campus publications at PSU Asingan focus on the following research topics and publications:\n\n${pubTitles.join('\n')}\n\nThese research works center on instructional game development, mathematics and modular arithmetic learning tools, educational technology, academic performance, and institutional community research.`,
+        citedPapers: (publications || []).slice(0, 5),
+        source: 'local-rag',
+      };
+    }
+
+    // 5. Local RAG Retrieval & Synthesis
     const words = qLower.split(/[^a-z0-9]+/).filter(w => w.length > 2 && !RETRIEVAL_STOPWORDS.has(w));
 
     if (words.length === 0) {

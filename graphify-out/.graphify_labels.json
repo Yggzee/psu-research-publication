@@ -1,6 +1,5 @@
 {
   "0": "compileWorkflowInternal",
-  "1": "check-update.mjs",
   "2": "render-erd.mjs",
   "3": "geometry.mjs",
   "4": "dataflow-compiler.mjs",

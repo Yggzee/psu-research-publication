@@ -54,12 +54,27 @@ export function Dashboard() {
     deptYearStats: [],
   });
 
+  const recordedYears = (dashboardData.deptYearStats || [])
+    .map((s) => Number(s.year))
+    .filter((y) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
+  const minRecordedYear = recordedYears.length > 0 ? Math.min(...recordedYears) : 2011;
+
   const fetchStats = async () => {
     setIsLoading(true);
     try {
       const data = await apiService.getDashboardStats();
       if (data) {
         setDashboardData(data);
+        const yList = (data.deptYearStats || [])
+          .map((s: any) => Number(s.year))
+          .filter((y: number) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
+        if (yList.length > 0) {
+          const earliest = Math.min(...yList);
+          setYearRange((prev) => ({
+            start: Math.min(prev.start, earliest),
+            end: Math.max(prev.end, new Date().getFullYear()),
+          }));
+        }
       }
     } catch (err) {
       console.warn("Failed to fetch dashboard stats from database:", err);
@@ -94,11 +109,10 @@ export function Dashboard() {
   });
 
   const handleYearBack = () => {
-    const MIN_YEAR = 2015;
     const RANGE_SIZE = 5;
     const newEnd = yearRange.start - 1;
-    if (newEnd < MIN_YEAR) return;
-    const newStart = Math.max(newEnd - RANGE_SIZE + 1, MIN_YEAR);
+    if (newEnd < minRecordedYear) return;
+    const newStart = Math.max(newEnd - RANGE_SIZE + 1, minRecordedYear);
     setYearRange({ start: newStart, end: newEnd });
   };
 
@@ -254,14 +268,14 @@ export function Dashboard() {
                 type="button"
                 onClick={() => {
                   const currentYr = new Date().getFullYear();
-                  setYearRange({ start: 2015, end: currentYr });
+                  setYearRange({ start: minRecordedYear, end: currentYr });
                 }}
-                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${yearRange.start === 2015 && yearRange.end - yearRange.start > 9
+                className={`px-2 py-1 rounded-md font-medium transition-all cursor-pointer ${yearRange.start === minRecordedYear && yearRange.end - yearRange.start >= 9
                   ? "bg-card text-foreground font-semibold shadow-2xs"
                   : "text-muted-foreground hover:text-foreground"
                   }`}
               >
-                All
+                All ({minRecordedYear}–{new Date().getFullYear()})
               </button>
             </div>
 
@@ -271,9 +285,9 @@ export function Dashboard() {
                 variant="ghost"
                 size="icon"
                 onClick={handleYearBack}
-                disabled={yearRange.start <= 2015}
+                disabled={yearRange.start <= minRecordedYear}
                 className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                title="Previous 5 years"
+                title={`Previous 5 years (Earliest: ${minRecordedYear})`}
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>

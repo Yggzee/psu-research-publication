@@ -267,6 +267,15 @@ export function AdminPage() {
 
   useEffect(() => {
     loadData();
+    const handleUpdate = () => loadData();
+    window.addEventListener("researchers-updated", handleUpdate);
+    window.addEventListener("faculty-updated", handleUpdate);
+    window.addEventListener("research-records-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("researchers-updated", handleUpdate);
+      window.removeEventListener("faculty-updated", handleUpdate);
+      window.removeEventListener("research-records-updated", handleUpdate);
+    };
   }, []);
 
   const openScholarReview = (
@@ -1170,41 +1179,6 @@ export function AdminPage() {
       {activeTab === "integrations" && (
         <div className="space-y-6">
           <SectionCard
-            title="Campus Research Unit Governance"
-            description="Official research monitoring & quality assurance authority for PSU Asingan Campus"
-          >
-            <div className="p-4 sm:p-5 rounded-xl bg-muted/20 border border-border/70 space-y-3 text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-border/50">
-                <span className="font-semibold text-foreground">Designated Research Coordinator:</span>
-                <span className="font-bold text-brand text-sm inline-flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-amber-500" />
-                  Sir Rodelio M. Garin
-                </span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-muted-foreground pt-1">
-                <div>
-                  <span className="block text-[11px] font-semibold text-foreground">Office & Campus Unit</span>
-                  <span>Office of the Campus Research Coordinator • PSU Asingan</span>
-                </div>
-                <div>
-                  <span className="block text-[11px] font-semibold text-foreground">Faculty & Department</span>
-                  <span>PSU-002 • Department of Information Technology (BSIT)</span>
-                </div>
-                <div>
-                  <span className="block text-[11px] font-semibold text-foreground">Reporting Standard</span>
-                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                    PSU RDO Target Apportionments & Citation Matrix
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[11px] font-semibold text-foreground">SDG Alignment Model</span>
-                  <span>AI Multilabel Classifier (17 UN SDGs)</span>
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard
             title="Academic Index Scraping Tokens"
             description="Manage API token rotation and monthly usage limits for resilient academic literature imports"
           >
@@ -1587,6 +1561,9 @@ export function AdminPage() {
           onImportSuccess={async () => {
             await loadData();
             resetForm();
+            window.dispatchEvent(new CustomEvent("researchers-updated"));
+            window.dispatchEvent(new CustomEvent("faculty-updated"));
+            window.dispatchEvent(new CustomEvent("research-records-updated"));
           }}
         />
       )}

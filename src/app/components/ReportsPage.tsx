@@ -2,17 +2,12 @@ import { useState, useEffect, useMemo } from "react";
 import {
     FileBarChart,
     Download,
-    Calendar,
     TrendingUp,
     Users,
     FileText,
     Award,
-    Filter,
     RefreshCw,
     Printer,
-    ChevronDown,
-    FolderArchive,
-    FolderOpen,
     CheckSquare,
     Square,
     Search,
@@ -23,18 +18,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { apiService, type DashboardStatsResponse } from "../services/api.service";
 import { PageHeader, StatCard, PageTabs, StatusBadge, EmptyState } from "./common";
 import { exportPerResearcherReportsByDepartment } from "../utils/excelExportUtils";
 import { matchesResearcher } from "../utils/facultyUtils";
 
-type ReportType = "summary" | "researcher" | "department" | "yearly" | "accreditation";
+type ReportType = "spreadsheets" | "accreditation" | "summary";
 
 export function ReportsPage() {
-    const [selectedReport, setSelectedReport] = useState<ReportType>("summary");
-    const [selectedYear, setSelectedYear] = useState<string>("all");
+    const [selectedReport, setSelectedReport] = useState<ReportType>("spreadsheets");
     const [exportYear, setExportYear] = useState<string>("all");
     const [exportDepartment, setExportDepartment] = useState<string>("all");
     const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +36,6 @@ export function ReportsPage() {
 
     // Multi-researcher selection state for per-researcher Excel export
     const [selectedResearcherIds, setSelectedResearcherIds] = useState<string[]>([]);
-    const [showResearcherPicker, setShowResearcherPicker] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
 
     // Database state
@@ -70,7 +62,6 @@ export function ReportsPage() {
             if (stats) setDashboardData(stats);
             if (Array.isArray(researchers)) {
                 setResearchersList(researchers);
-                // By default, none is selected
                 setSelectedResearcherIds((prev) =>
                     prev.length > 0
                         ? prev.filter((id) =>
@@ -125,18 +116,6 @@ export function ReportsPage() {
     // Department order
     const departmentOrder = ["BSIT", "BSBA", "BEE", "BTLED", "BIT", "BSE", "Non-Faculty"];
 
-    // Department stats from researchers list
-    const deptStats: { [key: string]: { researchers: number; citations: number; publications: number } } = {};
-    researchersList.forEach((r: any) => {
-        const dept = r.department || "Unassigned";
-        if (!deptStats[dept]) {
-            deptStats[dept] = { researchers: 0, citations: 0, publications: 0 };
-        }
-        deptStats[dept].researchers += 1;
-        deptStats[dept].citations += r.totalCitations || 0;
-        deptStats[dept].publications += r.totalPublications || 0;
-    });
-
     // Researchers filtered by department & search inside the export picker
     const pickerFilteredResearchers = useMemo(() => {
         return researchersList.filter((r: any) => {
@@ -156,14 +135,6 @@ export function ReportsPage() {
             selectedResearcherIds.includes(r.instructorId || r.id)
         );
     }, [researchersList, selectedResearcherIds]);
-
-    const selectedDepartmentsPreview = useMemo(() => {
-        const depts = new Set<string>();
-        selectedResearchersObjects.forEach((r: any) => {
-            depts.add(r.department || "Unassigned");
-        });
-        return Array.from(depts);
-    }, [selectedResearchersObjects]);
 
     const toggleResearcherSelection = (id: string) => {
         setSelectedResearcherIds((prev) =>
@@ -188,12 +159,12 @@ export function ReportsPage() {
 
     const handleDownload = async () => {
         if (selectedResearchersObjects.length === 0) {
-            toast.error("Please select at least one faculty member to export.");
+            toast.error("Please select at least one researcher to export.");
             return;
         }
 
         setIsExporting(true);
-        setExportProgressText("Preparing publications & citation sheets for selected faculty...");
+        setExportProgressText("Preparing publications & citation sheets for selected researchers...");
 
         try {
             // Find all publications belonging to the selected researchers
@@ -239,7 +210,7 @@ export function ReportsPage() {
             setExportProgressText(
                 selectedResearchersObjects.length === 1
                     ? `Generating Excel report (.xlsx) for ${selectedResearchersObjects[0].name}...`
-                    : `Packaging ${selectedResearchersObjects.length} faculty reports into ZIP...`
+                    : `Packaging ${selectedResearchersObjects.length} researcher reports into ZIP...`
             );
 
             const res = await exportPerResearcherReportsByDepartment({
@@ -248,17 +219,18 @@ export function ReportsPage() {
                 exportYear,
             });
 
-            if (!res.isZip) {
+            if (res.success) {
                 toast.success(
-                    `Exported Excel report (.xlsx) for ${selectedResearchersObjects[0]?.name || "selected faculty"}`
+                    res.mode === "single"
+                        ? `Exported Excel spreadsheet for ${selectedResearchersObjects[0].name}`
+                        : `Successfully generated and packaged ${res.count} researcher spreadsheets into ${res.filename}`
                 );
             } else {
-                toast.success(
-                    `Exported ${res.exportedFiles} faculty Excel reports in ZIP archive (${res.departments.join(", ")})`
-                );
+                toast.error("Failed to generate research spreadsheets.");
             }
         } catch (err: any) {
-            toast.error(err?.message || "Failed to export Excel reports.");
+            console.error("Export error:", err);
+            toast.error(err.message || "An unexpected error occurred while preparing spreadsheets.");
         } finally {
             setIsExporting(false);
             setExportProgressText(null);
@@ -266,19 +238,17 @@ export function ReportsPage() {
     };
 
     const tabs = [
+        { id: "spreadsheets", label: "Faculty Spreadsheets", icon: FileSpreadsheet, count: researchersList.length },
+        { id: "accreditation", label: "Accreditation & SUC Matrix", icon: Award, count: publicationsList.length },
         { id: "summary", label: "Executive Summary", icon: FileBarChart },
-        { id: "researcher", label: "By Researcher", count: researchersList.length, icon: Users },
-        { id: "department", label: "By Department", count: Object.keys(deptStats).length, icon: TrendingUp },
-        { id: "yearly", label: "Yearly Trends", count: years.length, icon: Calendar },
-        { id: "accreditation", label: "SUC & AACCUP Exhibit", icon: Award },
     ];
 
     return (
-        <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="space-y-6 max-w-7xl mx-auto pb-10">
             {/* 1. Page Header */}
             <PageHeader
                 title="Research Reports & Exports"
-                description="Official institutional research matrices and faculty publication spreadsheets"
+                description="Official institutional research matrices and researcher publication spreadsheets"
                 actions={
                     <Button
                         variant="outline"
@@ -293,469 +263,211 @@ export function ReportsPage() {
                 }
             />
 
-            {/* 2. Faculty Research Spreadsheet Generator (Cohesive Export Control following Gestalt Proximity) */}
-            <Card className="border-border/60 shadow-xs">
-                <CardHeader className="pb-3 border-b border-border/60">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div>
-                            <CardTitle className="text-base font-bold flex items-center gap-2">
-                                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                                <span>Export Faculty Research Spreadsheets</span>
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                                Select faculty members to download their individual research & citation Excel files. Exporting 1 faculty member downloads 1 Excel file (.xlsx); multiple faculty are packaged in a ZIP archive.
-                            </CardDescription>
-                        </div>
-                        {selectedResearchersObjects.length > 0 && (
-                            <Badge className="bg-emerald-600 text-white font-mono text-xs px-2.5 py-1 w-fit">
-                                {selectedResearchersObjects.length} Faculty Selected
-                            </Badge>
-                        )}
-                    </div>
-                </CardHeader>
-
-                <CardContent className="p-4 sm:p-5 space-y-4">
-                    {/* Natural Mapping Filter & Scope Bar */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-2.5 flex-wrap flex-1">
-                            {/* Department Dropdown */}
-                            <div className="w-full sm:w-44">
-                                <Select value={exportDepartment} onValueChange={handleDepartmentScopeChange}>
-                                    <SelectTrigger className="h-8 text-xs w-full">
-                                        <SelectValue placeholder="All Departments" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Departments</SelectItem>
-                                        {departmentOrder.map((dept) => (
-                                            <SelectItem key={dept} value={dept}>
-                                                {dept} Only
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Year Dropdown */}
-                            <div className="w-full sm:w-32">
-                                <Select value={exportYear} onValueChange={setExportYear}>
-                                    <SelectTrigger className="h-8 text-xs w-full">
-                                        <SelectValue placeholder="All Years" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Years</SelectItem>
-                                        {years.map((y) => (
-                                            <SelectItem key={y} value={y.toString()}>
-                                                {y}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Faculty Name Search Filter */}
-                            <div className="relative flex-1 min-w-[200px] w-full sm:w-auto">
-                                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    value={pickerSearch}
-                                    onChange={(e) => setPickerSearch(e.target.value)}
-                                    placeholder="Filter faculty by name..."
-                                    className="pl-8 h-8 text-xs w-full"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Selection Controls (Select All / Clear) */}
-                        <div className="flex items-center gap-2 shrink-0">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={selectAllVisibleResearchers}
-                                className="h-8 text-xs gap-1.5"
-                            >
-                                <CheckSquare className="w-3.5 h-3.5 text-brand" />
-                                <span>
-                                    {selectedResearcherIds.length === pickerFilteredResearchers.length && pickerFilteredResearchers.length > 0
-                                        ? "Deselect All"
-                                        : `Select All (${pickerFilteredResearchers.length})`}
-                                </span>
-                            </Button>
-                            {selectedResearcherIds.length > 0 && (
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setSelectedResearcherIds([])}
-                                    className="h-8 text-xs text-muted-foreground hover:text-foreground"
-                                >
-                                    Clear Selection
-                                </Button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Faculty Checkbox Selection Grid */}
-                    {pickerFilteredResearchers.length === 0 ? (
-                        <div className="p-6 text-center border border-dashed rounded-xl bg-muted/20">
-                            <p className="text-xs text-muted-foreground">
-                                No faculty members found for the current department or search filter.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
-                            {pickerFilteredResearchers.map((r: any) => {
-                                const rKey = r.instructorId || r.id;
-                                const isChecked = selectedResearcherIds.includes(rKey);
-                                const pubCount = publicationsList.filter((p) => matchesResearcher(p, r)).length;
-                                const citCount = publicationsList
-                                    .filter((p) => matchesResearcher(p, r))
-                                    .reduce((sum, p) => sum + (p.citations || 0), 0);
-
-                                return (
-                                    <div
-                                        key={rKey}
-                                        onClick={() => toggleResearcherSelection(rKey)}
-                                        className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2.5 cursor-pointer transition-all ${isChecked
-                                            ? "border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/20 text-foreground shadow-2xs"
-                                            : "border-border/60 bg-background hover:bg-muted/40 text-muted-foreground"
-                                            }`}
-                                    >
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                            {isChecked ? (
-                                                <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
-                                            ) : (
-                                                <Square className="w-4 h-4 text-muted-foreground/60 shrink-0" />
-                                            )}
-                                            <div className="min-w-0">
-                                                <p className={`font-semibold truncate ${isChecked ? "text-foreground" : "text-foreground/90"}`}>
-                                                    {r.name}
-                                                </p>
-                                                <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                                                    <span className="font-medium text-foreground/80">{r.department || "Faculty"}</span>
-                                                    <span>•</span>
-                                                    <span>{pubCount} papers</span>
-                                                    <span>•</span>
-                                                    <span>{citCount} citations</span>
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-
-                    {/* Action Bar - Proximity Principle: Positioned directly beneath what it acts on */}
-                    <div className="pt-3 border-t border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="text-xs text-muted-foreground">
-                            {selectedResearchersObjects.length === 0 ? (
-                                <span>No faculty selected. Select individual faculty checkboxes above or click "Select All".</span>
-                            ) : selectedResearchersObjects.length === 1 ? (
-                                <span>Ready to download <strong>1 single Excel file (.xlsx)</strong> for {selectedResearchersObjects[0]?.name}.</span>
-                            ) : (
-                                <span>Ready to package <strong>{selectedResearchersObjects.length} Excel files</strong> into a single ZIP archive.</span>
-                            )}
-                        </div>
-
-                        <Button
-                            onClick={handleDownload}
-                            disabled={isExporting || selectedResearchersObjects.length === 0}
-                            className={`h-10 px-6 text-xs sm:text-sm font-semibold transition-all shadow-sm ${selectedResearchersObjects.length === 0
-                                ? "bg-muted text-muted-foreground cursor-not-allowed"
-                                : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                }`}
-                        >
-                            {isExporting ? (
-                                <>
-                                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                    <span>{exportProgressText || "Exporting..."}</span>
-                                </>
-                            ) : selectedResearchersObjects.length === 0 ? (
-                                <span>Select at least 1 faculty member to export</span>
-                            ) : selectedResearchersObjects.length === 1 ? (
-                                <>
-                                    <FileSpreadsheet className="h-4 w-4 mr-2" />
-                                    <span>Export {selectedResearchersObjects[0]?.name}'s Excel Report (.xlsx)</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Download className="h-4 w-4 mr-2" />
-                                    <span>Export {selectedResearchersObjects.length} Researcher Excel Reports (.zip)</span>
-                                </>
-                            )}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* 3. Navigation Tabs */}
+            {/* 2. Streamlined Navigation Tabs */}
             <PageTabs
                 tabs={tabs}
                 activeTab={selectedReport}
                 onChange={(tabId) => setSelectedReport(tabId as ReportType)}
             />
 
-            {/* 4. Tab 1: Executive Summary */}
-            {selectedReport === "summary" && (
-                <div className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatCard
-                            label="Total Researchers"
-                            value={totalResearchers}
-                            subtitle="Active researchers"
-                            icon={Users}
-                        />
-                        <StatCard
-                            label="Total Publications"
-                            value={totalPublications}
-                            subtitle="Across all departments"
-                            icon={FileText}
-                        />
-                        <StatCard
-                            label="Total Citations"
-                            value={totalCitations.toLocaleString()}
-                            subtitle="Combined Google Scholar impact"
-                            icon={TrendingUp}
-                        />
-                        <StatCard
-                            label="Mean Researcher Output"
-                            value={(totalPublications / safeResearchers).toFixed(1)}
-                            subtitle="Publications / researcher"
-                            icon={Award}
-                        />
-                    </div>
-
-                    <Card className="border-border/60 shadow-xs">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-semibold">Institutional Productivity Benchmarks</CardTitle>
-                            <CardDescription className="text-xs">
-                                Key ratio indicators for SUC Leveling and CHED institutional monitoring
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="divide-y divide-border/60 text-xs">
-                                <div className="flex items-center justify-between py-3">
-                                    <span className="text-muted-foreground font-medium">Average Citations per Researcher</span>
-                                    <span className="text-foreground font-bold font-mono text-sm">
-                                        {(totalCitations / safeResearchers).toFixed(1)}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between py-3">
-                                    <span className="text-muted-foreground font-medium">Average Publications per Researcher</span>
-                                    <span className="text-foreground font-bold font-mono text-sm">
-                                        {(totalPublications / safeResearchers).toFixed(1)}
-                                    </span>
-                                </div>
-                                <div className="flex items-center justify-between py-3">
-                                    <span className="text-muted-foreground font-medium">Average Citation Density per Publication</span>
-                                    <span className="text-foreground font-bold font-mono text-sm">
-                                        {(totalCitations / safePubs).toFixed(1)}
-                                    </span>
-                                </div>
+            {/* 3. Tab 1: Faculty Spreadsheets Hub */}
+            {selectedReport === "spreadsheets" && (
+                <Card className="border-border/60 shadow-xs">
+                    <CardHeader className="pb-3 border-b border-border/60">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <CardTitle className="text-base font-bold flex items-center gap-2">
+                                    <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                                    <span>Export Faculty Research Spreadsheets</span>
+                                </CardTitle>
+                                <CardDescription className="text-xs">
+                                    Select researchers to download their individual research & citation Excel files. Exporting 1 researcher downloads 1 Excel file (.xlsx); multiple researchers are packaged into an organized ZIP archive.
+                                </CardDescription>
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
-
-            {/* 5. Tab 2: Researcher Performance Report */}
-            {selectedReport === "researcher" && (
-                <Card className="border-border/60 shadow-xs overflow-hidden">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-semibold">Researcher Productivity Directory</CardTitle>
-                        <CardDescription className="text-xs">
-                            Individual publication and citation counts tracked in database
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        {researchersList.length === 0 ? (
-                            <div className="p-8">
-                                <EmptyState
-                                    icon={Users}
-                                    title="No researchers found"
-                                    description="Add researchers from the Admin Console or approve pending registrations."
-                                />
-                            </div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs">
-                                    <thead className="bg-muted/40 border-b border-border/80 text-muted-foreground uppercase tracking-wider text-[11px] font-semibold">
-                                        <tr>
-                                            <th className="py-3 px-4 w-10 text-center">Export</th>
-                                            <th className="py-3 px-4">Researcher Name</th>
-                                            <th className="py-3 px-4">Department Folder</th>
-                                            <th className="py-3 px-4 text-center">Publications</th>
-                                            <th className="py-3 px-4 text-center">Citations</th>
-                                            <th className="py-3 px-4 text-right">Avg Citations/Pub</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/60">
-                                        {researchersList.map((r: any) => {
-                                            const rKey = r.instructorId || r.id;
-                                            const isChecked = selectedResearcherIds.includes(rKey);
-                                            const pubs = r.totalPublications || 0;
-                                            const cites = r.totalCitations || 0;
-                                            return (
-                                                <tr
-                                                    key={rKey}
-                                                    onClick={() => toggleResearcherSelection(rKey)}
-                                                    className={`hover:bg-muted/30 transition-colors cursor-pointer ${isChecked ? "bg-brand/5" : ""
-                                                        }`}
-                                                >
-                                                    <td className="py-3 px-4 text-center">
-                                                        {isChecked ? (
-                                                            <CheckSquare className="w-4 h-4 text-brand inline-block" />
-                                                        ) : (
-                                                            <Square className="w-4 h-4 text-muted-foreground/60 inline-block" />
-                                                        )}
-                                                    </td>
-                                                    <td className="py-3 px-4 font-semibold text-foreground">{r.name}</td>
-                                                    <td className="py-3 px-4 text-muted-foreground text-xs">
-                                                        {r.department || "Faculty"}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-center font-mono font-medium">{pubs}</td>
-                                                    <td className="py-3 px-4 text-center font-mono font-medium">{cites}</td>
-                                                    <td className="py-3 px-4 text-right font-mono text-muted-foreground">
-                                                        {pubs > 0 ? (cites / pubs).toFixed(1) : "0.0"}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* 6. Tab 3: Department Performance Report */}
-            {selectedReport === "department" && (
-                <Card className="border-border/60 shadow-xs overflow-hidden">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-semibold">Academic Department Performance Report</CardTitle>
-                        <CardDescription className="text-xs">
-                            Consolidated research volume by college unit
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        {Object.keys(deptStats).length === 0 ? (
-                            <div className="p-8">
-                                <EmptyState
-                                    icon={FileBarChart}
-                                    title="No department data available"
-                                    description="Department statistics will populate as faculty members are registered."
-                                />
-                            </div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-xs">
-                                    <thead className="bg-muted/40 border-b border-border/80 text-muted-foreground uppercase tracking-wider text-[11px] font-semibold">
-                                        <tr>
-                                            <th className="py-3 px-4">Academic Department</th>
-                                            <th className="py-3 px-4 text-center">Faculty Count</th>
-                                            <th className="py-3 px-4 text-center">Publications</th>
-                                            <th className="py-3 px-4 text-center">Citations</th>
-                                            <th className="py-3 px-4 text-right">Avg Citations/Faculty</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border/60">
-                                        {Object.entries(deptStats)
-                                            .sort((a, b) => {
-                                                const indexA = departmentOrder.indexOf(a[0]);
-                                                const indexB = departmentOrder.indexOf(b[0]);
-                                                return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
-                                            })
-                                            .map(([dept, s]) => (
-                                                <tr key={dept} className="hover:bg-muted/30 transition-colors">
-                                                    <td className="py-3 px-4 font-semibold text-foreground">{dept}</td>
-                                                    <td className="py-3 px-4 text-center font-mono">{s.researchers}</td>
-                                                    <td className="py-3 px-4 text-center font-mono">{s.publications}</td>
-                                                    <td className="py-3 px-4 text-center font-mono">{s.citations}</td>
-                                                    <td className="py-3 px-4 text-right font-mono text-muted-foreground">
-                                                        {(s.citations / Math.max(s.researchers, 1)).toFixed(0)}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* 7. Tab 4: Yearly Trends */}
-            {selectedReport === "yearly" && (
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Filter by calendar year:</span>
-                        <div className="w-36">
-                            <Select value={selectedYear} onValueChange={setSelectedYear}>
-                                <SelectTrigger className="h-8 text-xs">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Years</SelectItem>
-                                    {years.map((year) => (
-                                        <SelectItem key={year} value={year.toString()}>
-                                            Year {year}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {selectedResearchersObjects.length > 0 && (
+                                <Badge className="bg-emerald-600 text-white font-mono text-xs px-2.5 py-1 w-fit">
+                                    {selectedResearchersObjects.length} Selected
+                                </Badge>
+                            )}
                         </div>
-                    </div>
+                    </CardHeader>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {years.map((year) => {
-                            const yearPubs = publicationsList.filter((pub: any) => Number(pub.year) === Number(year));
-                            const deptYearMatches = dashboardData.deptYearStats.filter(
-                                (s) => Number(s.year) === Number(year)
-                            );
-                            const yearCitations =
-                                deptYearMatches.length > 0
-                                    ? deptYearMatches.reduce((sum, s) => sum + (Number(s.citations) || 0), 0)
-                                    : yearPubs.reduce((sum: number, pub: any) => sum + (pub.citations || 0), 0);
+                    <CardContent className="p-4 sm:p-5 space-y-4">
+                        {/* Scope Filter Bar */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2.5 flex-wrap flex-1">
+                                {/* Department Dropdown */}
+                                <div className="w-full sm:w-44">
+                                    <Select value={exportDepartment} onValueChange={handleDepartmentScopeChange}>
+                                        <SelectTrigger className="h-8 text-xs w-full">
+                                            <SelectValue placeholder="All Departments" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Departments</SelectItem>
+                                            {departmentOrder.map((dept) => (
+                                                <SelectItem key={dept} value={dept}>
+                                                    {dept} Only
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                            if (selectedYear !== "all" && selectedYear !== year.toString()) {
-                                return null;
-                            }
+                                {/* Year Dropdown */}
+                                <div className="w-full sm:w-32">
+                                    <Select value={exportYear} onValueChange={setExportYear}>
+                                        <SelectTrigger className="h-8 text-xs w-full">
+                                            <SelectValue placeholder="All Years" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Years</SelectItem>
+                                            {years.map((y) => (
+                                                <SelectItem key={y} value={y.toString()}>
+                                                    {y}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                            if (yearPubs.length === 0 && yearCitations === 0 && selectedYear === "all") {
-                                return null;
-                            }
+                                {/* Search Filter */}
+                                <div className="relative flex-1 min-w-[200px] w-full sm:w-auto">
+                                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        value={pickerSearch}
+                                        onChange={(e) => setPickerSearch(e.target.value)}
+                                        placeholder="Filter researchers by name or ID..."
+                                        className="pl-8 h-8 text-xs w-full"
+                                    />
+                                </div>
+                            </div>
 
-                            return (
-                                <Card key={year} className="border-border/60 shadow-xs">
-                                    <CardHeader className="pb-2">
-                                        <div className="flex items-center justify-between">
-                                            <CardTitle className="text-sm font-semibold">{year} Output & Impact</CardTitle>
-                                            <Badge variant="outline" className="font-mono text-[10px]">
-                                                {year}
-                                            </Badge>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3 pt-1 text-xs">
-                                        <div className="grid grid-cols-2 gap-2 text-center pt-1 border-t border-border/40">
-                                            <div>
-                                                <p className="text-[10px] text-muted-foreground">Papers Published</p>
-                                                <p className="text-base font-bold font-mono text-foreground">{yearPubs.length}</p>
+                            {/* Selection Controls (Select All / Clear) */}
+                            <div className="flex items-center gap-2 shrink-0">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={selectAllVisibleResearchers}
+                                    className="h-8 text-xs gap-1.5"
+                                >
+                                    <CheckSquare className="w-3.5 h-3.5 text-brand" />
+                                    <span>
+                                        {selectedResearcherIds.length === pickerFilteredResearchers.length && pickerFilteredResearchers.length > 0
+                                            ? "Deselect All"
+                                            : `Select All (${pickerFilteredResearchers.length})`}
+                                    </span>
+                                </Button>
+                                {selectedResearcherIds.length > 0 && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setSelectedResearcherIds([])}
+                                        className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                                    >
+                                        Clear Selection
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Researcher Selection Grid */}
+                        {pickerFilteredResearchers.length === 0 ? (
+                            <div className="p-8 text-center border border-dashed rounded-xl bg-muted/20">
+                                <p className="text-xs text-muted-foreground">
+                                    No researchers match your active department or search criteria.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-80 overflow-y-auto pr-1">
+                                {pickerFilteredResearchers.map((r: any) => {
+                                    const rKey = r.instructorId || r.id;
+                                    const isChecked = selectedResearcherIds.includes(rKey);
+                                    const pubCount = publicationsList.filter((p) => matchesResearcher(p, r)).length;
+                                    const citCount = publicationsList
+                                        .filter((p) => matchesResearcher(p, r))
+                                        .reduce((sum, p) => sum + (p.citations || 0), 0);
+
+                                    return (
+                                        <div
+                                            key={rKey}
+                                            onClick={() => toggleResearcherSelection(rKey)}
+                                            className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2.5 cursor-pointer transition-all ${isChecked
+                                                ? "border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/20 text-foreground shadow-2xs"
+                                                : "border-border/60 bg-background hover:bg-muted/40 text-muted-foreground"
+                                                }`}
+                                        >
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                {isChecked ? (
+                                                    <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
+                                                ) : (
+                                                    <Square className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+                                                )}
+                                                <div className="min-w-0">
+                                                    <p className={`font-semibold truncate ${isChecked ? "text-foreground" : "text-foreground/90"}`}>
+                                                        {r.name}
+                                                    </p>
+                                                    <p className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                                                        <span className="font-medium text-foreground/80">{r.department || "Researcher"}</span>
+                                                        <span>•</span>
+                                                        <span>{pubCount} publications</span>
+                                                        <span>•</span>
+                                                        <span>{citCount} citations</span>
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="text-[10px] text-muted-foreground">Citations Earned</p>
-                                                <p className="text-base font-bold font-mono text-emerald-600">{yearCitations}</p>
-                                            </div>
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            );
-                        })}
-                    </div>
-                </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Action Bar */}
+                        <div className="pt-3 border-t border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="text-xs text-muted-foreground">
+                                {selectedResearchersObjects.length === 0 ? (
+                                    <span>Select individual researcher checkboxes above or click "Select All" to export.</span>
+                                ) : selectedResearchersObjects.length === 1 ? (
+                                    <span>Ready to download <strong>1 single Excel file (.xlsx)</strong> for {selectedResearchersObjects[0]?.name}.</span>
+                                ) : (
+                                    <span>Ready to package <strong>{selectedResearchersObjects.length} Excel files</strong> into a single ZIP archive.</span>
+                                )}
+                            </div>
+
+                            <Button
+                                onClick={handleDownload}
+                                disabled={isExporting || selectedResearchersObjects.length === 0}
+                                className={`h-10 px-6 text-xs sm:text-sm font-semibold transition-all shadow-sm ${selectedResearchersObjects.length === 0
+                                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                                    : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    }`}
+                            >
+                                {isExporting ? (
+                                    <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        <span>{exportProgressText || "Exporting..."}</span>
+                                    </>
+                                ) : selectedResearchersObjects.length === 0 ? (
+                                    <span>Select at least 1 researcher to export</span>
+                                ) : selectedResearchersObjects.length === 1 ? (
+                                    <>
+                                        <FileSpreadsheet className="h-4 w-4 mr-2" />
+                                        <span>Export {selectedResearchersObjects[0]?.name}'s Spreadsheet (.xlsx)</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="h-4 w-4 mr-2" />
+                                        <span>Export {selectedResearchersObjects.length} Researcher Spreadsheets (.zip)</span>
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
-            {/* 8. Tab 5: SUC & AACCUP Exhibit Dossier */}
+            {/* 4. Tab 2: Accreditation & SUC Matrix */}
             {selectedReport === "accreditation" && (
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -877,6 +589,85 @@ export function ReportsPage() {
                                 </tbody>
                             </table>
                         </div>
+                    </Card>
+                </div>
+            )}
+
+            {/* 5. Tab 3: Executive Summary */}
+            {selectedReport === "summary" && (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-sm font-semibold text-foreground">Executive Overview</h3>
+                            <p className="text-xs text-muted-foreground">High-level institutional output benchmarks for campus leadership</p>
+                        </div>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => window.print()}
+                            className="text-xs h-8 gap-1.5"
+                        >
+                            <Printer className="h-3.5 w-3.5" />
+                            <span>Print Summary</span>
+                        </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <StatCard
+                            label="Total Researchers"
+                            value={totalResearchers}
+                            subtitle="Active campus researchers"
+                            icon={Users}
+                        />
+                        <StatCard
+                            label="Total Publications"
+                            value={totalPublications}
+                            subtitle="Across all departments"
+                            icon={FileText}
+                        />
+                        <StatCard
+                            label="Total Citations"
+                            value={totalCitations.toLocaleString()}
+                            subtitle="Combined Google Scholar impact"
+                            icon={TrendingUp}
+                        />
+                        <StatCard
+                            label="Mean Researcher Output"
+                            value={(totalPublications / safeResearchers).toFixed(1)}
+                            subtitle="Publications / researcher"
+                            icon={Award}
+                        />
+                    </div>
+
+                    <Card className="border-border/60 shadow-xs">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-semibold">Institutional Productivity Benchmarks</CardTitle>
+                            <CardDescription className="text-xs">
+                                Key ratio indicators for SUC Leveling and CHED institutional monitoring
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="divide-y divide-border/60 text-xs">
+                                <div className="flex items-center justify-between py-3">
+                                    <span className="text-muted-foreground font-medium">Average Citations per Researcher</span>
+                                    <span className="text-foreground font-bold font-mono text-sm">
+                                        {(totalCitations / safeResearchers).toFixed(1)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between py-3">
+                                    <span className="text-muted-foreground font-medium">Average Publications per Researcher</span>
+                                    <span className="text-foreground font-bold font-mono text-sm">
+                                        {(totalPublications / safeResearchers).toFixed(1)}
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between py-3">
+                                    <span className="text-muted-foreground font-medium">Average Citation Density per Publication</span>
+                                    <span className="text-foreground font-bold font-mono text-sm">
+                                        {(totalCitations / safePubs).toFixed(1)}
+                                    </span>
+                                </div>
+                            </div>
+                        </CardContent>
                     </Card>
                 </div>
             )}

@@ -16,6 +16,7 @@ import {
 import {
   classifyPublicationSDG,
   localHeuristicSDG,
+  buildDynamicSDGRationale,
   auditJournalReputation,
   askCampusIntelligence,
   calculateSynergy,
@@ -1155,11 +1156,54 @@ export async function handleApiRequest(req, res) {
       const updatedPhoto = photoUrl !== undefined ? photoUrl : user.photo_url;
       const updatedScholar = scholarUrl !== undefined ? scholarUrl : user.scholar_url;
       const updatedScholarId = googleScholarId !== undefined ? googleScholarId : user.google_scholar_id;
-      const updatedInstructorId = instructorId !== undefined ? instructorId.trim() : (user.instructor_id || user.username);
 
-      if (instructorId && instructorId !== user.username && user.role !== 'admin') {
-        db.prepare(`UPDATE users SET username = ? WHERE id = ?`).run(updatedInstructorId, user.id);
-        db.prepare(`UPDATE researchers SET instructor_id = ? WHERE user_id = ? OR LOWER(instructor_id) = LOWER(?)`).run(updatedInstructorId, user.id, user.username);
+      // Find matching researcher record for this user to track all prior identity keys
+      const existingResearcher = db.prepare(`
+        SELECT * FROM researchers 
+        WHERE user_id = ? OR id = ? OR LOWER(instructor_id) = LOWER(?)
+        LIMIT 1
+      `).get(user.id, user.id, user.username);
+
+      const oldIds = new Set([
+        user.username,
+        existingResearcher?.instructor_id,
+        existingResearcher?.id,
+      ].filter(Boolean));
+
+      const updatedInstructorId = instructorId !== undefined && instructorId.trim() !== ''
+        ? instructorId.trim()
+        : (existingResearcher?.instructor_id || user.username);
+
+      // Cascade update Instructor ID across researchers, users, publications, and ai sessions
+      if (updatedInstructorId) {
+        if (existingResearcher) {
+          db.prepare('UPDATE researchers SET instructor_id = ? WHERE id = ?').run(updatedInstructorId, existingResearcher.id);
+        } else {
+          db.prepare('UPDATE researchers SET instructor_id = ? WHERE user_id = ? OR LOWER(instructor_id) = LOWER(?)')
+            .run(updatedInstructorId, user.id, user.username);
+        }
+
+        if (user.role !== 'admin') {
+          db.prepare('UPDATE users SET username = ? WHERE id = ?').run(updatedInstructorId, user.id);
+        }
+
+        // Cascade to publications
+        for (const oldId of oldIds) {
+          db.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE LOWER(owner_id) = LOWER(?)')
+            .run(updatedInstructorId, updatedName, oldId);
+        }
+
+        // Cascade to AI chat sessions
+        for (const oldId of oldIds) {
+          db.prepare('UPDATE ai_chat_sessions SET user_id = ? WHERE LOWER(user_id) = LOWER(?)')
+            .run(updatedInstructorId, oldId);
+        }
+
+        // Cascade to invitation requests
+        for (const oldId of oldIds) {
+          db.prepare('UPDATE invitation_requests SET instructor_id = ? WHERE LOWER(instructor_id) = LOWER(?)')
+            .run(updatedInstructorId, oldId);
+        }
       }
 
       db.prepare(`
@@ -1171,8 +1215,8 @@ export async function handleApiRequest(req, res) {
       db.prepare(`
         UPDATE researchers 
         SET name = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
-        WHERE user_id = ? OR LOWER(instructor_id) = LOWER(?)
-      `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id, user.username);
+        WHERE user_id = ? OR id = ? OR LOWER(instructor_id) = LOWER(?) OR LOWER(instructor_id) = LOWER(?)
+      `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id, user.id, user.username, updatedInstructorId);
 
       return sendJson(200, {
         success: true,
@@ -1180,8 +1224,8 @@ export async function handleApiRequest(req, res) {
           id: user.id,
           role: user.role,
           name: updatedName,
-          username: updatedInstructorId || user.username,
-          instructorId: updatedInstructorId || user.username,
+          username: user.role === 'admin' ? user.username : updatedInstructorId,
+          instructorId: updatedInstructorId,
           email: updatedEmail,
           department: updatedDept,
           photoUrl: updatedPhoto,
@@ -2244,6 +2288,26 @@ export async function handleApiRequest(req, res) {
         WHERE id = ?
       `).run(firstName, lastName, fullName, department, isFaculty, photoUrl, scholarUrl || null, googleScholarId || null, current.id);
 
+      const newInstId = sanitized.instructorId ? sanitized.instructorId.trim() : current.instructor_id;
+      if (newInstId && newInstId !== current.instructor_id) {
+        db.prepare('UPDATE researchers SET instructor_id = ? WHERE id = ?').run(newInstId, current.id);
+        if (current.user_id) {
+          const userRec = db.prepare('SELECT role FROM users WHERE id = ?').get(current.user_id);
+          if (userRec && userRec.role !== 'admin') {
+            db.prepare('UPDATE users SET username = ? WHERE id = ?').run(newInstId, current.user_id);
+          }
+        }
+        const oldIds = [current.instructor_id, current.id].filter(Boolean);
+        for (const oldId of oldIds) {
+          db.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE LOWER(owner_id) = LOWER(?)')
+            .run(newInstId, fullName, oldId);
+          db.prepare('UPDATE ai_chat_sessions SET user_id = ? WHERE LOWER(user_id) = LOWER(?)')
+            .run(newInstId, oldId);
+          db.prepare('UPDATE invitation_requests SET instructor_id = ? WHERE LOWER(instructor_id) = LOWER(?)')
+            .run(newInstId, oldId);
+        }
+      }
+
       // Update associated user record if password or details changed
       if (current.user_id) {
         if (sanitized.password) {
@@ -3182,7 +3246,7 @@ export async function handleApiRequest(req, res) {
           }
         }
 
-        if (photoUrl && (!researcher.photo_url || researcher.photo_url === '')) {
+        if (photoUrl) {
           db.prepare('UPDATE researchers SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.id);
           if (researcher.user_id) {
             db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.user_id);
@@ -3345,6 +3409,8 @@ export async function handleApiRequest(req, res) {
           instructorId: updatedRes.instructor_id,
           name: updatedRes.name,
           department: updatedRes.department,
+          photoUrl: updatedRes.photo_url,
+          scholarUrl: updatedRes.scholar_url,
           totalPublications: updatedRes.total_publications,
           totalCitations: updatedRes.total_citations,
         },
@@ -4669,22 +4735,9 @@ export async function handleApiRequest(req, res) {
         LIMIT 500
       `).all();
 
-      const scrapedPubs = db.prepare(`
-        SELECT id, title, authors, year, journal, citations, abstract, '' AS sdg_tags, '' AS sdg_rationale, '' AS ched_priority, 10.0 AS jc3_points, 10.0 AS nbc461_points, '' AS owner_name, '' AS owner_id
-        FROM scraped_publications
-        ORDER BY citations DESC, year DESC
-        LIMIT 200
-      `).all();
-
+      // Campus publications: STRICTLY approved institutional publications of PSU Asingan
+      // External scraped search results are deliberately excluded to prevent confusing external works with campus research
       const combinedPubs = [...approvedPubs];
-      const seenTitles = new Set(approvedPubs.map(p => (p.title || '').toLowerCase().trim()));
-      for (const sp of scrapedPubs) {
-        const norm = (sp.title || '').toLowerCase().trim();
-        if (norm && !seenTitles.has(norm)) {
-          seenTitles.add(norm);
-          combinedPubs.push(sp);
-        }
-      }
 
       const pubTotals = db.prepare(`
         SELECT COUNT(*) AS total, COALESCE(SUM(citations), 0) AS citations
@@ -4958,13 +5011,7 @@ export async function handleApiRequest(req, res) {
           }
           if (rawRationale && !rawRationale.startsWith('{')) return rawRationale;
           const cleanT = (p.title || '').replace(/^\[.*?\]\s*/, '');
-          if (targetNum === 4) return `Directly enhances Quality Education by providing practical learning tools and teaching techniques in "${cleanT}".`;
-          if (targetNum === 3) return `Promotes Good Health and Well-being by contributing clinical findings and health safety protocols in "${cleanT}".`;
-          if (targetNum === 8) return `Supports Decent Work and Economic Growth by strengthening workforce competencies and professional training in "${cleanT}".`;
-          if (targetNum === 9) return `Fosters Industry, Innovation, and Infrastructure by introducing digital tools and technical methodologies in "${cleanT}".`;
-          if (targetNum === 10) return `Helps reduce inequalities by providing targeted learning interventions to support struggling and disadvantaged students in "${cleanT}".`;
-          if (targetNum === 12) return `Encourages Responsible Consumption by promoting cost-effective resource management and waste reduction in "${cleanT}".`;
-          return `Advances ${targetKey} through verified academic research and institutional development.`;
+          return buildDynamicSDGRationale(targetKey, cleanT, p.abstract || '', []);
         };
 
         const paperItem = {

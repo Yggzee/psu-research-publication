@@ -729,20 +729,20 @@ const researcherGuideCategories: GuideCategory[] = [
     subtitle: "Updating your researcher profile, Google Scholar link, password, and display theme",
     icon: Settings,
     narrativeParagraphs: [
-      "At the bottom of the left navigation sidebar (or by clicking your name and photo in the top-right header), you will find 'My Profile' and 'Settings'. On the 'My Profile' page, you see your researcher card displaying your photo, full name, Instructor ID (ASIN-00000), department, email address, and Google Scholar profile link. You can upload a new profile picture, update your Google Scholar URL, or click 'Sync My Publications' to automatically fetch newly published works from your Google Scholar profile.",
+      "At the bottom of the left navigation sidebar (or by clicking your name and photo in the top-right header), you will find 'My Profile' and 'Settings'. On the 'My Profile' page, you see your researcher card displaying your photo, full name, Instructor ID (ASIN-00000), department, email address, and Google Scholar profile link. You can update your profile details, update your Google Scholar URL, or click 'Sync Scholar' to automatically fetch newly published works and synchronize your profile photo directly from Google Scholar. Updating your Instructor ID automatically cascades across all system publications and administrative directories.",
       "On the 'Settings' page, you will see tabs for 'Appearance & Theme', 'Security & Password', and 'Display Preferences'. In 'Appearance & Theme', you can switch the entire workspace between Light Mode, Dark Mode, or System Default. In 'Security & Password', you can change your sign-in password at any time. In 'Display Preferences', you can choose between 'Compact' and 'Standard' row spacing for tables.",
     ],
     clickableItems: [
       {
-        label: "Sync My Publications Button (My Profile)",
+        label: "Sync Scholar Button (My Profile)",
         visualReplica: (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold">
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sync My Publications</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand/30 text-brand bg-brand-soft text-xs font-semibold">
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Sync Scholar</span>
           </span>
         ),
         explanation:
-          "Checks your linked Google Scholar profile and retrieves any new publications you have authored.",
+          "Checks your linked Google Scholar profile, retrieves newly published works, and updates your profile picture.",
       },
       {
         label: "Light Mode / Dark Mode Switch (Settings & Top Header)",
@@ -1063,31 +1063,31 @@ const coordinatorGuideCategories: GuideCategory[] = [
     subtitle: "Exporting official Excel spreadsheets and printable PDF reports for CHED and AACCUP accreditation",
     icon: FileBarChart,
     narrativeParagraphs: [
-      "The 'Reports' page is built specifically to eliminate hours of manual spreadsheet formatting before CHED, AACCUP, or university-wide evaluations. At the top of the screen, you will see filter selectors for Department (All Departments, BSIT, BSBA, BSE, BEE, BTLED, BIT, or Non-Faculty) and Publication Year range, alongside two primary action buttons: 'Export Excel' and 'Print / Save PDF'. Below the controls is a live preview table of the exact records that will be included in your exported document.",
-      "Whenever you change the department or year filter, the summary counts and preview table update immediately. Clicking 'Export Excel' generates a clean, multi-column Excel workbook (.xlsx) organized with publication titles, authors, journals, years, citations, and assigned researchers. Clicking 'Print / Save PDF' formats the report with official Pangasinan State University headers ready for printing or saving as a PDF.",
+      "The 'Reports' page is organized into three streamlined tabs designed to eliminate manual spreadsheet formatting before CHED, AACCUP, or university evaluations: 'Faculty Spreadsheets', 'Accreditation & SUC Matrix', and 'Executive Summary'.",
+      "In 'Faculty Spreadsheets', you can filter researchers by academic department or publication year, select individual researchers or click 'Select All', and download their complete research and citation spreadsheets. Exporting a single researcher produces a ready-to-use Microsoft Excel workbook (.xlsx), while selecting multiple researchers automatically packages them into an organized ZIP archive. In 'Accreditation & SUC Matrix', you review verified papers categorized by Scopus/WoS and refereed indexing, with a one-click 'Print Dossier' action. In 'Executive Summary', campus leaders can review and print high-level productivity benchmarks.",
     ],
     clickableItems: [
       {
-        label: "Export Excel Button",
+        label: "Export Spreadsheets Button",
         visualReplica: (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold shadow-2xs">
             <Download className="w-3.5 h-3.5" />
-            <span>Export Excel (.xlsx)</span>
+            <span>Export Researcher Spreadsheets (.zip / .xlsx)</span>
           </span>
         ),
         explanation:
-          "Downloads a formatted Microsoft Excel spreadsheet containing all publications matching your selected filters.",
+          "Generates formatted Excel spreadsheets for all selected researchers, packaging multiple files into an organized ZIP archive.",
       },
       {
-        label: "Print / Save PDF Button",
+        label: "Print Dossier / Summary Button",
         visualReplica: (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-semibold">
             <Printer className="w-3.5 h-3.5 text-brand" />
-            <span>Print / Save PDF</span>
+            <span>Print Dossier</span>
           </span>
         ),
         explanation:
-          "Opens the print-ready institutional report view so you can print on paper or save as an official PDF.",
+          "Formats the institutional accreditation matrix or executive briefing with official headers for paper printing or PDF export.",
       },
     ],
   },

@@ -63,7 +63,7 @@ export function ResearcherProfile() {
     return (
       <div className="space-y-6 max-w-5xl mx-auto">
         <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/researchers")} className="text-xs gap-1.5">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Faculty Researchers
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Researchers
         </Button>
         <Card className="border-border/60">
           <CardContent className="p-12 text-center text-muted-foreground text-xs">
@@ -78,20 +78,20 @@ export function ResearcherProfile() {
     return (
       <div className="space-y-6 max-w-5xl mx-auto">
         <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard/researchers")} className="text-xs gap-1.5">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Faculty Researchers
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Researchers
         </Button>
         <EmptyState
           icon={User}
           title="Researcher Not Found"
           description="The requested researcher could not be found in institutional records."
-          actionLabel="View All Faculty"
+          actionLabel="View All Researchers"
           onAction={() => navigate("/dashboard/researchers")}
         />
       </div>
     );
   }
 
-  const facultyPhoto = getFacultyPhoto(researcher.name) || researcher.photoUrl;
+  const facultyPhoto = researcher.photoUrl || getFacultyPhoto(researcher.name);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">

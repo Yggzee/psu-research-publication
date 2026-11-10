@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, StatCard, StatusBadge, EmptyState } from "./common";
+import { ScholarImportModal } from "./ScholarImportModal";
 
 type SortOption = "year" | "citations" | "journal";
 
@@ -58,6 +59,7 @@ export function ProfilePage() {
   });
 
   const [showEditModal, setShowEditModal] = useState(false);
+  const [scholarModalOpen, setScholarModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [idDigits, setIdDigits] = useState("00002");
   const [publications, setPublications] = useState<any[]>([]);
@@ -188,6 +190,9 @@ export function ProfilePage() {
         if (updated) setCurrentUserState(updated);
         setShowEditModal(false);
         toast.success("Profile updated successfully!");
+        window.dispatchEvent(new CustomEvent("researchers-updated"));
+        window.dispatchEvent(new CustomEvent("faculty-updated"));
+        window.dispatchEvent(new CustomEvent("research-records-updated"));
         loadProfileAndPublications();
       } else {
         toast.error("Failed to update profile.");
@@ -205,10 +210,42 @@ export function ProfilePage() {
       if (updated) setCurrentUserState(updated);
       setShowEditModal(false);
       toast.success("Profile saved locally!");
+      window.dispatchEvent(new CustomEvent("researchers-updated"));
+      window.dispatchEvent(new CustomEvent("faculty-updated"));
+      window.dispatchEvent(new CustomEvent("research-records-updated"));
       loadProfileAndPublications();
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleScholarImportSuccess = async () => {
+    try {
+      const activeUser = getCurrentUser() || currentUser;
+      const updatedResearchers = await apiService.getResearchers();
+      const myRecord = (updatedResearchers as any[]).find(
+        (r: any) =>
+          r.instructorId === activeUser.instructorId ||
+          r.id === activeUser.instructorId ||
+          (r.name && activeUser.name && r.name.toLowerCase() === activeUser.name.toLowerCase())
+      );
+      if (myRecord) {
+        const updated = updateCurrentUser({
+          photoUrl: myRecord.photoUrl || activeUser.photoUrl,
+          instructorId: myRecord.instructorId || activeUser.instructorId,
+          scholarUrl: myRecord.scholarUrl || activeUser.scholarUrl,
+          googleScholarId: myRecord.googleScholarId || activeUser.googleScholarId,
+        });
+        if (updated) setCurrentUserState(updated);
+      }
+    } catch (err) {
+      console.warn("Could not reload researcher photo after import:", err);
+    }
+    window.dispatchEvent(new CustomEvent("researchers-updated"));
+    window.dispatchEvent(new CustomEvent("faculty-updated"));
+    window.dispatchEvent(new CustomEvent("research-records-updated"));
+    await loadProfileAndPublications();
+    toast.success("Google Scholar publications & profile photo synced successfully!");
   };
 
   const sortedPublications = useMemo(() => {
@@ -247,7 +284,7 @@ export function ProfilePage() {
       : undefined);
 
   const effectiveName = currentUser.name || (isCoordinator ? "Rodelio M. Garin" : "Researcher");
-  const facultyPhoto = getFacultyPhoto(effectiveName) || currentUser.photoUrl;
+  const facultyPhoto = currentUser.photoUrl || getFacultyPhoto(effectiveName);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -261,6 +298,17 @@ export function ProfilePage() {
         }
         actions={
           <div className="flex items-center gap-2">
+            {effectiveScholarUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setScholarModalOpen(true)}
+                className="text-xs h-9 gap-1.5 border-brand/30 text-brand hover:bg-brand-soft shadow-2xs"
+              >
+                <GraduationCap className="h-3.5 w-3.5" />
+                <span>Sync Scholar</span>
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={handleOpenEdit}
@@ -755,6 +803,18 @@ export function ProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Google Scholar Import Modal */}
+      {scholarModalOpen && (
+        <ScholarImportModal
+          isOpen={scholarModalOpen}
+          onClose={() => setScholarModalOpen(false)}
+          instructorId={currentUser.instructorId || (isCoordinator ? "ASIN-00002" : "ASIN-00000")}
+          researcherName={effectiveName}
+          initialScholarUrl={effectiveScholarUrl}
+          onImportSuccess={handleScholarImportSuccess}
+        />
+      )}
     </div>
   );
 }

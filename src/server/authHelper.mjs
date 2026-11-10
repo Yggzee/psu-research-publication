@@ -345,6 +345,7 @@ export function sanitizeResearcherInput(data, caller) {
     return {
       firstName: data.firstName?.trim(),
       lastName: data.lastName?.trim(),
+      instructorId: data.instructorId?.trim(),
       department: data.department,
       isFaculty: data.isFaculty !== undefined ? Boolean(data.isFaculty) : undefined,
       photoUrl: data.photoUrl,
@@ -359,6 +360,7 @@ export function sanitizeResearcherInput(data, caller) {
   return {
     firstName: data.firstName?.trim(),
     lastName: data.lastName?.trim(),
+    instructorId: data.instructorId?.trim(),
     department: data.department,
     isFaculty: undefined, // Cannot change faculty flag
     photoUrl: data.photoUrl,

@@ -53,12 +53,27 @@ export function ImpactAnalysisPage() {
     deptYearStats: [],
   });
 
+  const recordedYears = (data.deptYearStats || [])
+    .map((s) => Number(s.year))
+    .filter((y) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
+  const minRecordedYear = recordedYears.length > 0 ? Math.min(...recordedYears) : 2011;
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
       const stats = await apiService.getDashboardStats();
       if (stats) {
         setData(stats);
+        const yList = (stats.deptYearStats || [])
+          .map((s: any) => Number(s.year))
+          .filter((y: number) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
+        if (yList.length > 0) {
+          const earliest = Math.min(...yList);
+          setYearRange((prev) => ({
+            start: Math.min(prev.start, earliest),
+            end: Math.max(prev.end, new Date().getFullYear()),
+          }));
+        }
       }
     } catch (err) {
       console.warn("Failed to fetch impact analysis data:", err);
@@ -126,11 +141,10 @@ export function ImpactAnalysisPage() {
   const safeYearsCount = Math.max(chartYears.length, 1);
 
   const handleYearBack = () => {
-    const MIN_YEAR = 2015;
     const RANGE_SIZE = 5;
     const newEnd = yearRange.start - 1;
-    if (newEnd < MIN_YEAR) return;
-    const newStart = Math.max(newEnd - RANGE_SIZE + 1, MIN_YEAR);
+    if (newEnd < minRecordedYear) return;
+    const newStart = Math.max(newEnd - RANGE_SIZE + 1, minRecordedYear);
     setYearRange({ start: newStart, end: newEnd });
   };
 
@@ -261,15 +275,15 @@ export function ImpactAnalysisPage() {
               type="button"
               onClick={() => {
                 const currentYr = new Date().getFullYear();
-                setYearRange({ start: 2015, end: currentYr });
+                setYearRange({ start: minRecordedYear, end: currentYr });
               }}
               className={`px-2.5 py-1 rounded-md font-medium transition-all cursor-pointer ${
-                yearRange.start === 2015 && yearRange.end - yearRange.start > 9
+                yearRange.start === minRecordedYear && yearRange.end - yearRange.start >= 9
                   ? "bg-card text-brand font-bold shadow-2xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              All (2015–{new Date().getFullYear()})
+              All ({minRecordedYear}–{new Date().getFullYear()})
             </button>
           </div>
 
@@ -278,7 +292,7 @@ export function ImpactAnalysisPage() {
             <button
               type="button"
               onClick={handleYearBack}
-              disabled={yearRange.start <= 2015}
+              disabled={yearRange.start <= minRecordedYear}
               className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
               title="Previous 5 years"
             >
