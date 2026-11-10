@@ -255,7 +255,7 @@ export function DashboardLayout() {
   return (
     <div className="min-h-screen bg-felt-canvas text-foreground transition-colors duration-200">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white dark:bg-card border-r border-border/70 flex-col z-20">
+      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-white dark:bg-card border-r border-border/70 flex-col z-20 select-none">
         {/* Logo + Small ? Guide Button */}
         <div className="p-5 border-b border-border/70 flex items-center justify-between gap-2">
           <div
@@ -333,7 +333,7 @@ export function DashboardLayout() {
           />
 
           {/* Slide-over menu */}
-          <div className="relative flex flex-col w-72 max-w-[80vw] bg-white dark:bg-card border-r border-border/70 z-10 shadow-2xl">
+          <div className="relative flex flex-col w-72 max-w-[80vw] bg-white dark:bg-card border-r border-border/70 z-10 shadow-2xl select-none">
             <div className="p-5 border-b border-border/70 flex items-center justify-between">
               <div
                 className="flex items-center gap-3 cursor-pointer"
@@ -410,7 +410,7 @@ export function DashboardLayout() {
       {/* Main Container */}
       <div className="lg:ml-64 flex flex-col min-h-screen">
         {/* Calm Top Header */}
-        <header className="bg-white/95 dark:bg-card/95 backdrop-blur-md border-b border-border/70 sticky top-0 z-30 transition-colors">
+        <header className="bg-white/95 dark:bg-card/95 backdrop-blur-md border-b border-border/70 sticky top-0 z-30 transition-colors select-none">
           <div className="px-3.5 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex items-center justify-between">
             {/* Left: Mobile Brand & Desktop Breadcrumb */}
             <div className="flex items-center gap-2.5 sm:gap-3">
@@ -505,7 +505,7 @@ export function DashboardLayout() {
         {/* Mobile Bottom Navigation Bar (Modern Premier App Feel) */}
         <nav
           aria-label="Mobile Navigation"
-          className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-card/95 backdrop-blur-md border-t border-border/80 pb-safe px-2 py-1 shadow-lg"
+          className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-card/95 backdrop-blur-md border-t border-border/80 pb-safe px-2 py-1 shadow-lg select-none"
         >
           <div className="flex items-center justify-around max-w-lg mx-auto">
             {/* Primary Tab 1: Overview */}

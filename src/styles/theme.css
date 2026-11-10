@@ -235,6 +235,46 @@
     background-repeat: repeat;
   }
 
+  /* Suppress blinking caret cursor on all non-input elements */
+  *:not(input):not(textarea):not([contenteditable="true"]) {
+    caret-color: transparent;
+  }
+
+  /* Form inputs and editable areas retain normal text selection and visible carets */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    caret-color: auto;
+    user-select: text;
+  }
+
+  /* Prevent accidental text selection and I-beam cursor on all UI headers, navigation, buttons, labels, and badges */
+  h1, h2, h3, h4, h5, h6,
+  header, nav, aside,
+  button, label,
+  [role="button"], [role="tab"], [role="menuitem"],
+  .ui-chrome {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Clickable controls retain pointer cursor */
+  button,
+  [role="button"],
+  a,
+  .cursor-pointer {
+    cursor: pointer;
+  }
+
+  /* Research content, article text, DOIs, and abstracts remain selectable for scholarly copying */
+  .selectable-content,
+  article,
+  .prose,
+  [data-selectable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
   /**
   * Default typography styles for HTML elements (h1-h4, p, label, button, input).
   * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.

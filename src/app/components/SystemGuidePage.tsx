@@ -1290,7 +1290,7 @@ export function SystemGuidePage() {
       {/* ==================================================== */}
       {/* FULL-WIDTH INSTITUTIONAL TOP HEADER                  */}
       {/* ==================================================== */}
-      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur">
+      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur select-none">
         <div className="w-full px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           {/* Left: PSU Brand */}
           <div
@@ -1386,7 +1386,7 @@ export function SystemGuidePage() {
       {/* ==================================================== */}
       <div className="flex-1 w-full flex flex-col lg:flex-row">
         {/* Left Topic Sidebar (Mirrors Workspace Navigation) */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border/70 bg-card/60 p-4 flex flex-col justify-between">
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border/70 bg-card/60 p-4 flex flex-col justify-between select-none">
           <div className="space-y-3">
             <div className="px-2 py-1">
               <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">

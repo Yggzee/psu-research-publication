@@ -49,6 +49,7 @@ All system rules are organized into modular, `always_on` rule files in `.agents/
    - **Facebook Dark Mode:** `#18191a` background, `#242526` surface, `#3a3b3c` input, `#e4e6eb` text, `#2d88ff` blue.
    - **Pre-Change Breakdown:** Provide clear issue breakdown and file plan before writing code.
    - **Web Security, SEO & Accessibility Audit:** HSTS, CSP, COOP, robots.txt, and WCAG AA contrast.
+   - **UI Chrome Text Selection & Caret Suppression:** Non-editable UI headers, navigation, and badges disable text selection and suppress blinking carets; form inputs and scholarly research text remain selectable.
 
 4. **[Infrastructure & Tooling Rules](.agents/rules/tooling-infrastructure.md)**
    - **100% Free-Tier & Zero-Cost:** Never introduce paid external APIs, vector databases, or LLM tokens.

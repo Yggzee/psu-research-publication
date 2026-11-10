@@ -250,7 +250,7 @@ export function PublicRepositoryPortal() {
       {/* ---------------------------------------------------- */}
       {/* TOP INSTITUTIONAL NAVIGATION HEADER                  */}
       {/* ---------------------------------------------------- */}
-      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 select-none">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           
           {/* TOP-LEFT REPOSITORY LOGO + METRICS COUNTER + SMALL ? GUIDE BUTTON */}
@@ -344,13 +344,13 @@ export function PublicRepositoryPortal() {
       {/* ---------------------------------------------------- */}
       {/* HERO SECTION WITH SEARCH ENGINE SELECTOR             */}
       {/* ---------------------------------------------------- */}
-      <section className="relative py-8 md:py-12 px-4 sm:px-6 bg-gradient-to-b from-brand/5 via-background to-background border-b border-border/60">
+      <section className="relative py-8 md:py-12 px-4 sm:px-6 bg-gradient-to-b from-brand/5 via-background to-background border-b border-border/60 select-none">
         <div className="max-w-4xl mx-auto text-center space-y-4">
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-foreground">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-foreground select-none">
             Explore Institutional Research & Academic Literature
           </h2>
 
-          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed select-none">
             Search verified scholarly publications from PSU Asingan and explore global academic literature.
           </p>
 

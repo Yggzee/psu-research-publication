@@ -40,3 +40,9 @@ Always maintain the following user interface standards across the application:
   - **SEO & Social Metadata (`index.html`):** Ensure meta description, OpenGraph (`og:*`), Twitter Card, and canonical tags remain intact.
   - **WCAG AA Color Contrast:** Ensure all text elements maintain at least a `4.5:1` contrast ratio in both Light Mode and Dark Mode.
 
+## 8. UI Chrome Text Selection & Caret Suppression
+- All non-editable UI elements (headers, titles, hero banners, navigation bars, sidebars, buttons, labels, and badges) must disable accidental text selection (`user-select: none; -webkit-user-select: none;`) and suppress blinking text carets (`caret-color: transparent; cursor: default;`).
+- Form fields (`input`, `textarea`, `[contenteditable="true"]`) must retain standard text selection and visible insertion carets (`caret-color: auto; user-select: text;`).
+- Scholarly research content (abstracts, publication text, citations, DOIs) must explicitly remain selectable (`user-select: text;`) so researchers can copy references and scholarly findings.
+
+

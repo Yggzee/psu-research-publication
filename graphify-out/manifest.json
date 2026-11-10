@@ -60,10 +60,10 @@
     "semantic_hash": ""
   },
   "src/app/components/DashboardLayout.tsx": {
-    "mtime": 1794269726.2059247,
-    "seen": 1794322751.1462424,
-    "ast_hash": "ee635284a8a982def1e136901fec39c6",
-    "semantic_hash": "ee635284a8a982def1e136901fec39c6"
+    "mtime": 1794338770.5742395,
+    "seen": 1794338886.5274448,
+    "ast_hash": "d961871d73911f92a330a7587d33101a",
+    "semantic_hash": ""
   },
   "src/app/components/DepartmentLegend.tsx": {
     "mtime": 1791903527.2738693,
@@ -102,10 +102,10 @@
     "semantic_hash": ""
   },
   "src/app/components/PublicRepositoryPortal.tsx": {
-    "mtime": 1794269727.1529098,
-    "seen": 1794322751.1462564,
-    "ast_hash": "32954b128ccdee876c40eb3ad20ac43f",
-    "semantic_hash": "32954b128ccdee876c40eb3ad20ac43f"
+    "mtime": 1794338715.6201806,
+    "seen": 1794338886.5274682,
+    "ast_hash": "bd0267e5800c2e98724ac5de38ad0d86",
+    "semantic_hash": ""
   },
   "src/app/components/PublicationDetail.tsx": {
     "mtime": 1794331513.3392937,
@@ -174,9 +174,9 @@
     "semantic_hash": "0b8b1b54da27f8809f99dcb72475c933"
   },
   "src/app/components/SystemGuidePage.tsx": {
-    "mtime": 1794333433.350777,
-    "seen": 1794338216.0100358,
-    "ast_hash": "ab0dc760f67f8ad28918d0d9170db94b",
+    "mtime": 1794338804.509982,
+    "seen": 1794338886.527502,
+    "ast_hash": "e318073e71e7b2c6d40f487484e2becf",
     "semantic_hash": ""
   },
   "src/app/components/VerifyEmailPage.tsx": {
