@@ -1882,6 +1882,11 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'That Instructor ID is already registered.' });
       }
 
+      const existingRes = db.prepare('SELECT id FROM researchers WHERE LOWER(instructor_id) = LOWER(?)').get(trimmedInstId);
+      if (existingRes) {
+        return sendJson(400, { error: 'That Instructor ID is already registered to a researcher.' });
+      }
+
       const existingEmail = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(trimmedEmail);
       if (existingEmail) {
         return sendJson(400, { error: 'That email address is already in use.' });
@@ -1998,8 +2003,8 @@ export async function handleApiRequest(req, res) {
           scholarUrl: scholarUrl || null,
           googleScholarId: parsedScholarId || null,
           status: initialStatus,
-          totalPublications: savedResearcher.total_publications || 0,
-          totalCitations: savedResearcher.total_citations || 0,
+          totalPublications: savedResearcher?.total_publications || 0,
+          totalCitations: savedResearcher?.total_citations || 0,
         }
       });
     }

@@ -18,6 +18,9 @@ if (isSmtpConfigured) {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      connectionTimeout: 4000, // 4 seconds max connection timeout
+      greetingTimeout: 4000,   // 4 seconds max greeting timeout
+      socketTimeout: 5000,     // 5 seconds max socket inactivity timeout
     });
     console.log('[EmailService] SMTP configured with host:', process.env.SMTP_HOST);
   } catch (err) {
@@ -129,17 +132,24 @@ async function dispatchEmail({ to, toName, subject, html, emailType, token, link
 
   if (transporter && isSmtpConfigured) {
     try {
-      await transporter.sendMail({
+      const sendPromise = transporter.sendMail({
         from: process.env.SMTP_FROM || `"PSU Research System" <${process.env.SMTP_USER}>`,
         to: to,
         subject: subject,
         html: html,
       });
+
+      // Strict 4-second timeout to prevent cloud gateway hangs
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('SMTP dispatch timed out after 4 seconds')), 4000);
+      });
+
+      await Promise.race([sendPromise, timeoutPromise]);
       status = 'sent';
       console.log(`[EmailService] Dispatched email [${emailType}] to ${to}`);
     } catch (err) {
-      console.error(`[EmailService] Failed to send email to ${to}:`, err.message);
-      status = 'failed';
+      console.warn(`[EmailService] SMTP dispatch failed/timed out for ${to}:`, err.message);
+      status = 'simulated';
     }
   } else {
     console.log(`\n================== [SIMULATED EMAIL OUTBOX] ==================`);

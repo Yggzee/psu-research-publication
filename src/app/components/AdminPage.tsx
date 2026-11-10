@@ -115,6 +115,7 @@ export function AdminPage() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingResearcher, setIsSavingResearcher] = useState(false);
 
   // Invitation creation result feedback banner
   const [inviteResult, setInviteResult] = useState<{
@@ -313,10 +314,15 @@ export function AdminPage() {
 
     let finalInstructorId = form.instructorId.trim();
     if (!editingId) {
-      const digitsOnly = finalInstructorId.replace(/^ASIN-/i, "").replace(/\D/g, "");
-      if (digitsOnly.length !== 5) {
-        setFormError("Instructor ID must be 5 digits (format: ASIN-00000).");
+      let digitsOnly = finalInstructorId.replace(/^ASIN-/i, "").replace(/\D/g, "");
+      if (!digitsOnly) {
+        setFormError("Instructor ID must contain digits (format: ASIN-00000).");
         return;
+      }
+      if (digitsOnly.length > 5) {
+        digitsOnly = digitsOnly.slice(0, 5);
+      } else if (digitsOnly.length < 5) {
+        digitsOnly = digitsOnly.padStart(5, "0");
       }
       finalInstructorId = `ASIN-${digitsOnly}`;
     }
@@ -345,9 +351,13 @@ export function AdminPage() {
       invitationRequestId: form.invitationRequestId || undefined,
     };
 
+    setIsSavingResearcher(true);
+    setFormError("");
+
     try {
       if (editingId) {
         await apiService.updateResearcher(editingId, payload);
+        toast.success(`Researcher ${fullName} updated successfully.`);
       } else {
         const res = await apiService.createResearcher(payload);
         if (res.verificationLink) {
@@ -357,6 +367,9 @@ export function AdminPage() {
             verificationLink: res.verificationLink,
             message: res.message,
           });
+          toast.success(`Invitation generated for ${fullName}!`);
+        } else {
+          toast.success(`Researcher ${fullName} created successfully.`);
         }
       }
       await loadData();
@@ -366,6 +379,8 @@ export function AdminPage() {
       window.dispatchEvent(new CustomEvent("research-records-updated"));
     } catch (err: any) {
       setFormError(err.message || "Failed to save researcher.");
+    } finally {
+      setIsSavingResearcher(false);
     }
   };
 
@@ -1412,9 +1427,15 @@ export function AdminPage() {
             <Button
               size="sm"
               onClick={saveForm}
+              disabled={isSavingResearcher}
               className="h-8 text-xs font-semibold bg-brand hover:bg-brand/90 text-white gap-1.5"
             >
-              {editingId ? (
+              {isSavingResearcher ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{editingId ? "Updating..." : "Sending Invitation..."}</span>
+                </>
+              ) : editingId ? (
                 <>
                   <Save className="w-3.5 h-3.5" />
                   <span>Update Researcher</span>
