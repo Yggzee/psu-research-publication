@@ -24,7 +24,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { getLastNYears, DEPARTMENT_COLORS, DEPARTMENTS } from "../utils/chartUtils";
+import { getLastNYears, DEPARTMENT_COLORS, DEPARTMENTS, normalizeDepartment } from "../utils/chartUtils";
 import { DepartmentLegend } from "./DepartmentLegend";
 import { Button } from "./ui/button";
 import { apiService, type DashboardStatsResponse } from "../services/api.service";
@@ -55,8 +55,8 @@ export function ImpactAnalysisPage() {
 
   const recordedYears = (data.deptYearStats || [])
     .map((s) => Number(s.year))
-    .filter((y) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
-  const minRecordedYear = recordedYears.length > 0 ? Math.min(...recordedYears) : 2011;
+    .filter((y) => !isNaN(y) && y >= 2000 && y <= new Date().getFullYear());
+  const minRecordedYear = recordedYears.length > 0 ? Math.min(...recordedYears) : 2015;
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -64,16 +64,6 @@ export function ImpactAnalysisPage() {
       const stats = await apiService.getDashboardStats();
       if (stats) {
         setData(stats);
-        const yList = (stats.deptYearStats || [])
-          .map((s: any) => Number(s.year))
-          .filter((y: number) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
-        if (yList.length > 0) {
-          const earliest = Math.min(...yList);
-          setYearRange((prev) => ({
-            start: Math.min(prev.start, earliest),
-            end: Math.max(prev.end, new Date().getFullYear()),
-          }));
-        }
       }
     } catch (err) {
       console.warn("Failed to fetch impact analysis data:", err);
@@ -96,14 +86,14 @@ export function ImpactAnalysisPage() {
   const getDeptCitationsForYear = (dept: string, year: number, mode: "annual" | "cumulative") => {
     if (mode === "annual") {
       const match = data.deptYearStats.find(
-        (s) => Number(s.year) === Number(year) && String(s.department || "").toUpperCase() === dept
+        (s) => Number(s.year) === Number(year) && normalizeDepartment(s.department) === dept
       );
       return match ? Number(match.citations) || 0 : 0;
     }
     // Cumulative: sum all citations for this department up to and including `year`
     return data.deptYearStats
       .filter(
-        (s) => Number(s.year) <= Number(year) && String(s.department || "").toUpperCase() === dept
+        (s) => Number(s.year) <= Number(year) && normalizeDepartment(s.department) === dept
       )
       .reduce((sum, s) => sum + (Number(s.citations) || 0), 0);
   };
@@ -122,7 +112,7 @@ export function ImpactAnalysisPage() {
     const row: any = { year, key: `impact-pub-${year}` };
     DEPARTMENTS.forEach((dept) => {
       const match = data.deptYearStats.find(
-        (s) => Number(s.year) === Number(year) && String(s.department || "").toUpperCase() === dept
+        (s) => Number(s.year) === Number(year) && normalizeDepartment(s.department) === dept
       );
       row[dept] = match ? Number(match.publications) || 0 : 0;
     });

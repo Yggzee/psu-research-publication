@@ -1,10 +1,14 @@
 {
-  "1": "researchStore.ts",
+  "0": "Button",
+  "1": "AdminPage.tsx",
+  "2": "chart.tsx",
   "9": "toggle-group.tsx",
-  "16": "sheet.tsx",
-  "20": "App.tsx",
-  "21": "popover.tsx",
+  "16": "AdminSearchStore",
+  "20": "useResearchers.ts",
+  "21": "input-otp.tsx",
   "24": "api.service.ts",
   "28": "utils.ts",
-  "30": "resizable.tsx"
+  "30": "Publication",
+  "31": "sonner.tsx",
+  "35": ".askCampusAI"
 }

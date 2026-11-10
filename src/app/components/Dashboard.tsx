@@ -22,7 +22,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { getLastNYears, DEPARTMENT_COLORS, DEPARTMENTS } from "../utils/chartUtils";
+import { getLastNYears, DEPARTMENT_COLORS, DEPARTMENTS, normalizeDepartment } from "../utils/chartUtils";
 import { DepartmentLegend } from "./DepartmentLegend";
 import { Button } from "./ui/button";
 import { apiService, type DashboardStatsResponse } from "../services/api.service";
@@ -56,8 +56,8 @@ export function Dashboard() {
 
   const recordedYears = (dashboardData.deptYearStats || [])
     .map((s) => Number(s.year))
-    .filter((y) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
-  const minRecordedYear = recordedYears.length > 0 ? Math.min(...recordedYears) : 2011;
+    .filter((y) => !isNaN(y) && y >= 2000 && y <= new Date().getFullYear());
+  const minRecordedYear = recordedYears.length > 0 ? Math.min(...recordedYears) : 2015;
 
   const fetchStats = async () => {
     setIsLoading(true);
@@ -65,16 +65,6 @@ export function Dashboard() {
       const data = await apiService.getDashboardStats();
       if (data) {
         setDashboardData(data);
-        const yList = (data.deptYearStats || [])
-          .map((s: any) => Number(s.year))
-          .filter((y: number) => !isNaN(y) && y >= 1990 && y <= new Date().getFullYear());
-        if (yList.length > 0) {
-          const earliest = Math.min(...yList);
-          setYearRange((prev) => ({
-            start: Math.min(prev.start, earliest),
-            end: Math.max(prev.end, new Date().getFullYear()),
-          }));
-        }
       }
     } catch (err) {
       console.warn("Failed to fetch dashboard stats from database:", err);
@@ -97,7 +87,7 @@ export function Dashboard() {
     const row: any = { year, key: `metric-${year}` };
     DEPARTMENTS.forEach((dept) => {
       const match = dashboardData.deptYearStats.find(
-        (s) => Number(s.year) === Number(year) && String(s.department || "").toUpperCase() === dept
+        (s) => Number(s.year) === Number(year) && normalizeDepartment(s.department) === dept
       );
       row[dept] = match
         ? outputMetric === "citations"
@@ -130,7 +120,7 @@ export function Dashboard() {
 
   const topResearchersByDepartment = DEPARTMENTS.map((dept) => {
     const deptList = dashboardData.topResearchers
-      .filter((r) => r.department === dept)
+      .filter((r) => normalizeDepartment(r.department) === dept)
       .slice(0, 3);
     return {
       department: dept,

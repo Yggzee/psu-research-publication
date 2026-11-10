@@ -1,6 +1,4 @@
 {
-  "0": "compileWorkflowInternal",
-  "2": "render-erd.mjs",
   "3": "geometry.mjs",
   "4": "dataflow-compiler.mjs",
   "5": "generated-validators.mjs",

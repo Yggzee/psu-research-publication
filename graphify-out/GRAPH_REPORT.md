@@ -1,24 +1,24 @@
 # Graph Report - ResPub  (2026-11-11)
 
 ## Corpus Check
-- 118 files · ~131,452 words
+- 118 files · ~131,605 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: (none) 5, .css 5, .db 1)
 
 ## Summary
-- 878 nodes · 2778 edges · 36 communities (28 shown, 8 thin omitted)
+- 880 nodes · 2788 edges · 38 communities (26 shown, 12 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d15b360c`
+- Built from commit: `522d6d56`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- compileWorkflowInternal
-- researchStore.ts
-- render-erd.mjs
+- Button
+- AdminPage.tsx
+- chart.tsx
 - geometry.mjs
 - dataflow-compiler.mjs
 - generated-validators.mjs
@@ -32,12 +32,12 @@
 - render-lifecycle.mjs
 - commandDeliver
 - cn
-- sheet.tsx
+- AdminSearchStore
 - render-waterfall.mjs
 - YAYTP6L5.js
 - ProfilePage.tsx
-- App.tsx
-- popover.tsx
+- useResearchers.ts
+- input-otp.tsx
 - render-timeline.mjs
 - extract-audio-data.py
 - api.service.ts
@@ -46,7 +46,7 @@
 - CampusAIChatHistory.tsx
 - utils.ts
 - L4LY553T.js
-- resizable.tsx
+- Publication
 - vite.config.ts
 
 ## God Nodes (most connected - your core abstractions)
@@ -55,56 +55,52 @@
 3. `Button()` - 66 edges
 4. `Badge()` - 50 edges
 5. `Card()` - 49 edges
-6. `handleApiRequest()` - 47 edges
+6. `handleApiRequest()` - 48 edges
 7. `CardContent()` - 45 edges
 8. `Input()` - 40 edges
 9. `CardHeader()` - 34 edges
 10. `getCurrentUser()` - 33 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `SimulatedPublicCounterGraph()` --calls--> `Badge()`  [EXTRACTED]
-  src/app/components/SystemGuidePage.tsx → src/app/components/ui/badge.tsx
-- `SimulatedSDGRadarGraph()` --calls--> `Badge()`  [EXTRACTED]
-  src/app/components/SystemGuidePage.tsx → src/app/components/ui/badge.tsx
 - `Menubar()` --calls--> `cn()`  [EXTRACTED]
   src/app/components/ui/menubar.tsx → src/app/components/ui/utils.ts
 - `MenubarCheckboxItem()` --calls--> `cn()`  [EXTRACTED]
   src/app/components/ui/menubar.tsx → src/app/components/ui/utils.ts
 - `MenubarItem()` --calls--> `cn()`  [EXTRACTED]
   src/app/components/ui/menubar.tsx → src/app/components/ui/utils.ts
+- `MenubarLabel()` --calls--> `cn()`  [EXTRACTED]
+  src/app/components/ui/menubar.tsx → src/app/components/ui/utils.ts
+- `MenubarRadioItem()` --calls--> `cn()`  [EXTRACTED]
+  src/app/components/ui/menubar.tsx → src/app/components/ui/utils.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (36 total, 8 thin omitted)
+## Communities (38 total, 12 thin omitted)
 
-### Community 0 - "compileWorkflowInternal"
-Cohesion: 0.08
-Nodes (67): AdminPage(), DEPARTMENTS, emptyForm, ApifyTokenManager(), ApifyTokenManagerProps, AskCampusAI(), SUGGESTED_QUESTIONS, CoAuthorshipGraph() (+59 more)
-
-### Community 1 - "researchStore.ts"
-Cohesion: 0.08
-Nodes (24): Notice(), NoticeProps, NoticeVariant, SearchEngine(), AdminSearchStore, normalizeTitle(), addResearchRecord(), AUTH_TOKEN_KEY (+16 more)
-
-### Community 2 - "render-erd.mjs"
-Cohesion: 0.08
-Nodes (55): EmptyState(), EmptyStateProps, PageHeader(), PageHeaderProps, PageTabs(), PageTabsProps, TabItem, StatusBadge() (+47 more)
-
-### Community 3 - "geometry.mjs"
+### Community 0 - "Button"
 Cohesion: 0.06
-Nodes (3): Publication, Researcher, ApiService
+Nodes (104): ApifyTokenManager(), ApifyTokenManagerProps, AskCampusAI(), SUGGESTED_QUESTIONS, CoAuthorshipGraph(), EmptyState(), Notice(), NoticeProps (+96 more)
+
+### Community 1 - "AdminPage.tsx"
+Cohesion: 0.07
+Nodes (50): AdminPage(), DEPARTMENTS, emptyForm, CommandPalette(), CommandPaletteProps, ALL_SDG_OPTIONS, parseAuthorsList(), PublicationDetail() (+42 more)
+
+### Community 2 - "chart.tsx"
+Cohesion: 0.27
+Nodes (10): ChartConfig, ChartContainer(), ChartContext, ChartContextProps, ChartLegendContent(), ChartStyle(), ChartTooltipContent(), getPayloadConfigFromPayload() (+2 more)
 
 ### Community 4 - "dataflow-compiler.mjs"
 Cohesion: 0.07
-Nodes (33): Separator(), SidebarContent(), SidebarContext, SidebarContextProps, SidebarFooter(), SidebarGroup(), SidebarGroupAction(), SidebarGroupContent() (+25 more)
+Nodes (42): Separator(), Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay(), SheetPortal() (+34 more)
 
 ### Community 5 - "generated-validators.mjs"
 Cohesion: 0.07
-Nodes (32): BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList(), BreadcrumbPage(), BreadcrumbSeparator(), CardAction(), CardFooter() (+24 more)
+Nodes (31): AccordionContent(), AccordionItem(), AccordionTrigger(), BreadcrumbEllipsis(), BreadcrumbItem(), BreadcrumbLink(), BreadcrumbList(), BreadcrumbPage() (+23 more)
 
 ### Community 6 - "render-class.mjs"
 Cohesion: 0.16
-Nodes (28): activeCitationSyncJobs, attachTokenUsage(), cleanupOrphanedPublications(), computePublicationCitationYears(), deleteResearcherPublications(), enqueuePublicationCitationSync(), fetchApifyTokenUsage(), getActiveApifyTokenRow() (+20 more)
+Nodes (29): activeCitationSyncJobs, attachTokenUsage(), cleanupOrphanedPublications(), computePublicationCitationYears(), deleteResearcherPublications(), enqueuePublicationCitationSync(), fetchApifyTokenUsage(), getActiveApifyTokenRow() (+21 more)
 
 ### Community 7 - "visual-check.mjs"
 Cohesion: 0.10
@@ -120,7 +116,7 @@ Nodes (9): Alert(), AlertDescription(), AlertTitle(), alertVariants, ToggleGroup
 
 ### Community 10 - "render-sequence.mjs"
 Cohesion: 0.10
-Nodes (26): Dashboard(), OutputMetric, TopResearchTab, DepartmentLegend(), DepartmentLegendProps, ChartConfig, ChartContainer(), ChartContext (+18 more)
+Nodes (22): App(), Dashboard(), OutputMetric, TopResearchTab, DepartmentLegend(), DepartmentLegendProps, router, DashboardStatsResponse (+14 more)
 
 ### Community 11 - "ref_node_path"
 Cohesion: 0.16
@@ -142,25 +138,21 @@ Nodes (17): cleanText(), enrichBatchWithCrossRef(), enrichPaperWithCrossRef(), e
 Cohesion: 0.12
 Nodes (9): ContextMenuCheckboxItem(), ContextMenuContent(), ContextMenuItem(), ContextMenuLabel(), ContextMenuRadioItem(), ContextMenuSeparator(), ContextMenuShortcut(), ContextMenuSubContent() (+1 more)
 
-### Community 16 - "sheet.tsx"
-Cohesion: 0.23
-Nodes (9): Sheet(), SheetContent(), SheetDescription(), SheetFooter(), SheetHeader(), SheetOverlay(), SheetPortal(), SheetTitle() (+1 more)
-
 ### Community 17 - "render-waterfall.mjs"
 Cohesion: 0.17
 Nodes (13): Carousel(), CarouselApi, CarouselContent(), CarouselContext, CarouselContextProps, CarouselItem(), CarouselNext(), CarouselOptions (+5 more)
 
 ### Community 18 - "YAYTP6L5.js"
-Cohesion: 0.18
+Cohesion: 0.22
 Nodes (8): __dirname, DIST_DIR, __filename, MIME_TYPES, PORT, server, applySecurityHeaders(), SECURITY_HEADERS
 
 ### Community 19 - "ProfilePage.tsx"
 Cohesion: 0.19
 Nodes (10): FormControl(), FormDescription(), FormFieldContext, FormFieldContextValue, FormItem(), FormItemContext, FormItemContextValue, FormLabel() (+2 more)
 
-### Community 20 - "App.tsx"
-Cohesion: 0.38
-Nodes (3): App(), router, ThemeProvider()
+### Community 21 - "input-otp.tsx"
+Cohesion: 0.33
+Nodes (3): InputOTP(), InputOTPGroup(), InputOTPSlot()
 
 ### Community 22 - "render-timeline.mjs"
 Cohesion: 0.20
@@ -172,7 +164,7 @@ Nodes (9): NavigationMenu(), NavigationMenuContent(), NavigationMenuIndicator(),
 
 ### Community 24 - "api.service.ts"
 Cohesion: 0.08
-Nodes (26): API_CONFIG, API_ENDPOINTS, ApifyToken, ApifyTokenUsage, AskCampusResponse, EmailLog, FetchScholarProfileResponse, InvitationRequest (+18 more)
+Nodes (25): API_CONFIG, API_ENDPOINTS, ApifyToken, ApifyTokenUsage, AskCampusResponse, EmailLog, FetchScholarProfileResponse, InvitationRequest (+17 more)
 
 ### Community 25 - "createRouter"
 Cohesion: 0.36
@@ -183,30 +175,30 @@ Cohesion: 0.25
 Nodes (3): LoginAttemptTracker, loginAttemptTracker, rateLimiter
 
 ### Community 27 - "CampusAIChatHistory.tsx"
-Cohesion: 0.08
-Nodes (46): ChatMessage, CampusAIChatHistory(), CommandPalette(), CommandPaletteProps, FormattedChatMessage(), FormattedChatMessageProps, parseInline(), adminNavigationCategories (+38 more)
+Cohesion: 0.10
+Nodes (37): ChatMessage, CampusAIChatHistory(), FormattedChatMessage(), FormattedChatMessageProps, parseInline(), ConfirmModal(), ConfirmModalProps, adminNavigationCategories (+29 more)
 
 ### Community 28 - "utils.ts"
-Cohesion: 0.07
-Nodes (11): AccordionContent(), AccordionItem(), AccordionTrigger(), HoverCardContent(), Progress(), RadioGroup(), RadioGroupItem(), ScrollArea() (+3 more)
+Cohesion: 0.06
+Nodes (11): EmptyStateProps, HoverCardContent(), PopoverContent(), Progress(), RadioGroup(), RadioGroupItem(), ResizableHandle(), ResizablePanelGroup() (+3 more)
 
 ## Knowledge Gaps
-- **8 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `cn()` connect `generated-validators.mjs` to `compileWorkflowInternal`, `render-erd.mjs`, `dataflow-compiler.mjs`, `ApiService`, `toggle-group.tsx`, `render-sequence.mjs`, `render-lifecycle.mjs`, `cn`, `sheet.tsx`, `render-waterfall.mjs`, `ProfilePage.tsx`, `popover.tsx`, `render-timeline.mjs`, `extract-audio-data.py`, `CampusAIChatHistory.tsx`, `utils.ts`, `resizable.tsx`?**
-  _High betweenness centrality (0.230) - this node is a cross-community bridge._
-- **Should `compileWorkflowInternal` be split into smaller, more focused modules?**
-  _Cohesion score 0.0813843236409608 - nodes in this community are weakly interconnected._
-- **Why does `ApiService` connect `geometry.mjs` to `compileWorkflowInternal`, `researchStore.ts`, `render-erd.mjs`, `render-sequence.mjs`, `api.service.ts`, `CampusAIChatHistory.tsx`?**
+- **Why does `cn()` connect `generated-validators.mjs` to `Button`, `AdminPage.tsx`, `chart.tsx`, `dataflow-compiler.mjs`, `ApiService`, `toggle-group.tsx`, `render-lifecycle.mjs`, `cn`, `render-waterfall.mjs`, `ProfilePage.tsx`, `input-otp.tsx`, `render-timeline.mjs`, `extract-audio-data.py`, `CampusAIChatHistory.tsx`, `utils.ts`?**
+  _High betweenness centrality (0.229) - this node is a cross-community bridge._
+- **Should `Button` be split into smaller, more focused modules?**
+  _Cohesion score 0.06406948744410045 - nodes in this community are weakly interconnected._
+- **Why does `ApiService` connect `geometry.mjs` to `Button`, `AdminPage.tsx`, `.askCampusAI`, `render-sequence.mjs`, `useResearchers.ts`, `api.service.ts`, `CampusAIChatHistory.tsx`, `Publication`?**
   _High betweenness centrality (0.102) - this node is a cross-community bridge._
-- **Should `researchStore.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.08253968253968254 - nodes in this community are weakly interconnected._
-- **Why does `Button()` connect `compileWorkflowInternal` to `researchStore.ts`, `render-erd.mjs`, `dataflow-compiler.mjs`, `generated-validators.mjs`, `ApiService`, `render-sequence.mjs`, `render-waterfall.mjs`, `CampusAIChatHistory.tsx`?**
-  _High betweenness centrality (0.031) - this node is a cross-community bridge._
-- **Should `render-erd.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.07992007992007992 - nodes in this community are weakly interconnected._
+- **Should `AdminPage.tsx` be split into smaller, more focused modules?**
+  _Cohesion score 0.0741745816372682 - nodes in this community are weakly interconnected._
+- **Why does `Button()` connect `Button` to `AdminPage.tsx`, `dataflow-compiler.mjs`, `generated-validators.mjs`, `ApiService`, `render-sequence.mjs`, `render-waterfall.mjs`, `CampusAIChatHistory.tsx`, `utils.ts`?**
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Should `geometry.mjs` be split into smaller, more focused modules?**
-  _Cohesion score 0.06101190476190476 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07607843137254902 - nodes in this community are weakly interconnected._
+- **Should `dataflow-compiler.mjs` be split into smaller, more focused modules?**
+  _Cohesion score 0.0653061224489796 - nodes in this community are weakly interconnected._

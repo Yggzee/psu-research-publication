@@ -18,6 +18,21 @@ export type Department = keyof typeof DEPARTMENT_COLORS;
 export const DEPARTMENTS: Department[] = ["BSIT", "BSBA", "BEE", "BTLED", "BIT", "BSE"];
 
 /**
+ * Normalizes any freeform or legacy department label into one of the 6 canonical PSU Asingan codes
+ */
+export function normalizeDepartment(rawDept?: string | null): Department {
+  if (!rawDept) return "BSIT";
+  const u = String(rawDept).toUpperCase().trim();
+  if (u.includes("BSIT") || u.includes("INFORMATION TECHNOLOGY") || u === "IT") return "BSIT";
+  if (u.includes("BSBA") || u.includes("BUSINESS") || u.includes("ADMINISTRATION")) return "BSBA";
+  if (u.includes("BTLED") || u.includes("LIVELIHOOD") || u.includes("TECHNOLOGY AND LIVELIHOOD")) return "BTLED";
+  if (u.includes("BSE") || u.includes("SECONDARY")) return "BSE";
+  if (u.includes("BEE") || u.includes("ELEMENTARY")) return "BEE";
+  if (u.includes("BIT") || u.includes("INDUSTRIAL")) return "BIT";
+  return "BSIT";
+}
+
+/**
  * Get the current year dynamically
  */
 export function getCurrentYear(): number {

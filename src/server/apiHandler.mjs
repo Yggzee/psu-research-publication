@@ -45,6 +45,7 @@ import {
   canCallerModifyResearcher,
   sanitizePublicationInput,
   sanitizeResearcherInput,
+  normalizeDepartment,
 } from './authHelper.mjs';
 
 export { matchesResearcher };
@@ -230,31 +231,31 @@ function inferCitingPaperYear(cp, minYear = 2000) {
  * using fast SQLite indexed GROUP BY queries (supports 10,000+ citations in <1ms).
  */
 function computePublicationCitationYears(dbInstance, p, persistTrends = false) {
-  const minPubYear = Number(p.year) >= 1990 ? Number(p.year) : 2000;
+  const minPubYear = Number(p.year) >= 2000 ? Number(p.year) : (Number(p.year) >= 1990 ? Number(p.year) : 2011);
 
-  // Only inspect rows whose year is missing/null to infer their year once
+  // Only inspect rows whose year is missing/null or predates the publication to infer or adjust their year
   const missingYearRows = dbInstance
-    .prepare('SELECT id, year, link, volume_issue, doi_issn FROM citing_papers WHERE publication_id = ? AND (year IS NULL OR year < 1990)')
-    .all(p.id);
+    .prepare('SELECT id, year, link, volume_issue, doi_issn FROM citing_papers WHERE publication_id = ? AND (year IS NULL OR year < ?)')
+    .all(p.id, minPubYear);
 
   if (missingYearRows.length > 0) {
     const updYearStmt = dbInstance.prepare('UPDATE citing_papers SET year = ? WHERE id = ?');
     runInTransaction(() => {
       for (const cp of missingYearRows) {
-        const yr = inferCitingPaperYear(cp, minPubYear);
+        const yr = inferCitingPaperYear(cp, minPubYear) || minPubYear;
         if (yr && cp.id) {
           try {
-            updYearStmt.run(yr, cp.id);
+            updYearStmt.run(Math.max(yr, minPubYear), cp.id);
           } catch {}
         }
       }
     });
   }
 
-  // Fast indexed SQL aggregation across 1 to 10,000+ citing rows
+  // Fast indexed SQL aggregation across citing rows (a citation must occur in or after the publication year)
   const groupedRows = dbInstance
-    .prepare('SELECT year, COUNT(*) as cnt FROM citing_papers WHERE publication_id = ? AND year IS NOT NULL AND year >= 1990 GROUP BY year')
-    .all(p.id);
+    .prepare('SELECT year, COUNT(*) as cnt FROM citing_papers WHERE publication_id = ? AND year IS NOT NULL AND year >= ? GROUP BY year')
+    .all(p.id, minPubYear);
 
   const yearCounts = {};
   let datedCount = 0;
@@ -1698,7 +1699,7 @@ export async function handleApiRequest(req, res) {
         return {
           id: r.id,
           name: r.name,
-          department: r.department,
+          department: normalizeDepartment(r.department),
           instructor_id: r.instructor_id,
           citations: citCount,
           publications: pubCount,
@@ -1724,17 +1725,19 @@ export async function handleApiRequest(req, res) {
       for (const p of allApprovedPubs) {
         // Find matching researcher to get department
         const matchedR = allResearchers.find((r) => matchesResearcher(p, r));
-        const dept = matchedR ? matchedR.department : 'BSIT';
+        const dept = normalizeDepartment(matchedR ? matchedR.department : 'BSIT');
+        const pubYear = Number(p.year);
 
-        if (p.year) {
-          ensureDeptYear(dept, p.year).publications += 1;
+        if (pubYear && pubYear >= 2000) {
+          ensureDeptYear(dept, pubYear).publications += 1;
         }
 
         const citeYearCounts = computePublicationCitationYears(db, p);
         for (const [cYearStr, cnt] of Object.entries(citeYearCounts)) {
           const cYear = Number(cYearStr);
-          if (cYear >= 1990) {
-            ensureDeptYear(dept, cYear).citations += Number(cnt) || 0;
+          const effectiveYear = Math.max(cYear, pubYear || 2011);
+          if (effectiveYear >= 2000) {
+            ensureDeptYear(dept, effectiveYear).citations += Number(cnt) || 0;
           }
         }
       }

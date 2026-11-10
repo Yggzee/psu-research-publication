@@ -434,7 +434,7 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
             password = 'ENV_MANAGED',
             name = 'Sir Rodelio M. Garin',
             email = 'rodeliogarin@gmail.com',
-            department = 'Campus Research Unit / BSIT',
+            department = 'BSIT',
             scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
             google_scholar_id = 'x6PdtN8AAAAJ'
         WHERE role = 'admin'
@@ -443,9 +443,20 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
       prepareFn(`
         UPDATE researchers 
         SET user_id = 'admin-1',
+            department = 'BSIT',
             scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
             google_scholar_id = 'x6PdtN8AAAAJ'
-        WHERE instructor_id = 'PSU-002' OR name LIKE '%Garin%'
+        WHERE instructor_id = 'ASIN-00002' OR instructor_id = 'PSU-002' OR name LIKE '%Garin%'
+      `).run();
+      prepareFn(`
+        UPDATE researchers 
+        SET department = 'BSIT' 
+        WHERE department LIKE '%Campus Research Unit%' OR department LIKE '%Information Technology%'
+      `).run();
+      prepareFn(`
+        UPDATE users 
+        SET department = 'BSIT' 
+        WHERE department LIKE '%Campus Research Unit%' OR department LIKE '%Information Technology%'
       `).run();
     } catch {}
 

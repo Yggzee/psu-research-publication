@@ -22,7 +22,7 @@ import {
   type SynergyCandidate,
   type SynergyMatchResponse,
 } from "../services/api.service";
-import { DEPARTMENT_COLORS } from "../utils/chartUtils";
+import { DEPARTMENT_COLORS, normalizeDepartment } from "../utils/chartUtils";
 import { useTheme } from "../utils/themeContext";
 import { toast } from "sonner";
 
@@ -162,7 +162,7 @@ export function CoAuthorshipGraph() {
       // Draw Nodes
       simNodes.forEach((n) => {
         const isSelected = selectedNode?.id === n.id;
-        const color = (DEPARTMENT_COLORS as Record<string, string>)[n.department] || "#3b82f6";
+        const color = (DEPARTMENT_COLORS as Record<string, string>)[normalizeDepartment(n.department)] || "#3b82f6";
 
         // Outer glow
         if (isSelected) {
