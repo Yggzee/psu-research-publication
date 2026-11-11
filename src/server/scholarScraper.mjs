@@ -134,10 +134,46 @@ export async function enrichPaperWithCrossRef(paper) {
           const items = rawItems.filter((it) => it.type !== 'component' && !/\.s\d+$/i.test(it.DOI || ''));
           const candidatePool = items.length > 0 ? items : rawItems;
           const targetWords = normTarget.split(' ').filter((w) => w.length > 2);
+
+          const existingAuthorsList = Array.isArray(paper.authors)
+            ? paper.authors
+            : typeof paper.authors === 'string'
+            ? paper.authors.split(/[,;]/).map((a) => a.trim()).filter(Boolean)
+            : [];
+          const hasRealExistingAuthors =
+            existingAuthorsList.length > 0 &&
+            !(existingAuthorsList.length === 1 && /^author$/i.test(existingAuthorsList[0].trim()));
+
+          const existingSurnames = existingAuthorsList.map((a) => {
+            const clean = String(a).toLowerCase().replace(/[^a-z\s]/g, '').trim();
+            const words = clean.split(/\s+/).filter((w) => w.length > 2);
+            return words[words.length - 1] || '';
+          }).filter(Boolean);
+
           for (const candidate of candidatePool) {
             const candTitle = normalizeForMatch(candidate?.title?.[0] || '');
             if (!candTitle) continue;
             const hasAuthors = Array.isArray(candidate.author) && candidate.author.length > 0;
+
+            // Strict Author Overlap Check: If the paper already has ground-truth authors from Google Scholar,
+            // CrossRef MUST have at least one matching author surname. Never let an unrelated foreign paper
+            // with a similar title overwrite our researcher's authorship!
+            if (hasRealExistingAuthors && hasAuthors) {
+              const candSurnames = (candidate.author || []).map((a) => {
+                const fam = String(a.family || a.name || '').toLowerCase().replace(/[^a-z]/g, '').trim();
+                return fam;
+              }).filter(Boolean);
+
+              const hasAuthorOverlap = existingSurnames.some((es) =>
+                candSurnames.some((cs) => cs === es || cs.includes(es) || es.includes(cs))
+              );
+
+              if (!hasAuthorOverlap) {
+                // Surnames conflict entirely — different paper with similar title!
+                continue;
+              }
+            }
+
             if (candTitle === normTarget || candTitle.includes(normTarget) || normTarget.includes(candTitle)) {
               matchedItem = candidate;
               if (hasAuthors) break;

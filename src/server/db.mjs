@@ -488,6 +488,12 @@ export function initDatabase() {
 
   // Upgrade any plaintext researcher passwords to salted scrypt hashes
   migrateResearcherPasswordsToScrypt(db);
+  // Re-attribute publications based strictly on verified author names (decoupling from generic uploader IDs)
+  reattributePublicationsByAuthorName();
+  // Purge any stale scraped profile cache so verified Google Scholar author arrays populate cleanly
+  try {
+    db.prepare("DELETE FROM scraped_publications WHERE id LIKE 'gsp-%'").run();
+  } catch {}
   // Call on startup audit to recalibrate any inflated citation counts
   auditAndSyncResearcherCitations();
   autoBackfillMissingSDGs();
@@ -576,6 +582,49 @@ export function autoBackfillMissingSDGs() {
 }
 
 /**
+ * Re-attribute all publications in database based strictly on verified author names,
+ * purging any false ownership stamps caused by uploader/import shortcuts.
+ */
+export function reattributePublicationsByAuthorName() {
+  try {
+    const researchers = db.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
+    const publications = db.prepare("SELECT id, title, authors, owner_id, owner_name FROM publications").all();
+
+    let reattributedCount = 0;
+    for (const pub of publications) {
+      let matchingResearcher = null;
+      for (const res of researchers) {
+        if (matchesResearcher(pub, res)) {
+          matchingResearcher = res;
+          break;
+        }
+      }
+
+      if (matchingResearcher) {
+        if (pub.owner_id !== matchingResearcher.instructor_id || pub.owner_name !== matchingResearcher.name) {
+          db.prepare("UPDATE publications SET owner_id = ?, owner_name = ? WHERE id = ?").run(
+            matchingResearcher.instructor_id,
+            matchingResearcher.name,
+            pub.id
+          );
+          reattributedCount++;
+        }
+      } else {
+        if (pub.owner_id !== null || pub.owner_name !== null) {
+          db.prepare("UPDATE publications SET owner_id = NULL, owner_name = NULL WHERE id = ?").run(pub.id);
+          reattributedCount++;
+        }
+      }
+    }
+    if (reattributedCount > 0) {
+      console.log(`[Reattribution] Successfully re-attributed ${reattributedCount} publication(s) based on verified author names.`);
+    }
+  } catch (err) {
+    console.warn('[Reattribution Error]:', err.message);
+  }
+}
+
+/**
  * Recalculate publication counts and citation sums for all researchers using strict attribution
  */
 export function auditAndSyncResearcherCitations() {
@@ -611,6 +660,7 @@ const tursoSyncWithTimeout = async () => {
   const syncTask = (async () => {
     await initTursoSchema();
     await rehydrateFromTurso(db, originalPrepare);
+    reattributePublicationsByAuthorName();
     auditAndSyncResearcherCitations();
     autoBackfillMissingSDGs();
   })();

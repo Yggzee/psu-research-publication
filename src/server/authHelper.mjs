@@ -8,21 +8,10 @@ import crypto from 'node:crypto';
  */
 export function matchesResearcher(p, r) {
   if (!r || !p) return false;
-  const pOwnerId = (p.owner_id || p.ownerId || '').trim().toLowerCase();
+
   const rInstId = (r.instructor_id || r.instructorId || '').trim().toLowerCase();
   const rId = (r.id || '').trim().toLowerCase();
   const rUserId = (r.user_id || r.userId || '').trim().toLowerCase();
-
-  // 1. Strict Explicit Ownership Match
-  // If the publication has an explicit researcher owner_id assigned (not generic 'admin'/'instructor'),
-  // strictly tie the publication to that assigned researcher.
-  if (pOwnerId && pOwnerId !== 'admin' && pOwnerId !== 'instructor') {
-    return (
-      pOwnerId === rInstId ||
-      pOwnerId === rId ||
-      (Boolean(rUserId) && pOwnerId === rUserId)
-    );
-  }
 
   // Normalize researcher names for token-level matching
   const rName = (r.name || '').trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
@@ -32,76 +21,78 @@ export function matchesResearcher(p, r) {
 
   if (!rLast || rLast.length < 2) return false;
 
-  const pOwnerName = (p.owner_name || p.ownerName || '').trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
-
-  // Exact full name match on owner_name
-  if (pOwnerName && pOwnerName === rName) {
-    return true;
-  }
-
-  // If pOwnerName is present and doesn't match full name, ensure it doesn't belong to a different person
-  if (pOwnerName && pOwnerName !== 'admin' && pOwnerName !== 'instructor') {
-    const ownerTokens = pOwnerName.split(' ').filter(Boolean);
-    if (ownerTokens.includes(rLast)) {
-      if (rFirst && ownerTokens.includes(rFirst)) return true;
-      if (rFirst && ownerTokens.some((t) => t.length > 2 && t !== rFirst && !rName.includes(t))) {
-        // Explicitly belongs to someone else (e.g., "Maria Moreno" vs "Julius Moreno")
-        return false;
-      }
-    } else {
-      return false;
-    }
-  }
-
   let authors = [];
   try {
     authors = Array.isArray(p.authors) ? p.authors : JSON.parse(p.authors || '[]');
   } catch {
     authors = [p.authors || ''];
   }
+  authors = authors.filter(Boolean);
 
-  for (const a of authors) {
-    const raw = (typeof a === 'string' ? a : (a?.name || '')).trim().toLowerCase();
-    if (!raw) continue;
-    const clean = raw.replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!clean) continue;
+  // 1. Strict Author Presence Verification
+  // If the paper has an author list, the researcher MUST be physically present in authors!
+  // We NEVER blindly trust owner_id if the paper is clearly authored by other people.
+  if (authors.length > 0) {
+    for (const a of authors) {
+      const raw = (typeof a === 'string' ? a : (a?.name || '')).trim().toLowerCase();
+      if (!raw) continue;
+      const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!clean) continue;
 
-    // 1. Exact full-name match
-    if (clean === rName) return true;
-
-    const tokens = clean.split(' ').filter(Boolean);
-    // Must contain the exact last name token as a distinct word boundary
-    if (!tokens.includes(rLast)) continue;
-
-    // Check if full first name matches as a token (e.g. "Julius" in "Julius Moreno" or "Moreno, Julius")
-    if (rFirst && tokens.includes(rFirst)) {
-      return true;
-    }
-
-    // Check academic initial formats: "J. O. Moreno" or "Moreno, J. O."
-    if (rFirst) {
-      const fInit = rFirst[0];
-      const otherTokens = tokens.filter((t) => t !== rLast);
-
-      // Reject conflicting full first names (e.g. "Juan Moreno", "Jorge Moreno" must NEVER match "Julius")
-      const hasConflictingFirstName = otherTokens.some((t) => t.length > 2 && t !== rFirst && !rName.includes(t));
-      if (hasConflictingFirstName) {
-        continue;
+      // Exact full-name match (e.g. "rodelio m garin", "rodelio garin")
+      if (clean === rName || (rFirst && rLast && clean.includes(rFirst) && clean.includes(rLast))) {
+        return true;
       }
 
-      // Check initials match
-      const matchedFirstInit = otherTokens.some((t) => t === fInit || t.startsWith(fInit));
-      if (matchedFirstInit) {
-        if (rMiddle) {
-          // If researcher has a middle initial, verify it matches
-          const matchedMiddle = otherTokens.some((t) => t === rMiddle || t === `${fInit}${rMiddle}` || t.endsWith(rMiddle));
-          if (matchedMiddle) return true;
-        } else if (otherTokens.length === 1 && otherTokens[0] === fInit) {
-          // Single initial e.g. "Moreno, J." when researcher has no middle initial recorded
-          return true;
+      const tokens = clean.split(' ').filter(Boolean);
+      // Must contain the exact last name token as a distinct word boundary
+      if (!tokens.includes(rLast)) continue;
+
+      // Check if full first name matches as a token (e.g. "Rodelio" in "Rodelio Garin" or "Garin, Rodelio")
+      if (rFirst && tokens.includes(rFirst)) {
+        return true;
+      }
+
+      // Check academic initials (e.g. "RM Garin", "R. M. Garin", "R. Garin", "Garin, R. M.")
+      if (rFirst) {
+        const fInit = rFirst[0];
+        const otherTokens = tokens.filter((t) => t !== rLast);
+
+        // Reject conflicting full first names (e.g. "Maria Garin" or "Carlo Pagano" must NEVER match "Rodelio Garin")
+        const hasConflictingFirstName = otherTokens.some((t) => t.length > 2 && t !== rFirst && !rName.includes(t));
+        if (hasConflictingFirstName) {
+          continue;
+        }
+
+        // Match initial tokens e.g. "rm", "r", "r m"
+        const matchedFirstInit = otherTokens.some((t) => t === fInit || t.startsWith(fInit));
+        if (matchedFirstInit) {
+          if (rMiddle) {
+            const matchedMiddle = otherTokens.some((t) => t === rMiddle || t === `${fInit}${rMiddle}` || t.endsWith(rMiddle));
+            if (matchedMiddle) return true;
+          }
+          // For single initial formats (e.g. "R. Garin"), verify PSU/Philippine context if available
+          const fullPaperContext = `${p.title || ''} ${p.journal || ''} ${p.abstract || ''} ${p.url || ''}`.toLowerCase();
+          const hasPsuContext = fullPaperContext.includes('pangasinan') || fullPaperContext.includes('psu') || fullPaperContext.includes('philippines');
+          if (hasPsuContext || otherTokens.length === 1) {
+            return true;
+          }
         }
       }
     }
+
+    // Paper has verified authors, but this researcher is NOT one of them
+    return false;
+  }
+
+  // 2. Fallback ONLY when authors array is completely empty or unavailable:
+  const pOwnerId = (p.owner_id || p.ownerId || '').trim().toLowerCase();
+  if (pOwnerId && pOwnerId !== 'admin' && pOwnerId !== 'instructor') {
+    return (
+      pOwnerId === rInstId ||
+      pOwnerId === rId ||
+      (Boolean(rUserId) && pOwnerId === rUserId)
+    );
   }
 
   return false;

@@ -537,6 +537,17 @@ export function SearchEngine() {
                             <span>PDF</span>
                           </a>
                         )}
+
+                        {result.isAuthorMatch && (
+                          <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-medium">
+                            Author Match
+                          </Badge>
+                        )}
+                        {result.isRelatedMatch && (
+                          <Badge variant="outline" className="text-[10px] bg-muted/60 text-muted-foreground border-border/40 font-medium">
+                            Related Campus Research
+                          </Badge>
+                        )}
                       </div>
 
                       <p className="text-xs text-muted-foreground">

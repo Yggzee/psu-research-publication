@@ -3799,23 +3799,11 @@ export async function handleApiRequest(req, res) {
 
       const matchesQueriedAuthor = (item) => {
         if (!item) return false;
-        if (item.isTargetAuthor) return 'strong';
         if (!targetLast) return false;
-
-        // Check if item belongs to any matched researcher by ID or matchesResearcher
-        for (const mr of matchingResearchers) {
-          if (item.owner_id && (item.owner_id === mr.instructor_id || item.owner_id === mr.id)) return 'strong';
-          if (matchesResearcher(item, mr)) return 'strong';
-        }
 
         const isPsu = isPsuItem(item);
 
-        // Check owner_name field
-        if (item.owner_name) {
-          const res = matchAuthorName(item.owner_name, queryWords, targetLast, targetFirst, targetInitials, isPsu);
-          if (res) return res;
-        }
-
+        // 1. Strict Author Presence Check: Parse authors array as Absolute Source of Truth
         let authorsArr = [];
         if (Array.isArray(item.authors)) {
           authorsArr = item.authors;
@@ -3828,16 +3816,29 @@ export async function handleApiRequest(req, res) {
           }
         }
         authorsArr = authorsArr.map((a) => String(a || '').trim()).filter(Boolean);
-        if (authorsArr.length === 0) return false;
 
-        let bestMatch = false;
-        for (const a of authorsArr) {
-          const matchResult = matchAuthorName(a, queryWords, targetLast, targetFirst, targetInitials, isPsu);
-          if (matchResult === 'strong') return 'strong';
-          if (matchResult === 'weak') bestMatch = 'weak';
+        if (authorsArr.length > 0) {
+          for (const a of authorsArr) {
+            const matchResult = matchAuthorName(a, queryWords, targetLast, targetFirst, targetInitials, isPsu);
+            if (matchResult === 'strong') return 'strong';
+            if (matchResult === 'weak') return 'weak';
+          }
+          // The paper has explicit authors, but the queried researcher was NOT one of them!
+          // Never let mismatched owner_id or owner_name falsely claim authorship.
+          return false;
         }
 
-        return bestMatch;
+        // 2. Fallback only if authors array is completely empty
+        if (item.owner_name) {
+          const res = matchAuthorName(item.owner_name, queryWords, targetLast, targetFirst, targetInitials, isPsu);
+          if (res) return res;
+        }
+
+        for (const mr of matchingResearchers) {
+          if (matchesResearcher(item, mr)) return 'strong';
+        }
+
+        return false;
       };
 
       const insertScraped = db.prepare(`
@@ -3907,7 +3908,21 @@ export async function handleApiRequest(req, res) {
           if (normalizedItem.abstract && (!existing.abstract || normalizedItem.abstract.length > existing.abstract.length)) {
             existing.abstract = normalizedItem.abstract;
           }
-          if (normalizedItem.authors.length > existing.authors.length) {
+          // Protect verified authors: Never overwrite trusted authors with an external list that drops the target author!
+          const existingMatchesTarget = (isPersonNameQuery || isExplicitAuthorQuery) ? matchesQueriedAuthor(existing) : false;
+          const incomingMatchesTarget = (isPersonNameQuery || isExplicitAuthorQuery) ? matchesQueriedAuthor(normalizedItem) : false;
+
+          if (
+            normalizedItem.source === 'institutional_repository' ||
+            (!existingMatchesTarget && incomingMatchesTarget) ||
+            (existing.authors.length === 0 || (existing.authors.length === 1 && existing.authors[0] === 'Author'))
+          ) {
+            existing.authors = normalizedItem.authors;
+          } else if (
+            existingMatchesTarget &&
+            incomingMatchesTarget &&
+            normalizedItem.authors.length > existing.authors.length
+          ) {
             existing.authors = normalizedItem.authors;
           }
           if (
@@ -3943,7 +3958,7 @@ export async function handleApiRequest(req, res) {
             `).all(r.instructor_id, r.id, `%${r.last_name}%`, `%${r.last_name}%`);
 
             for (const p of authorPubs) {
-              if (matchesResearcher(p, r) || p.owner_id === r.instructor_id || String(p.owner_name || '').toLowerCase().includes(r.last_name.toLowerCase())) {
+              if (matchesResearcher(p, r)) {
                 addCandidateToPool({
                   id: p.id,
                   title: p.title,
@@ -4386,17 +4401,19 @@ export async function handleApiRequest(req, res) {
 
       // HIGH-RECALL TOPIC & AUTHOR RELEVANCE FILTER
       const isTopicRelevant = (item) => {
-        if ((isPersonNameQuery || isExplicitAuthorQuery) && matchesQueriedAuthor(item)) {
+        const authorMatch = (isPersonNameQuery || isExplicitAuthorQuery) ? matchesQueriedAuthor(item) : false;
+        if (authorMatch) {
           return true;
         }
-        // When searching by person name or explicit author, retain all candidates
-        // while target author papers are boosted to top rank (+500,000 pts)
-        if (isExplicitAuthorQuery || matchedScholarProfile || isPersonNameQuery) {
-          const tLower = String(item.title || '').toLowerCase();
-          const absLower = String(item.abstract || '').toLowerCase();
-          const full = `${tLower} ${absLower}`;
-          if (queryWords.some((w) => hasWordMatch(full, w))) return true;
-          return true;
+
+        // When searching by researcher name or explicit author:
+        if (isPersonNameQuery || isExplicitAuthorQuery) {
+          // Retain PSU campus research as secondary/related papers below the author's primary works
+          if (isPsuItem(item)) {
+            return true;
+          }
+          // If the paper is outside PSU and does NOT have the author, exclude it completely
+          return false;
         }
 
         const tLower = String(item.title || '').toLowerCase();
@@ -4435,13 +4452,15 @@ export async function handleApiRequest(req, res) {
         const isPsu = isPsuItem(item);
         const isPh = isPhItem(item);
 
-        // Author match gets top priority (+500,000 pts for strong, +50,000 for weak/ambiguous initial) ONLY when searching by researcher name or explicit author
+        // Author match gets top priority (+1,000,000 pts for strong, +500,000 for weak/initial)
+        // Guarantees all papers verified as authored by the person appear FIRST in the results
+        let authorMatchQuality = false;
         if (isPersonNameQuery || isExplicitAuthorQuery) {
-          const authorMatchQuality = matchesQueriedAuthor(item);
+          authorMatchQuality = matchesQueriedAuthor(item);
           if (authorMatchQuality === 'strong') {
-            score += 500000;
+            score += 1000000;
           } else if (authorMatchQuality === 'weak') {
-            score += 50000;
+            score += 500000;
           }
         }
 
@@ -4498,7 +4517,7 @@ export async function handleApiRequest(req, res) {
       const startIndex = page * limit;
       const pageResults = allRankedResults.slice(startIndex, startIndex + limit);
 
-      // Auto-tag each result with its UN SDG Focus Track so the UI displays SDG tags automatically
+      // Auto-tag each result with its UN SDG Focus Track and author-match badges
       for (const item of pageResults) {
         if (!item.sdg_tags || item.sdg_tags.length === 0) {
           const sdgClass = localHeuristicSDG(item.title, item.abstract);
@@ -4508,6 +4527,12 @@ export async function handleApiRequest(req, res) {
           item.sdg_rationale = sdgClass.rationale;
           item.ched_priority = sdgClass.chedPriority;
         }
+
+        // Tag verified author match status for UI badging
+        const authorMatch = (isPersonNameQuery || isExplicitAuthorQuery) ? matchesQueriedAuthor(item) : false;
+        item.isAuthorMatch = authorMatch === 'strong' || authorMatch === 'weak';
+        item.isRelatedMatch = !item.isAuthorMatch && isPsuItem(item);
+
         // Label the geographical tier for UI badging
         if (isPsuItem(item)) {
           item.geo_tier = 'psu';

@@ -42,6 +42,8 @@ export interface ScholarSearchResult {
   ched_priority?: string;
   geo_tier?: 'psu' | 'philippines' | 'international';
   geo_tier_label?: string;
+  isAuthorMatch?: boolean;
+  isRelatedMatch?: boolean;
 }
 
 export interface ScholarSearchResponse {
