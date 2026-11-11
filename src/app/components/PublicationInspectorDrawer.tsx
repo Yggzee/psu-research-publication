@@ -427,16 +427,16 @@ export function PublicationInspectorDrawer({
                         return (
                           <div
                             key={sdg}
-                            className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-card space-y-2.5 shadow-xs"
+                            className="p-4 rounded-xl border border-border bg-card space-y-2.5 shadow-xs"
                           >
                             <div className="flex items-center gap-3">
                               <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs text-white shrink-0 ${idx === 0 ? "bg-emerald-600" : "bg-blue-600"}`}>
-                                {idx === 0 ? "1st" : "2nd"}
+                                {idx === 0 ? "Focus" : "Co-Align"}
                               </div>
                               <div>
                                 <p className="text-sm font-bold text-foreground">{sdg}</p>
                                 <p className="text-[11px] text-muted-foreground">
-                                  {idx === 0 ? "Primary Institutional Alignment" : "Secondary Alignment"}
+                                  {idx === 0 ? "Primary Focus Goal (Institutional Count)" : "Secondary Co-Alignment"}
                                 </p>
                               </div>
                             </div>

@@ -518,7 +518,7 @@ export function autoBackfillMissingSDGs() {
   try {
     const unclassified = db.prepare(`
       SELECT id, title, abstract, journal, doi FROM publications
-      WHERE (sdg_tags IS NULL OR sdg_tags = '' OR sdg_tags = '[]' OR sdg_tags = '["General Research"]')
+      WHERE (sdg_tags IS NULL OR sdg_tags = '' OR sdg_tags = '[]' OR sdg_tags = '["General Research"]' OR sdg_rationale LIKE '%Advances academic instruction%')
       AND approval_status = 'approved'
       AND (sdg_source IS NULL OR sdg_source != 'manual_override')
     `).all();

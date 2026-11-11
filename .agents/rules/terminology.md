@@ -39,3 +39,9 @@ Always enforce the following standardized terminology and formatting across all 
 ## 8. Proponent Attribution
 - Always maintain the proponent developer credit in the public repository footer: `"Developed by Julius Oscar Moreno • PSU Asingan Campus"`.
 
+## 9. Focus SDG Mapping (1:1 Ratio) & Bespoke Rationales
+- In SDG Alignment (UN Development Goals view), each publication maps strictly to **exactly 1 primary Focus SDG** in all institutional aggregations (radar charts, top goals bar charts, goal counts, and total mapped figures). The sum of all goal counts must equal the number of verified publications (1:1 paper-to-SDG ratio).
+- Any secondary/co-aligned SDGs are preserved in the publication's metadata (`sdg_tags`) and surfaced as subtle secondary badges and within the Publication Inspector Drawer (`PublicationInspectorDrawer.tsx`) and Publication Detail page.
+- "Why this is aligned" rationales must be **unique, evidence-grounded, and specific to the individual research paper's methodology and findings**, never following repeated grammatical boilerplate formulas or identical sentence patterns across papers.
+
+

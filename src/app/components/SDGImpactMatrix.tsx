@@ -276,7 +276,7 @@ export function SDGImpactMatrix() {
         <StatCard
           label="Verified Outputs"
           value={stats?.totalClassified || 0}
-          subtitle="100% Granular Mapping"
+          subtitle="1:1 Primary Focus Goal Mapping"
           icon={CheckCircle2}
         />
         <StatCard
@@ -423,7 +423,7 @@ export function SDGImpactMatrix() {
                     <span>17 UN Sustainable Development Goals</span>
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Select any goal to inspect matching research publications, citation evidence, and AI rationales directly below
+                    Institutional alignment mapped 1:1 by primary focus goal. Select any goal to inspect matching research publications, citation evidence, and bespoke AI rationales directly below
                   </CardDescription>
                 </div>
 
@@ -639,15 +639,33 @@ export function SDGImpactMatrix() {
                           );
                         })()}
 
-                        {/* Footer tags */}
+                        {/* Footer tags: Focus Goal & Subtle Secondary Badges */}
                         <div className="flex items-center justify-between pt-2 border-t border-border/50 text-xs flex-wrap gap-2">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[11px] text-muted-foreground font-medium">Mapped Goals:</span>
-                            {paper.sdgTags?.map((tag) => (
-                              <Badge key={tag} variant="outline" className="text-[10px] font-mono">
-                                {tag}
-                              </Badge>
-                            ))}
+                            <Badge
+                              className="text-[10px] font-mono font-bold text-white shadow-2xs"
+                              style={{ backgroundColor: SDG_COLORS[activeSDGItem?.sdg] || "#0038A8" }}
+                            >
+                              Focus Goal: {activeSDGItem?.sdg}
+                            </Badge>
+
+                            {/* Secondary co-alignment badges (subtle) */}
+                            {(() => {
+                              const secList = (paper.secondarySDGs && paper.secondarySDGs.length > 0)
+                                ? paper.secondarySDGs
+                                : (paper.sdgTags || []).filter(t => extractNumSafe(t) !== extractNumSafe(activeSDGItem?.sdg));
+                              return secList.map((sec) => (
+                                <Badge
+                                  key={sec}
+                                  variant="outline"
+                                  className="text-[10px] font-mono text-muted-foreground border-border/70 bg-muted/20"
+                                  title="Secondary co-alignment. Click 'Inspect' to read full details."
+                                >
+                                  + Secondary: {sec.split(":")[0]}
+                                </Badge>
+                              ));
+                            })()}
+
                             {paper.chedPriority && (
                               <Badge variant="secondary" className="text-[10px]">
                                 CHED: {paper.chedPriority}

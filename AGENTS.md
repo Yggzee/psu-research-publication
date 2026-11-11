@@ -39,7 +39,7 @@ All system rules are organized into modular, `always_on` rule files in `.agents/
    - Instructor ID: **`ASIN-00000`** format with locked non-editable `ASIN-` prefix and 5 editable digits.
    - Research Coordinator: **Sir Rodelio M. Garin** (single badge; "Rodelio M. Garin" without "Sir" in personal profile).
    - Publications: **"Publications"** (published works only, no ongoing/unpublished research).
-   - SDG Analytics: **"SDG Alignment"** (tab/feature) and **"SDG Goals"** (individual targets).
+   - SDG Analytics: **"SDG Alignment"** (tab/feature) and **"SDG Goals"** (individual targets); strict 1:1 primary Focus SDG mapping in institutional overviews with unique, non-patterned rationales.
    - Proponent Attribution: `"Developed by Julius Oscar Moreno • PSU Asingan Campus"` in public footer.
 
 3. **[UI & UX Design Rules](.agents/rules/ui-design.md)**

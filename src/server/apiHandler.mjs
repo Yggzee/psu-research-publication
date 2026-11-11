@@ -5267,15 +5267,20 @@ export async function handleApiRequest(req, res) {
           nbc461Points: p.nbc461_points || 5.0,
         };
 
+        // Strict 1:1 Focus SDG Mapping for Institutional Aggregations
+        // The first tag is the primary focus goal; subsequent tags are secondary co-alignments
+        const focusTag = tags[0];
+        const secondaryTags = tags.slice(1);
         let hasMatchedAnySDG = false;
-        tags.forEach(t => {
-          const tagNum = extractSDGNum(t);
+
+        if (focusTag) {
+          const tagNum = extractSDGNum(focusTag);
           const matchKey = ALL_SDGS.find(s => {
             const sNum = extractSDGNum(s);
             if (tagNum !== null && sNum !== null) {
               return tagNum === sNum;
             }
-            return s.toLowerCase() === String(t).toLowerCase();
+            return s.toLowerCase() === String(focusTag).toLowerCase();
           });
 
           if (matchKey) {
@@ -5284,10 +5289,12 @@ export async function handleApiRequest(req, res) {
             const tailoredRationale = getTailoredRationale(matchKey);
             sdgCounts[matchKey].papers.push({
               ...paperItem,
+              primaryFocusSDG: matchKey,
+              secondarySDGs: secondaryTags,
               sdgRationale: tailoredRationale,
             });
           }
-        });
+        }
 
         if (!hasMatchedAnySDG) {
           pendingReviewPapers.push(paperItem);

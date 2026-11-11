@@ -831,6 +831,8 @@ export interface SDGPaperItem {
   sdgRationales?: Record<string, string>;
   chedPriority?: string;
   sdgTags?: string[];
+  primaryFocusSDG?: string;
+  secondarySDGs?: string[];
   ownerName?: string;
   journalIndexing?: string;
   jc3Points?: number;
