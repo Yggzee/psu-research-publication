@@ -8,6 +8,10 @@ import { db } from './db.mjs';
 let transporter = null;
 const isSmtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER);
 
+if (process.env.BREVO_API_KEY) {
+  console.log('[EmailService] Brevo HTTPS REST API configured (Port 443 - Render cloud compatible).');
+}
+
 if (isSmtpConfigured) {
   try {
     transporter = nodemailer.createTransport({
@@ -241,12 +245,64 @@ function buildHtmlEmail({
 }
 
 /**
- * Send an email (via SMTP if available, or recorded safely)
+ * Send email via Brevo HTTPS REST API (Port 443)
+ * Guarantees delivery on cloud hosts like Render that block raw SMTP ports (25, 465, 587).
+ */
+async function sendViaBrevo({ to, toName, subject, html }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return null;
+
+  let fromEmail = process.env.SMTP_USER || 'mjuliusoscar@gmail.com';
+  let fromName = 'PSU Asingan Research Portal';
+  if (process.env.SMTP_FROM) {
+    const match = process.env.SMTP_FROM.match(/"?([^"<]+)"?\s*<([^>]+)>/);
+    if (match) {
+      fromName = match[1].trim();
+      fromEmail = match[2].trim();
+    }
+  }
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': apiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: fromName, email: fromEmail },
+      to: [{ email: to, name: toName || to }],
+      subject: subject,
+      htmlContent: html,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`Brevo API (${response.status}): ${data.message || JSON.stringify(data)}`);
+  }
+  return data;
+}
+
+/**
+ * Send an email (via Brevo HTTPS API or SMTP if available, or recorded safely)
  */
 async function dispatchEmail({ to, toName, subject, html, emailType, token, link }) {
   let status = 'simulated';
 
-  if (transporter && isSmtpConfigured) {
+  // 1. Try Brevo HTTPS REST API first (Port 443, Render cloud compatible)
+  if (process.env.BREVO_API_KEY) {
+    try {
+      await sendViaBrevo({ to, toName, subject, html });
+      status = 'sent';
+      console.log(`[EmailService] Dispatched via Brevo HTTPS API [${emailType}] to ${to}`);
+    } catch (err) {
+      console.warn(`[EmailService] Brevo HTTPS dispatch failed for ${to}:`, err.message);
+    }
+  }
+
+  // 2. Fall back to Nodemailer SMTP if Brevo is not configured or failed, and SMTP is configured
+  if (status !== 'sent' && transporter && isSmtpConfigured) {
     try {
       let fromAddress = process.env.SMTP_FROM || `"PSU Research System" <${process.env.SMTP_USER}>`;
       if (fromAddress && !fromAddress.includes('<') && process.env.SMTP_USER) {
@@ -271,12 +327,15 @@ async function dispatchEmail({ to, toName, subject, html, emailType, token, link
 
       await Promise.race([sendPromise, timeoutPromise]);
       status = 'sent';
-      console.log(`[EmailService] Dispatched email [${emailType}] to ${to}`);
+      console.log(`[EmailService] Dispatched via SMTP [${emailType}] to ${to}`);
     } catch (err) {
       console.warn(`[EmailService] SMTP dispatch failed/timed out for ${to}:`, err.message);
       status = 'simulated';
     }
-  } else {
+  }
+
+  // 3. Fallback: Log to simulated console if both failed or neither is configured
+  if (status === 'simulated') {
     console.log(`\n================== [SIMULATED EMAIL OUTBOX] ==================`);
     console.log(`To: ${toName || ''} <${to}>`);
     console.log(`Subject: ${subject}`);

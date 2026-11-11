@@ -4,11 +4,11 @@
   "2": "chart.tsx",
   "9": "toggle-group.tsx",
   "16": "AdminSearchStore",
-  "20": "useResearchers.ts",
+  "20": "sheet.tsx",
   "21": "input-otp.tsx",
-  "24": "api.service.ts",
+  "24": "breadcrumb.tsx",
   "28": "utils.ts",
-  "30": "Publication",
+  "30": "popover.tsx",
   "31": "sonner.tsx",
-  "35": ".askCampusAI"
+  "35": "scroll-area.tsx"
 }
