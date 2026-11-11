@@ -77,7 +77,7 @@ export function runInTransaction(fn) {
   } catch (err) {
     try {
       db.exec('ROLLBACK;');
-    } catch {}
+    } catch { }
     throw err;
   } finally {
     inBulkTransaction = false;
@@ -181,22 +181,22 @@ export function initDatabase() {
   }
   try {
     db.exec(`ALTER TABLE researchers ADD COLUMN scholar_url TEXT`);
-  } catch {}
+  } catch { }
   try {
     db.exec(`ALTER TABLE researchers ADD COLUMN google_scholar_id TEXT`);
-  } catch {}
+  } catch { }
   try {
     db.exec(`ALTER TABLE users ADD COLUMN scholar_url TEXT`);
-  } catch {}
+  } catch { }
   try {
     db.exec(`ALTER TABLE users ADD COLUMN google_scholar_id TEXT`);
-  } catch {}
+  } catch { }
   try {
     db.exec(`ALTER TABLE researchers ADD COLUMN middle_initial TEXT`);
-  } catch {}
+  } catch { }
   try {
     db.exec(`ALTER TABLE users ADD COLUMN middle_initial TEXT`);
-  } catch {}
+  } catch { }
 
   // 4b. Invitation Requests Table (Submitted from Login page by researchers asking for invitation)
   db.exec(`
@@ -217,21 +217,21 @@ export function initDatabase() {
   `);
 
   // Intelligence & Capstone Innovations Migrations
-  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_tags TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_rationale TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_source TEXT DEFAULT 'auto'`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_evidence TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN journal_indexing TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN is_predatory_flag INTEGER DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN nbc461_points REAL DEFAULT 0.0`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN jc3_points REAL DEFAULT 0.0`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN ched_priority TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN doi TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN keywords TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN issn_isbn TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN volume_issue TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN publication_date TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE publications ADD COLUMN publication_level TEXT DEFAULT 'International'`); } catch {}
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_tags TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_rationale TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_source TEXT DEFAULT 'auto'`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN sdg_evidence TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN journal_indexing TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN is_predatory_flag INTEGER DEFAULT 0`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN nbc461_points REAL DEFAULT 0.0`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN jc3_points REAL DEFAULT 0.0`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN ched_priority TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN doi TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN keywords TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN issn_isbn TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN volume_issue TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN publication_date TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE publications ADD COLUMN publication_level TEXT DEFAULT 'International'`); } catch { }
 
   // 5. Citation Trends Table (yearly citations per publication)
   db.exec(`
@@ -261,10 +261,10 @@ export function initDatabase() {
     );
   `);
 
-  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN journal TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN volume_issue TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN quarter TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN doi_issn TEXT`); } catch {}
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN journal TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN volume_issue TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN quarter TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE citing_papers ADD COLUMN doi_issn TEXT`); } catch { }
 
   // High-performance indexes for 1,000–10,000+ citation scale
   try {
@@ -275,7 +275,7 @@ export function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_publications_owner_id ON publications(owner_id);
       CREATE INDEX IF NOT EXISTS idx_publications_approval ON publications(approval_status, year DESC);
     `);
-  } catch {}
+  } catch { }
 
   // 7. Apify Scraper Tokens Table (Support for multiple tokens, switching, and auto-failover)
   db.exec(`
@@ -294,28 +294,28 @@ export function initDatabase() {
     UPDATE apify_tokens SET actor_id = 'johnvc~google-scholar-api' WHERE actor_id LIKE '%dan.k%';
   `);
 
-  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN search_count INTEGER DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN monthly_usage_usd REAL DEFAULT 0`); } catch {}
-  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN max_monthly_usage_usd REAL DEFAULT 5`); } catch {}
-  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN cycle_end_at TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN total_runs INTEGER`); } catch {}
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN search_count INTEGER DEFAULT 0`); } catch { }
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN monthly_usage_usd REAL DEFAULT 0`); } catch { }
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN max_monthly_usage_usd REAL DEFAULT 5`); } catch { }
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN cycle_end_at TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE apify_tokens ADD COLUMN total_runs INTEGER`); } catch { }
 
   // Verification & Onboarding Migrations
-  try { db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN verification_token TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN verification_token_expires_at TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN email_verified_at TEXT`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN registration_type TEXT DEFAULT 'manual'`); } catch {}
-  try { db.exec(`ALTER TABLE users ADD COLUMN has_scholar INTEGER DEFAULT 1`); } catch {}
+  try { db.exec(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`); } catch { }
+  try { db.exec(`ALTER TABLE users ADD COLUMN verification_token TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE users ADD COLUMN verification_token_expires_at TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE users ADD COLUMN email_verified_at TEXT`); } catch { }
+  try { db.exec(`ALTER TABLE users ADD COLUMN registration_type TEXT DEFAULT 'manual'`); } catch { }
+  try { db.exec(`ALTER TABLE users ADD COLUMN has_scholar INTEGER DEFAULT 1`); } catch { }
 
-  try { db.exec(`ALTER TABLE researchers ADD COLUMN status TEXT DEFAULT 'active'`); } catch {}
-  try { db.exec(`ALTER TABLE researchers ADD COLUMN has_scholar INTEGER DEFAULT 1`); } catch {}
+  try { db.exec(`ALTER TABLE researchers ADD COLUMN status TEXT DEFAULT 'active'`); } catch { }
+  try { db.exec(`ALTER TABLE researchers ADD COLUMN has_scholar INTEGER DEFAULT 1`); } catch { }
 
   // Ensure any existing rows have active status
   try {
     db.exec(`UPDATE users SET status = 'active' WHERE status IS NULL`);
     db.exec(`UPDATE researchers SET status = 'active' WHERE status IS NULL`);
-  } catch {}
+  } catch { }
 
   // 8. Email Logs & Outbox Table (Auditing, local preview, and resend support)
   db.exec(`
@@ -351,6 +351,52 @@ export function initDatabase() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+  `);
+
+  // 11. Archived Researchers Table (Audit storage for deleted researchers & publication snapshots)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS archived_researchers (
+      id TEXT PRIMARY KEY,
+      original_researcher_id TEXT NOT NULL,
+      original_user_id TEXT,
+      instructor_id TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      name TEXT NOT NULL,
+      email TEXT,
+      department TEXT,
+      is_faculty INTEGER NOT NULL DEFAULT 1,
+      affiliation TEXT,
+      photo_url TEXT,
+      scholar_url TEXT,
+      google_scholar_id TEXT,
+      total_publications INTEGER DEFAULT 0,
+      total_citations INTEGER DEFAULT 0,
+      publications_snapshot TEXT,
+      archive_reason TEXT DEFAULT 'Deleted by administrator',
+      archived_at TEXT NOT NULL
+    );
+  `);
+
+  // 12. Declined Registrations Table (Audit storage for declined registrations & invitation requests)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS declined_registrations (
+      id TEXT PRIMARY KEY,
+      original_request_id TEXT,
+      original_user_id TEXT,
+      instructor_id TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      name TEXT NOT NULL,
+      email TEXT,
+      department TEXT,
+      is_faculty INTEGER DEFAULT 1,
+      scholar_url TEXT,
+      google_scholar_id TEXT,
+      registration_type TEXT DEFAULT 'self_registration',
+      decline_reason TEXT DEFAULT 'Declined by administrator',
+      declined_at TEXT NOT NULL
     );
   `);
 
@@ -415,7 +461,7 @@ export function initDatabase() {
   // Delete duplicate orphaned test account from earlier experiments
   try {
     db.prepare("DELETE FROM users WHERE id = 'user-1794223646835-yndd'").run();
-  } catch {}
+  } catch { }
 
   // Ensure Sir Rodelio M. Garin's researcher profile is linked to admin-1
   try {
@@ -551,6 +597,6 @@ const tursoSyncWithTimeout = async () => {
 
 export const dbReadyPromise = isTursoConfigured
   ? tursoSyncWithTimeout().catch((err) => {
-      console.warn('[Turso Startup Error]:', err.message);
-    })
+    console.warn('[Turso Startup Error]:', err.message);
+  })
   : Promise.resolve();

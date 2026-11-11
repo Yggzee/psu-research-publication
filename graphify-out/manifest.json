@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "src/server/apiHandler.mjs": {
-    "mtime": 1794358626.472595,
-    "seen": 1794358631.081538,
-    "ast_hash": "b1faebca5f838e6e1ce0ab6c7d66509a",
+    "mtime": 1794359264.884018,
+    "seen": 1794359292.8175268,
+    "ast_hash": "15686974a7db6a6ea04d3d37200a1ee3",
     "semantic_hash": ""
   },
   "src/server/authHelper.mjs": {
@@ -642,9 +642,9 @@
     "semantic_hash": "cdcf848a39b2b7132bc12bb807815363"
   },
   "src/server/db.mjs": {
-    "mtime": 1794331514.9991474,
-    "seen": 1794333286.1150277,
-    "ast_hash": "337cc39c904e8fcd94566dfb53a00be4",
+    "mtime": 1794359238.0557113,
+    "seen": 1794359292.817535,
+    "ast_hash": "afe644ef615456e11e08b25303aa852b",
     "semantic_hash": ""
   },
   "src/server/emailService.mjs": {
@@ -678,9 +678,9 @@
     "semantic_hash": "fbbe07aa5761a46e42d225ec14c05de4"
   },
   "src/server/turso.mjs": {
-    "mtime": 1794338162.5278459,
-    "seen": 1794338216.0102806,
-    "ast_hash": "600b15d99127adda1435ba903aa6cf0a",
+    "mtime": 1794359265.2659037,
+    "seen": 1794359292.8175468,
+    "ast_hash": "9f626038149ff79c23e2d9753d18aae3",
     "semantic_hash": ""
   },
   "src/server/vitePlugin.d.mts": {

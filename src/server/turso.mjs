@@ -244,6 +244,44 @@ export async function initTursoSchema() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS archived_researchers (
+      id TEXT PRIMARY KEY,
+      original_researcher_id TEXT NOT NULL,
+      original_user_id TEXT,
+      instructor_id TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      name TEXT NOT NULL,
+      email TEXT,
+      department TEXT,
+      is_faculty INTEGER NOT NULL DEFAULT 1,
+      affiliation TEXT,
+      photo_url TEXT,
+      scholar_url TEXT,
+      google_scholar_id TEXT,
+      total_publications INTEGER DEFAULT 0,
+      total_citations INTEGER DEFAULT 0,
+      publications_snapshot TEXT,
+      archive_reason TEXT DEFAULT 'Deleted by administrator',
+      archived_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS declined_registrations (
+      id TEXT PRIMARY KEY,
+      original_request_id TEXT,
+      original_user_id TEXT,
+      instructor_id TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      name TEXT NOT NULL,
+      email TEXT,
+      department TEXT,
+      is_faculty INTEGER DEFAULT 1,
+      scholar_url TEXT,
+      google_scholar_id TEXT,
+      registration_type TEXT DEFAULT 'self_registration',
+      decline_reason TEXT DEFAULT 'Declined by administrator',
+      declined_at TEXT NOT NULL
     );`
   ];
 
@@ -359,7 +397,9 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
       'invitation_requests',
       'email_logs',
       'ai_chat_sessions',
-      'system_settings'
+      'system_settings',
+      'archived_researchers',
+      'declined_registrations'
     ];
 
     // Check if Turso Cloud is brand-new (0 users in cloud, while local DB has seed data)

@@ -1328,7 +1328,9 @@ export async function handleApiRequest(req, res) {
           'invitation_requests',
           'email_logs',
           'ai_chat_sessions',
-          'system_settings'
+          'system_settings',
+          'archived_researchers',
+          'declined_registrations'
         ];
         for (const t of tables) {
           await pushTableToTurso(db, t);
@@ -2158,8 +2160,34 @@ export async function handleApiRequest(req, res) {
     // ----------------------------------------------------
     if (pathname.startsWith('/api/admin/invitation-requests/') && pathname.endsWith('/dismiss') && method === 'POST') {
       const reqId = pathname.replace('/api/admin/invitation-requests/', '').replace('/dismiss', '');
+      const reqRow = db.prepare('SELECT * FROM invitation_requests WHERE id = ?').get(reqId);
+      if (reqRow) {
+        const declineId = `dec-req-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        const now = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO declined_registrations (
+            id, original_request_id, original_user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, scholar_url, google_scholar_id, registration_type, decline_reason, declined_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          declineId,
+          reqRow.id,
+          null,
+          reqRow.instructor_id,
+          reqRow.first_name || null,
+          reqRow.last_name || null,
+          reqRow.name,
+          reqRow.email || null,
+          reqRow.department || null,
+          reqRow.is_faculty ? 1 : 0,
+          reqRow.scholar_url || null,
+          null,
+          'invitation_request',
+          'Dismissed by administrator',
+          now
+        );
+      }
       db.prepare("UPDATE invitation_requests SET status = 'rejected' WHERE id = ?").run(reqId);
-      return sendJson(200, { success: true, message: 'Invitation request dismissed.' });
+      return sendJson(200, { success: true, message: 'Invitation request dismissed and archived.' });
     }
 
     // ----------------------------------------------------
@@ -2248,14 +2276,44 @@ export async function handleApiRequest(req, res) {
         return sendJson(404, { error: 'Researcher registration not found.' });
       }
 
+      const u = db.prepare('SELECT * FROM users WHERE id = ? OR LOWER(username) = LOWER(?)').get(r.user_id || '', r.instructor_id);
+
+      // 1. Relocate to declined_registrations table for audit history
+      const declineId = `dec-reg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO declined_registrations (
+          id, original_request_id, original_user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, scholar_url, google_scholar_id, registration_type, decline_reason, declined_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        declineId,
+        r.id,
+        r.user_id || null,
+        r.instructor_id,
+        r.first_name || null,
+        r.last_name || null,
+        r.name,
+        r.email || null,
+        r.department || null,
+        r.is_faculty ? 1 : 0,
+        r.scholar_url || null,
+        r.google_scholar_id || null,
+        u?.registration_type || 'self_registration',
+        reason ? reason.trim() : 'Declined by administrator',
+        now
+      );
+
+      // 2. Cascade delete any staged publications
       deleteResearcherPublications(db, r);
-      db.prepare("UPDATE researchers SET status = 'rejected' WHERE id = ?").run(r.id);
-      db.prepare("UPDATE users SET status = 'rejected' WHERE id = ? OR LOWER(username) = LOWER(?)").run(r.user_id || '', r.instructor_id);
+
+      // 3. Purge from active researchers and users tables to release Instructor ID and email
+      db.prepare('DELETE FROM researchers WHERE id = ?').run(r.id);
+      db.prepare("DELETE FROM users WHERE (id = ? OR LOWER(username) = LOWER(?)) AND role != 'admin'").run(r.user_id || '', r.instructor_id);
       cleanupOrphanedPublications(db);
 
       return sendJson(200, {
         success: true,
-        message: `Registration for ${r.name} has been rejected.`,
+        message: `Registration for ${r.name} has been declined and archived. Instructor ID ${r.instructor_id} is now released.`,
       });
     }
 
@@ -2404,13 +2462,68 @@ export async function handleApiRequest(req, res) {
       const current = db.prepare('SELECT * FROM researchers WHERE id = ? OR LOWER(instructor_id) = LOWER(?)').get(id, id);
       let deletedPubsCount = 0;
       if (current) {
-        // 1. Cascade delete all publications, citing papers, and citation trends tied to this researcher
+        // 1. Gather publication snapshot for the archive
+        const rInstId = (current.instructor_id || '').trim().toLowerCase();
+        const rId = (current.id || '').trim().toLowerCase();
+        const rUserId = (current.user_id || '').trim().toLowerCase();
+        const rName = (current.name || '').trim().toLowerCase();
+
+        const allPubs = db.prepare('SELECT * FROM publications').all();
+        const researcherPubs = allPubs.filter((p) => {
+          const pOwnerId = (p.owner_id || '').trim().toLowerCase();
+          const pOwnerName = (p.owner_name || '').trim().toLowerCase();
+          if (pOwnerId && (pOwnerId === rInstId || pOwnerId === rId || (rUserId && pOwnerId === rUserId))) return true;
+          if (pOwnerName && rName && pOwnerName === rName) return true;
+          return false;
+        });
+
+        const pubsSnapshot = researcherPubs.map((p) => ({
+          id: p.id,
+          title: p.title,
+          journal: p.journal,
+          year: p.year,
+          citations: p.citations,
+          doi: p.doi,
+          url: p.url,
+          approvalStatus: p.approval_status,
+        }));
+
+        // 2. Relocate snapshot into archived_researchers table
+        const archiveId = `arch-res-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        const now = new Date().toISOString();
+        db.prepare(`
+          INSERT INTO archived_researchers (
+            id, original_researcher_id, original_user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, affiliation, photo_url, scholar_url, google_scholar_id, total_publications, total_citations, publications_snapshot, archive_reason, archived_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          archiveId,
+          current.id,
+          current.user_id || null,
+          current.instructor_id,
+          current.first_name || null,
+          current.last_name || null,
+          current.name,
+          current.email || null,
+          current.department || null,
+          current.is_faculty ? 1 : 0,
+          current.affiliation || null,
+          current.photo_url || null,
+          current.scholar_url || null,
+          current.google_scholar_id || null,
+          current.total_publications || 0,
+          current.total_citations || 0,
+          JSON.stringify(pubsSnapshot),
+          'Deleted by administrator',
+          now
+        );
+
+        // 3. Cascade delete all publications, citing papers, and citation trends from active repository
         deletedPubsCount = deleteResearcherPublications(db, current);
 
-        // 2. Delete researcher record
+        // 4. Delete researcher record from active researchers table
         db.prepare('DELETE FROM researchers WHERE id = ?').run(current.id);
 
-        // 3. Delete associated user login (preserve main admin account if admin was also listed in researchers)
+        // 5. Delete associated user login (preserve main admin account if admin was also listed in researchers)
         if (current.user_id) {
           db.prepare("DELETE FROM users WHERE id = ? AND role != 'admin'").run(current.user_id);
         } else if (current.instructor_id) {
@@ -2418,16 +2531,40 @@ export async function handleApiRequest(req, res) {
         }
       }
 
-      // 4. Clean up any remaining orphaned publications
+      // 6. Clean up any remaining orphaned publications
       cleanupOrphanedPublications(db);
 
       return sendJson(200, {
         success: true,
         deletedPublicationsCount: deletedPubsCount,
         message: current
-          ? `Removed researcher ${current.name} and ${deletedPubsCount} associated publication(s) from the repository.`
+          ? `Archived researcher ${current.name} and removed ${deletedPubsCount} publication(s) from the active repository. Instructor ID ${current.instructor_id} is now available.`
           : 'Researcher deleted successfully',
       });
+    }
+
+    // ----------------------------------------------------
+    // ADMIN: GET /api/admin/archived-researchers
+    // ----------------------------------------------------
+    if (pathname === '/api/admin/archived-researchers' && method === 'GET') {
+      const caller = authenticateCaller(req);
+      if (!isCallerAdmin(caller)) {
+        return sendJson(403, { error: 'Forbidden: Administrator privileges required.' });
+      }
+      const rows = db.prepare('SELECT * FROM archived_researchers ORDER BY archived_at DESC').all();
+      return sendJson(200, rows);
+    }
+
+    // ----------------------------------------------------
+    // ADMIN: GET /api/admin/declined-registrations
+    // ----------------------------------------------------
+    if (pathname === '/api/admin/declined-registrations' && method === 'GET') {
+      const caller = authenticateCaller(req);
+      if (!isCallerAdmin(caller)) {
+        return sendJson(403, { error: 'Forbidden: Administrator privileges required.' });
+      }
+      const rows = db.prepare('SELECT * FROM declined_registrations ORDER BY declined_at DESC').all();
+      return sendJson(200, rows);
     }
 
     // ----------------------------------------------------
