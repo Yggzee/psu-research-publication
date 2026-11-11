@@ -775,6 +775,38 @@ export const UN_SDG_DEFINITIONS = [
 ];
 
 /**
+ * Detect whether a given rationale string is a generic canned definition or legacy boilerplate.
+ */
+export function isGenericBoilerplate(text) {
+  if (!text || typeof text !== 'string') return true;
+  const t = text.trim().toLowerCase();
+  if (t.length < 15) return true;
+  return (
+    t.includes('focuses on pedagogical innovation') ||
+    t.includes('advances academic instruction') ||
+    t.includes('advances specialized academic research') ||
+    t.includes('targets agricultural productivity') ||
+    t.includes('directly addresses healthcare interventions') ||
+    t.includes('promotes health and well-being through clinical') ||
+    t.includes('promotes gender equity') ||
+    t.includes('addresses water security') ||
+    t.includes('develops renewable energy applications') ||
+    t.includes('evaluates graduate employability') ||
+    t.includes('advances technological infrastructure') ||
+    t.includes('bridges social, economic') ||
+    t.includes('strengthens municipal planning') ||
+    t.includes('develops resource efficiency models') ||
+    t.includes('focuses on disaster risk reduction') ||
+    t.includes('protects aquatic ecosystems') ||
+    t.includes('preserves terrestrial biodiversity') ||
+    t.includes('improves institutional governance') ||
+    t.includes('strengthens multi-stakeholder partnerships') ||
+    t.includes('focuses on poverty alleviation') ||
+    t.includes('introduces innovative methodologies')
+  );
+}
+
+/**
  * Helper to build unique, paper-tailored analytical rationale for an SDG match
  * Eliminates repetitive boilerplate patterns and synthesizes bespoke, evidence-grounded prose.
  */

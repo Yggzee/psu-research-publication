@@ -17,6 +17,7 @@ import {
   classifyPublicationSDG,
   localHeuristicSDG,
   buildDynamicSDGRationale,
+  isGenericBoilerplate,
   auditJournalReputation,
   askCampusIntelligence,
   calculateSynergy,
@@ -5239,17 +5240,41 @@ export async function handleApiRequest(req, res) {
           }
         } catch {}
 
+        let dbNeedsRationaleUpdate = false;
+        const cleanT = (p.title || '').replace(/^\[.*?\]\s*/, '');
+
         const getTailoredRationale = (targetKey) => {
           const targetNum = extractSDGNum(targetKey);
           for (const [k, v] of Object.entries(rationalesMap)) {
-            if (k === targetKey || k.toLowerCase() === targetKey.toLowerCase()) return v;
             const kNum = extractSDGNum(k);
-            if (targetNum !== null && kNum !== null && targetNum === kNum) return v;
+            const matchesKey = k === targetKey || k.toLowerCase() === targetKey.toLowerCase() || (targetNum !== null && kNum !== null && targetNum === kNum);
+            if (matchesKey) {
+              if (!isGenericBoilerplate(v)) return v;
+            }
           }
-          if (rawRationale && !rawRationale.startsWith('{')) return rawRationale;
-          const cleanT = (p.title || '').replace(/^\[.*?\]\s*/, '');
-          return buildDynamicSDGRationale(targetKey, cleanT, p.abstract || '', []);
+          if (rawRationale && !rawRationale.startsWith('{') && !isGenericBoilerplate(rawRationale)) {
+            return rawRationale;
+          }
+          const bespoke = buildDynamicSDGRationale(targetKey, cleanT, p.abstract || '', []);
+          rationalesMap[targetKey] = bespoke;
+          dbNeedsRationaleUpdate = true;
+          return bespoke;
         };
+
+        // Cleanse any generic boilerplate entries in rationalesMap so client never receives repetitive patterns
+        for (const [k, v] of Object.entries(rationalesMap)) {
+          if (isGenericBoilerplate(v)) {
+            rationalesMap[k] = buildDynamicSDGRationale(k, cleanT, p.abstract || '', []);
+            dbNeedsRationaleUpdate = true;
+          }
+        }
+
+        // Auto-heal database row and replicate to Turso Cloud if boilerplate was purged
+        if (dbNeedsRationaleUpdate) {
+          try {
+            db.prepare('UPDATE publications SET sdg_rationale = ? WHERE id = ?').run(JSON.stringify(rationalesMap), p.id);
+          } catch {}
+        }
 
         const paperItem = {
           id: p.id,

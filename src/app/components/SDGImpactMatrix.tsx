@@ -154,13 +154,33 @@ export function SDGImpactMatrix() {
     return m ? parseInt(m[1], 10) : null;
   }
 
+  function isBoilerplateClient(text: string | undefined | null) {
+    if (!text || typeof text !== "string") return true;
+    const lower = text.toLowerCase();
+    return (
+      lower.includes("focuses on pedagogical innovation") ||
+      lower.includes("advances academic instruction") ||
+      lower.includes("advances specialized academic research") ||
+      lower.includes("targets agricultural productivity") ||
+      lower.includes("directly addresses healthcare interventions")
+    );
+  }
+
   const getDisplayRationale = (paper: SDGPaperItem, activeSDG: string | undefined) => {
+    // If paper has direct bespoke sdgRationale tailored to this active goal, use it
+    if (paper.sdgRationale && !paper.sdgRationale.startsWith("{") && !isBoilerplateClient(paper.sdgRationale)) {
+      return paper.sdgRationale;
+    }
     if (paper.sdgRationales && activeSDG) {
       const targetNum = extractNumSafe(activeSDG);
       for (const [k, v] of Object.entries(paper.sdgRationales)) {
-        if (k === activeSDG || k.toLowerCase() === activeSDG.toLowerCase()) return v;
+        if (k === activeSDG || k.toLowerCase() === activeSDG.toLowerCase()) {
+          if (!isBoilerplateClient(v)) return v;
+        }
         const kNum = extractNumSafe(k);
-        if (targetNum !== null && kNum !== null && targetNum === kNum) return v;
+        if (targetNum !== null && kNum !== null && targetNum === kNum) {
+          if (!isBoilerplateClient(v)) return v;
+        }
       }
     }
     if (paper.sdgRationale) {
@@ -169,13 +189,17 @@ export function SDGImpactMatrix() {
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && activeSDG) {
           const targetNum = extractNumSafe(activeSDG);
           for (const [k, v] of Object.entries(parsed as Record<string, string>)) {
-            if (k === activeSDG || k.toLowerCase() === activeSDG.toLowerCase()) return v;
+            if (k === activeSDG || k.toLowerCase() === activeSDG.toLowerCase()) {
+              if (!isBoilerplateClient(v)) return v;
+            }
             const kNum = extractNumSafe(k);
-            if (targetNum !== null && kNum !== null && targetNum === kNum) return v;
+            if (targetNum !== null && kNum !== null && targetNum === kNum) {
+              if (!isBoilerplateClient(v)) return v;
+            }
           }
         }
       } catch {}
-      return paper.sdgRationale;
+      if (!isBoilerplateClient(paper.sdgRationale)) return paper.sdgRationale;
     }
     return null;
   };
@@ -221,9 +245,13 @@ export function SDGImpactMatrix() {
     owner_name: paper.ownerName,
   });
 
+  const totalFocusMapped = useMemo(() => {
+    return radarData.reduce((sum, r) => sum + (r.count || 0), 0);
+  }, [radarData]);
+
   const tabs = [
     { id: "overview", label: "Impact Footprint & Agendas", icon: Target },
-    { id: "goals", label: "17 UN Goals & Evidence", count: 17, icon: Layers },
+    { id: "goals", label: "UN Development Goals", icon: Layers },
   ];
 
   return (
@@ -423,7 +451,7 @@ export function SDGImpactMatrix() {
                     <span>17 UN Sustainable Development Goals</span>
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Institutional alignment mapped 1:1 by primary focus goal. Select any goal to inspect matching research publications, citation evidence, and bespoke AI rationales directly below
+                    Institutional alignment mapped 1:1 by primary focus goal ({totalFocusMapped} publications total). Select any goal to inspect matching research publications, citation evidence, and bespoke AI rationales directly below
                   </CardDescription>
                 </div>
 

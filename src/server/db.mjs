@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { isTursoConfigured, initTursoSchema, rehydrateFromTurso, executeOnTurso, executeBatchOnTurso } from './turso.mjs';
 import { matchesResearcher, hashPassword } from './authHelper.mjs';
-import { localHeuristicSDG } from './aiService.mjs';
+import { localHeuristicSDG, isGenericBoilerplate } from './aiService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -523,16 +523,36 @@ export function migrateResearcherPasswordsToScrypt(dbInstance = db) {
  */
 export function autoBackfillMissingSDGs() {
   try {
-    const unclassified = db.prepare(`
-      SELECT id, title, abstract, journal, doi FROM publications
-      WHERE (sdg_tags IS NULL OR sdg_tags = '' OR sdg_tags = '[]' OR sdg_tags = '["General Research"]' OR sdg_rationale LIKE '%Advances academic instruction%')
-      AND approval_status = 'approved'
+    const allApproved = db.prepare(`
+      SELECT id, title, abstract, journal, doi, sdg_tags, sdg_rationale FROM publications
+      WHERE approval_status = 'approved'
       AND (sdg_source IS NULL OR sdg_source != 'manual_override')
     `).all();
 
-    if (unclassified.length > 0) {
-      console.log(`[SDG Backfill] Auto-classifying ${unclassified.length} publications...`);
-      for (const pub of unclassified) {
+    let refreshedCount = 0;
+    for (const pub of allApproved) {
+      let isBoilerplate = false;
+      if (!pub.sdg_tags || pub.sdg_tags === '' || pub.sdg_tags === '[]' || pub.sdg_tags === '["General Research"]') {
+        isBoilerplate = true;
+      } else if (!pub.sdg_rationale || isGenericBoilerplate(pub.sdg_rationale)) {
+        isBoilerplate = true;
+      } else {
+        try {
+          const parsed = JSON.parse(pub.sdg_rationale);
+          if (parsed && typeof parsed === 'object') {
+            for (const val of Object.values(parsed)) {
+              if (isGenericBoilerplate(val)) {
+                isBoilerplate = true;
+                break;
+              }
+            }
+          }
+        } catch {
+          if (isGenericBoilerplate(pub.sdg_rationale)) isBoilerplate = true;
+        }
+      }
+
+      if (isBoilerplate) {
         const classified = localHeuristicSDG(pub.title || '', pub.abstract || '');
         const tags = JSON.stringify([classified.primarySDG, ...(classified.secondarySDG ? [classified.secondarySDG] : [])].filter(Boolean));
         const rationale = classified.rationale || '';
@@ -544,8 +564,11 @@ export function autoBackfillMissingSDGs() {
           SET sdg_tags = ?, sdg_rationale = ?, ched_priority = ?, sdg_source = ?, sdg_evidence = ?
           WHERE id = ?
         `).run(tags, rationale, ched, source, evidenceJson, pub.id);
+        refreshedCount++;
       }
-      console.log(`[SDG Backfill] Finished auto-classifying ${unclassified.length} publications.`);
+    }
+    if (refreshedCount > 0) {
+      console.log(`[SDG Backfill] Refreshed ${refreshedCount} publications with unique bespoke rationales and 1:1 Focus SDGs.`);
     }
   } catch (err) {
     console.warn('[SDG Backfill Error]:', err.message);
