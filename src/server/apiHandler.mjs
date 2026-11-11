@@ -1196,7 +1196,20 @@ export async function handleApiRequest(req, res) {
     // 1c. UPDATE PROFILE: PUT /api/auth/profile
     // ----------------------------------------------------
     if (pathname === '/api/auth/profile' && method === 'PUT') {
-      const { userId, username, name, email, department, photoUrl, scholarUrl, googleScholarId, instructorId } = await readJsonBody();
+      const {
+        userId,
+        username,
+        name,
+        firstName,
+        lastName,
+        middleInitial,
+        email,
+        department,
+        photoUrl,
+        scholarUrl,
+        googleScholarId,
+        instructorId,
+      } = await readJsonBody();
       const caller = authenticateCaller(req);
       
       const user = db.prepare(`
@@ -1214,19 +1227,29 @@ export async function handleApiRequest(req, res) {
         return sendJson(403, { error: 'Forbidden: You cannot modify another user’s profile.' });
       }
 
-      const updatedName = name || user.name;
-      const updatedEmail = email !== undefined ? email : user.email;
-      const updatedDept = department !== undefined ? department : user.department;
-      const updatedPhoto = photoUrl !== undefined ? photoUrl : user.photo_url;
-      const updatedScholar = scholarUrl !== undefined ? scholarUrl : user.scholar_url;
-      const updatedScholarId = googleScholarId !== undefined ? googleScholarId : user.google_scholar_id;
-
-      // Find matching researcher record for this user to track all prior identity keys
+      // Find matching researcher record for this user to track prior identity keys
       const existingResearcher = db.prepare(`
         SELECT * FROM researchers 
         WHERE user_id = ? OR id = ? OR LOWER(instructor_id) = LOWER(?)
         LIMIT 1
       `).get(user.id, user.id, user.username);
+
+      const updatedFirst = firstName !== undefined ? firstName.trim() : (existingResearcher?.first_name || '');
+      const updatedLast = lastName !== undefined ? lastName.trim() : (existingResearcher?.last_name || '');
+      const updatedMi = middleInitial !== undefined ? middleInitial.trim() : (existingResearcher?.middle_initial || '');
+
+      let updatedName = name;
+      if (updatedFirst && updatedLast) {
+        updatedName = updatedMi ? `${updatedFirst} ${updatedMi} ${updatedLast}` : `${updatedFirst} ${updatedLast}`;
+      } else if (!updatedName) {
+        updatedName = user.name;
+      }
+
+      const updatedEmail = email !== undefined ? email : user.email;
+      const updatedDept = department !== undefined ? department : user.department;
+      const updatedPhoto = photoUrl !== undefined ? photoUrl : user.photo_url;
+      const updatedScholar = scholarUrl !== undefined ? scholarUrl : user.scholar_url;
+      const updatedScholarId = googleScholarId !== undefined ? googleScholarId : user.google_scholar_id;
 
       const oldIds = new Set([
         user.username,
@@ -1272,15 +1295,15 @@ export async function handleApiRequest(req, res) {
 
       db.prepare(`
         UPDATE users 
-        SET name = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
+        SET name = ?, middle_initial = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
         WHERE id = ?
-      `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id);
+      `).run(updatedName, updatedMi || null, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id);
 
       db.prepare(`
         UPDATE researchers 
-        SET name = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
+        SET name = ?, first_name = ?, last_name = ?, middle_initial = ?, email = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
         WHERE user_id = ? OR id = ? OR LOWER(instructor_id) = LOWER(?) OR LOWER(instructor_id) = LOWER(?)
-      `).run(updatedName, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id, user.id, user.username, updatedInstructorId);
+      `).run(updatedName, updatedFirst || null, updatedLast || null, updatedMi || null, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id, user.id, user.username, updatedInstructorId);
 
       return sendJson(200, {
         success: true,
@@ -1288,6 +1311,9 @@ export async function handleApiRequest(req, res) {
           id: user.id,
           role: user.role,
           name: updatedName,
+          firstName: updatedFirst,
+          lastName: updatedLast,
+          middleInitial: updatedMi,
           username: user.role === 'admin' ? user.username : updatedInstructorId,
           instructorId: updatedInstructorId,
           email: updatedEmail,

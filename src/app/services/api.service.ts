@@ -305,6 +305,9 @@ class ApiService {
     username?: string;
     instructorId?: string;
     name?: string;
+    firstName?: string;
+    lastName?: string;
+    middleInitial?: string;
     email?: string;
     department?: string;
     photoUrl?: string;

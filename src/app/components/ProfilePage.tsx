@@ -68,13 +68,35 @@ export function ProfilePage() {
   const [stats, setStats] = useState({ totalPublications: 0, totalCitations: 0 });
 
   const [formData, setFormData] = useState({
-    name: currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : ""),
+    firstName: "",
+    middleInitial: "",
+    lastName: "",
     email: currentUser.email || "",
     department: currentUser.department || "BSIT",
     photoUrl: currentUser.photoUrl || "",
     scholarUrl: currentUser.scholarUrl || "",
     googleScholarId: currentUser.googleScholarId || "",
   });
+
+  // Helper to cleanly parse a single full name string into First Name, Middle Initial, and Last Name
+  const parseNameParts = (fullName: string) => {
+    const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return { firstName: "", middleInitial: "", lastName: "" };
+    if (parts.length === 1) return { firstName: parts[0], middleInitial: "", lastName: "" };
+    if (parts.length === 2) return { firstName: parts[0], middleInitial: "", lastName: parts[1] };
+    if (parts[1].length <= 2 || parts[1].endsWith(".")) {
+      return {
+        firstName: parts[0],
+        middleInitial: parts[1],
+        lastName: parts.slice(2).join(" "),
+      };
+    }
+    return {
+      firstName: parts.slice(0, -1).join(" "),
+      middleInitial: "",
+      lastName: parts[parts.length - 1],
+    };
+  };
 
   // Load user details and their publications
   const loadProfileAndPublications = async () => {
@@ -149,8 +171,16 @@ export function ProfilePage() {
     const rawId = currentUser.instructorId || "";
     const match = rawId.match(/ASIN-(\d{5})/i) || rawId.match(/(\d{5})/);
     setIdDigits(match ? match[1] : "00002");
+    
+    const parsed = parseNameParts(currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : ""));
+    const initialFirst = (currentUser as any).firstName || parsed.firstName || (currentUser.role === "admin" ? "Rodelio" : "");
+    const initialMi = (currentUser as any).middleInitial || parsed.middleInitial || (currentUser.role === "admin" ? "M." : "");
+    const initialLast = (currentUser as any).lastName || parsed.lastName || (currentUser.role === "admin" ? "Garin" : "");
+
     setFormData({
-      name: currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : ""),
+      firstName: initialFirst,
+      middleInitial: initialMi,
+      lastName: initialLast,
       email: currentUser.email || "",
       department: currentUser.department || "BSIT",
       photoUrl: currentUser.photoUrl || "",
@@ -164,12 +194,27 @@ export function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     const fullInstructorId = `ASIN-${idDigits.padStart(5, "0")}`;
+    const cleanFirst = formData.firstName.trim();
+    const cleanMi = formData.middleInitial.trim();
+    const cleanLast = formData.lastName.trim();
+
+    if (!cleanFirst || !cleanLast) {
+      toast.error("First Name and Last Name are required.");
+      setSaving(false);
+      return;
+    }
+
+    const constructedName = cleanMi ? `${cleanFirst} ${cleanMi} ${cleanLast}` : `${cleanFirst} ${cleanLast}`;
+
     try {
       const res = await apiService.updateProfile({
         userId: currentUser.id,
         username: currentUser.username,
         instructorId: fullInstructorId,
-        name: formData.name,
+        name: constructedName,
+        firstName: cleanFirst,
+        lastName: cleanLast,
+        middleInitial: cleanMi,
         email: formData.email,
         department: formData.department,
         photoUrl: formData.photoUrl,
@@ -179,7 +224,10 @@ export function ProfilePage() {
 
       if (res.success && res.user) {
         const updated = updateCurrentUser({
-          name: res.user.name,
+          name: res.user.name || constructedName,
+          firstName: cleanFirst,
+          lastName: cleanLast,
+          middleInitial: cleanMi,
           email: res.user.email,
           instructorId: fullInstructorId,
           department: res.user.department,
@@ -199,7 +247,10 @@ export function ProfilePage() {
       }
     } catch {
       const updated = updateCurrentUser({
-        name: formData.name,
+        name: constructedName,
+        firstName: cleanFirst,
+        lastName: cleanLast,
+        middleInitial: cleanMi,
         email: formData.email,
         instructorId: fullInstructorId,
         department: formData.department,
@@ -418,19 +469,49 @@ export function ProfilePage() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-3.5 text-xs">
-              {/* Full Name */}
-              <div className="space-y-1">
-                <Label htmlFor="prof-name" className="text-xs font-semibold text-foreground">
-                  Full Legal / Academic Name *
-                </Label>
-                <Input
-                  id="prof-name"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g. Rodelio M. Garin"
-                  className="h-9 text-xs"
-                />
+              {/* Name Fields: First Name, Middle Initial, Last Name */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="prof-first-name" className="text-xs font-semibold text-foreground">
+                    First Name *
+                  </Label>
+                  <Input
+                    id="prof-first-name"
+                    required
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    placeholder="e.g. Rodelio"
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="prof-mi" className="text-xs font-semibold text-foreground">
+                    Middle Initial
+                  </Label>
+                  <Input
+                    id="prof-mi"
+                    value={formData.middleInitial}
+                    onChange={(e) => setFormData({ ...formData, middleInitial: e.target.value })}
+                    placeholder="e.g. M."
+                    maxLength={5}
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="prof-last-name" className="text-xs font-semibold text-foreground">
+                    Last Name *
+                  </Label>
+                  <Input
+                    id="prof-last-name"
+                    required
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    placeholder="e.g. Garin"
+                    className="h-9 text-xs"
+                  />
+                </div>
               </div>
 
               {/* Instructor ID with locked ASIN- prefix */}
