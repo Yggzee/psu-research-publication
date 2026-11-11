@@ -36,6 +36,14 @@ if (isSmtpConfigured) {
  * Get base application URL
  */
 export function getAppBaseUrl(req) {
+  // If the request explicitly comes from local development (localhost / 127.0.0.1), use the local host
+  if (req && req.headers && req.headers.host) {
+    const host = req.headers.host;
+    if (host.includes('localhost') || host.includes('127.0.0.1')) {
+      const proto = req.headers['x-forwarded-proto'] || 'http';
+      return `${proto}://${host}`;
+    }
+  }
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
   if (req && req.headers && req.headers.host) {
     const proto = req.headers['x-forwarded-proto'] || 'http';

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { CheckCircle2, Lock, Shield, User, Mail, Building, AlertCircle, Loader2, ArrowRight } from "lucide-react";
+import { CheckCircle2, Lock, Shield, User, Mail, Building, AlertCircle, Loader2, ArrowRight, ShieldCheck, Clock } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
@@ -12,11 +12,13 @@ import { apiService } from "../services/api.service";
 export function VerifyInvitationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const token = searchParams.get("token") || "";
+  const token = (searchParams.get("token") || "").trim();
 
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [alreadyActive, setAlreadyActive] = useState(false);
+  const [superseded, setSuperseded] = useState(false);
   const [success, setSuccess] = useState(false);
   const [userData, setUserData] = useState<{
     id?: string;
@@ -40,9 +42,15 @@ export function VerifyInvitationPage() {
     const checkToken = async () => {
       try {
         setLoading(true);
-        const res = await apiService.verifyToken(token);
+        const res: any = await apiService.verifyToken(token);
         if (res.valid && res.user) {
           setUserData(res.user);
+        } else if (res.alreadyActive) {
+          setAlreadyActive(true);
+          if (res.user) setUserData(res.user);
+        } else if (res.superseded) {
+          setSuperseded(true);
+          setError(res.error || "A newer invitation link was recently sent to your email.");
         } else {
           setError(res.error || "This invitation link is invalid or has expired.");
         }
@@ -72,11 +80,14 @@ export function VerifyInvitationPage() {
 
     setVerifying(true);
     try {
-      const res = await apiService.completeInvitation(token, password);
+      const res: any = await apiService.completeInvitation(token, password);
       if (res.success) {
         setSuccess(true);
+        if (res.user) setUserData(res.user);
+      } else if (res.alreadyActive) {
+        setAlreadyActive(true);
       } else {
-        setFormError(res.message || "Failed to activate account.");
+        setFormError(res.message || res.error || "Failed to activate account.");
       }
     } catch (err: any) {
       setFormError(err.message || "An error occurred while setting your password.");
@@ -86,7 +97,7 @@ export function VerifyInvitationPage() {
   };
 
   return (
-    <div className="min-h-screen bg-felt-canvas text-foreground flex flex-col justify-center items-center p-4 sm:p-6 transition-colors">
+    <div className="min-h-screen bg-background text-foreground flex flex-col justify-center items-center p-4 sm:p-6 transition-colors">
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
@@ -94,127 +105,184 @@ export function VerifyInvitationPage() {
         className="w-full max-w-md"
       >
         {/* Brand Header */}
-        <div className="flex items-center justify-center gap-3 mb-6">
+        <div className="flex items-center justify-center gap-3 mb-6 select-none">
           <img src={psuBookLogo} alt="PSU Research Portal" className="w-14 h-14 object-contain" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900 leading-tight">Pangasinan State University</h1>
-            <p className="text-xs text-blue-700 font-medium">Asingan Campus • Research & Publication System</p>
+            <h1 className="text-xl font-bold text-foreground leading-tight">Pangasinan State University</h1>
+            <p className="text-xs text-brand font-medium">Asingan Campus • Research Publication Tracking System</p>
           </div>
         </div>
 
-        <Card className="shadow-lg border-gray-200">
-          <CardHeader className="text-center pb-4">
-            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mx-auto mb-2">
-              <Shield className="w-6 h-6" />
+        <Card className="shadow-2xl border-border bg-card">
+          <CardHeader className="text-center pb-4 select-none">
+            <div className="w-12 h-12 rounded-full bg-brand/10 text-brand border border-brand/20 flex items-center justify-center mx-auto mb-2">
+              {success || alreadyActive ? (
+                <ShieldCheck className="w-6 h-6 text-emerald-500" />
+              ) : (
+                <Shield className="w-6 h-6" />
+              )}
             </div>
-            <CardTitle className="text-2xl font-bold text-gray-900">
-              {success ? "Account Activated!" : "Complete Researcher Setup"}
+            <CardTitle className="text-2xl font-bold text-foreground">
+              {alreadyActive
+                ? "Account Already Active"
+                : success
+                ? "Account Activated!"
+                : "Complete Researcher Setup"}
             </CardTitle>
-            <CardDescription className="text-sm">
-              {success
+            <CardDescription className="text-sm text-muted-foreground">
+              {alreadyActive
+                ? "Your researcher profile is already verified and active."
+                : success
                 ? "Your email is verified and your preferred password is set."
-                : "Verify your email invitation and set your personal password."}
+                : "Verify your researcher invitation and set your private login password."}
             </CardDescription>
           </CardHeader>
 
           <CardContent>
             {loading ? (
               <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
-                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                <p className="text-sm text-gray-500">Validating your invitation credentials...</p>
+                <Loader2 className="w-8 h-8 text-brand animate-spin" />
+                <p className="text-sm text-muted-foreground select-none">Validating invitation credentials...</p>
+              </div>
+            ) : alreadyActive ? (
+              /* Already Activated State */
+              <div className="py-4 space-y-5 text-center">
+                <div className="w-16 h-16 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-foreground">Profile Verified & Ready</h3>
+                  <p className="text-sm text-muted-foreground">
+                    This account is already active. You can sign in right away using your Instructor ID (
+                    <span className="font-mono text-brand font-bold">{userData?.instructorId}</span>) and your registered password.
+                  </p>
+                </div>
+                <Button onClick={() => navigate("/login")} className="w-full bg-brand hover:bg-brand/90 text-white font-semibold">
+                  Proceed to Sign In <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </div>
+            ) : superseded ? (
+              /* Superseded Token State */
+              <div className="py-4 space-y-5 text-center">
+                <div className="w-16 h-16 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full flex items-center justify-center mx-auto">
+                  <Clock className="w-9 h-9" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-foreground">Newer Invitation Dispatched</h3>
+                  <p className="text-sm text-muted-foreground">
+                    A more recent invitation link was sent to your email. Please check your inbox for the latest message from Campus Research Coordinator Sir Rodelio M. Garin.
+                  </p>
+                </div>
+                <Button onClick={() => navigate("/login")} variant="outline" className="w-full border-border hover:bg-muted text-foreground">
+                  Go to Sign In
+                </Button>
               </div>
             ) : error ? (
-              <div className="py-6 space-y-4">
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              /* Generic Error State */
+              <div className="py-4 space-y-4">
+                <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
                   <div>
-                    <h3 className="text-sm font-semibold text-red-800">Invalid or Expired Link</h3>
-                    <p className="text-xs text-red-700 mt-1">{error}</p>
+                    <h3 className="text-sm font-semibold text-destructive select-none">Invitation Notice</h3>
+                    <p className="text-xs text-destructive/90 mt-1 select-none">{error}</p>
                   </div>
                 </div>
-                <Button onClick={() => navigate("/login")} variant="outline" className="w-full">
+                <Button onClick={() => navigate("/login")} variant="outline" className="w-full border-border hover:bg-muted text-foreground">
                   Go to Sign In
                 </Button>
               </div>
             ) : success ? (
+              /* Success State */
               <div className="py-4 space-y-5 text-center">
-                <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto">
+                <div className="w-16 h-16 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
                   <CheckCircle2 className="w-10 h-10" />
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Welcome to the Research Community</h3>
-                  <p className="text-sm text-gray-600 mt-1">
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold text-foreground">Welcome to the Research Community</h3>
+                  <p className="text-sm text-muted-foreground">
                     Your account is officially active. You can now sign in using your Instructor ID (
-                    <span className="font-semibold text-gray-900">{userData?.instructorId}</span>) and your new password.
+                    <span className="font-mono text-brand font-bold">{userData?.instructorId}</span>) and your new password.
                   </p>
                 </div>
-                <Button onClick={() => navigate("/login")} className="w-full bg-blue-600 hover:bg-blue-700">
-                  Proceed to Login <ArrowRight className="w-4 h-4 ml-2" />
+                <Button onClick={() => navigate("/login")} className="w-full bg-brand hover:bg-brand/90 text-white font-semibold">
+                  Proceed to Sign In <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             ) : (
+              /* Form State */
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Researcher Verified Identity Badge */}
                 {userData && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5 text-xs text-blue-900">
-                    <div className="flex items-center gap-1.5 font-semibold text-sm text-blue-950">
-                      <User className="w-4 h-4 text-blue-600" />
-                      {userData.name}
+                  <div className="bg-muted/60 border border-border rounded-lg p-3.5 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-semibold text-sm text-foreground">
+                        <User className="w-4 h-4 text-brand" />
+                        <span>{userData.name}</span>
+                      </div>
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-brand/10 text-brand border border-brand/20 font-bold">
+                        {userData.instructorId}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-gray-600">
-                      <Mail className="w-3.5 h-3.5" />
-                      {userData.email}
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Mail className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{userData.email}</span>
                     </div>
-                    <div className="flex items-center justify-between text-gray-600 pt-1 border-t border-blue-100">
-                      <span>Instructor ID: <strong className="text-blue-900">{userData.instructorId}</strong></span>
-                      <span className="flex items-center gap-1">
-                        <Building className="w-3 h-3" />
-                        {userData.department}
+                    <div className="flex items-center justify-between text-muted-foreground pt-1.5 border-t border-border/60">
+                      <span className="flex items-center gap-1.5">
+                        <Building className="w-3.5 h-3.5 shrink-0" />
+                        <span>{userData.department}</span>
+                      </span>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 dark:text-emerald-400">
+                        Official Researcher
                       </span>
                     </div>
                   </div>
                 )}
 
                 {/* Password Fields */}
-                <div className="space-y-2">
-                  <Label htmlFor="password">Create New Password</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="password" className="text-foreground text-xs font-medium select-none">
+                    Create New Password
+                  </Label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                     <Input
                       id="password"
                       type="password"
                       placeholder="Minimum 6 characters"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="pl-9"
+                      className="pl-9 bg-surface border-border text-foreground placeholder:text-muted-foreground focus:ring-brand"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPassword" className="text-foreground text-xs font-medium select-none">
+                    Confirm Password
+                  </Label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                     <Input
                       id="confirmPassword"
                       type="password"
                       placeholder="Re-enter your password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="pl-9"
+                      className="pl-9 bg-surface border-border text-foreground placeholder:text-muted-foreground focus:ring-brand"
                       required
                     />
                   </div>
                 </div>
 
                 {formError && (
-                  <div className="p-2.5 bg-red-50 border border-red-200 rounded text-xs text-red-600 font-medium">
+                  <div className="p-2.5 bg-destructive/10 border border-destructive/20 rounded text-xs text-destructive font-medium">
                     {formError}
                   </div>
                 )}
 
-                <Button type="submit" disabled={verifying} className="w-full bg-blue-600 hover:bg-blue-700">
+                <Button type="submit" disabled={verifying} className="w-full bg-brand hover:bg-brand/90 text-white font-semibold">
                   {verifying ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />

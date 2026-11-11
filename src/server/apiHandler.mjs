@@ -995,7 +995,8 @@ export async function handleApiRequest(req, res) {
     // 1c. VERIFY TOKEN VALIDITY: GET /api/auth/verify-token
     // ----------------------------------------------------
     if (pathname === '/api/auth/verify-token' && method === 'GET') {
-      const token = url.searchParams.get('token');
+      const rawToken = url.searchParams.get('token');
+      const token = (rawToken || '').trim();
       if (!token) {
         return sendJson(400, { valid: false, error: 'Verification token is required.' });
       }
@@ -1009,11 +1010,49 @@ export async function handleApiRequest(req, res) {
       `).get(token);
 
       if (!user) {
-        return sendJson(404, { valid: false, error: 'Invalid or expired verification link.' });
+        // Check if this token was recorded in email_logs to provide precise, user-friendly status
+        const log = db.prepare(`
+          SELECT * FROM email_logs WHERE verification_token = ? ORDER BY created_at DESC LIMIT 1
+        `).get(token);
+
+        if (log && log.recipient_email) {
+          const matchedUser = db.prepare(`
+            SELECT u.*, r.instructor_id 
+            FROM users u
+            LEFT JOIN researchers r ON u.id = r.user_id
+            WHERE LOWER(u.email) = LOWER(?) LIMIT 1
+          `).get(log.recipient_email);
+
+          if (matchedUser && matchedUser.status === 'active' && !matchedUser.verification_token) {
+            return sendJson(200, {
+              valid: false,
+              alreadyActive: true,
+              error: 'This researcher account has already been activated and verified. You can sign in directly with your credentials.',
+              user: {
+                id: matchedUser.id,
+                name: matchedUser.name,
+                instructorId: matchedUser.instructor_id || matchedUser.username,
+                email: matchedUser.email,
+                department: matchedUser.department,
+                status: 'active',
+              }
+            });
+          }
+
+          if (matchedUser && matchedUser.verification_token && matchedUser.verification_token !== token) {
+            return sendJson(400, {
+              valid: false,
+              superseded: true,
+              error: 'A newer invitation link was recently dispatched to your email. Please check your inbox for the latest email, or contact Campus Research Coordinator Sir Rodelio M. Garin.',
+            });
+          }
+        }
+
+        return sendJson(404, { valid: false, error: 'This invitation link is invalid or has expired.' });
       }
 
       if (user.verification_token_expires_at && new Date(user.verification_token_expires_at) < new Date()) {
-        return sendJson(400, { valid: false, error: 'This verification link has expired.' });
+        return sendJson(400, { valid: false, error: 'This verification link has expired. Please contact Campus Research Coordinator Sir Rodelio M. Garin to request a fresh invitation.' });
       }
 
       return sendJson(200, {
@@ -1036,7 +1075,8 @@ export async function handleApiRequest(req, res) {
     // 1d. COMPLETE INVITATION & SET PASSWORD: POST /api/auth/complete-invitation
     // ----------------------------------------------------
     if (pathname === '/api/auth/complete-invitation' && method === 'POST') {
-      const { token, newPassword } = await readJsonBody();
+      const { token: rawToken, newPassword } = await readJsonBody();
+      const token = (rawToken || '').trim();
       if (!token || !newPassword) {
         return sendJson(400, { error: 'Token and new password are required.' });
       }
@@ -1052,6 +1092,29 @@ export async function handleApiRequest(req, res) {
       `).get(token);
 
       if (!user) {
+        const log = db.prepare(`
+          SELECT * FROM email_logs WHERE verification_token = ? ORDER BY created_at DESC LIMIT 1
+        `).get(token);
+
+        if (log && log.recipient_email) {
+          const matchedUser = db.prepare(`
+            SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1
+          `).get(log.recipient_email);
+
+          if (matchedUser && matchedUser.status === 'active' && !matchedUser.verification_token) {
+            return sendJson(200, {
+              success: true,
+              alreadyActive: true,
+              message: 'Your account is already active and your password is set. Please sign in.',
+              user: {
+                id: matchedUser.id,
+                instructorId: matchedUser.username,
+                name: matchedUser.name,
+              }
+            });
+          }
+        }
+
         return sendJson(404, { error: 'Invalid or already used invitation link.' });
       }
 

@@ -180,16 +180,16 @@
     "semantic_hash": ""
   },
   "src/app/components/VerifyEmailPage.tsx": {
-    "mtime": 1794266218.563011,
-    "seen": 1794322751.146283,
-    "ast_hash": "c49c42198404aa12f85ac1dd438bb5b7",
-    "semantic_hash": "c49c42198404aa12f85ac1dd438bb5b7"
+    "mtime": 1794358625.1847608,
+    "seen": 1794358631.0813031,
+    "ast_hash": "0f1dca3240ad0fe61b6b9531a2b34800",
+    "semantic_hash": ""
   },
   "src/app/components/VerifyInvitationPage.tsx": {
-    "mtime": 1794266218.6913881,
-    "seen": 1794322751.1462848,
-    "ast_hash": "decde11b754dca5e3b9a07b0aa6bd3b7",
-    "semantic_hash": "decde11b754dca5e3b9a07b0aa6bd3b7"
+    "mtime": 1794358625.5988557,
+    "seen": 1794358631.081311,
+    "ast_hash": "5b7eddc1f4fae2c3333922e355fcd29a",
+    "semantic_hash": ""
   },
   "src/app/components/common/EmptyState.tsx": {
     "mtime": 1792988628.4702795,
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "src/server/apiHandler.mjs": {
-    "mtime": 1794353800.6924067,
-    "seen": 1794354205.8153353,
-    "ast_hash": "38e9f07740758a7c297b6fdc6918cde2",
+    "mtime": 1794358626.472595,
+    "seen": 1794358631.081538,
+    "ast_hash": "b1faebca5f838e6e1ce0ab6c7d66509a",
     "semantic_hash": ""
   },
   "src/server/authHelper.mjs": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "src/server/emailService.mjs": {
-    "mtime": 1794358090.0101948,
-    "seen": 1794358129.0041163,
-    "ast_hash": "0534d3fc280828b80658965ebb728a09",
+    "mtime": 1794358453.765599,
+    "seen": 1794358631.0815551,
+    "ast_hash": "41d10c1507c996c4948b409795a00a52",
     "semantic_hash": ""
   },
   "src/server/prod.mjs": {
