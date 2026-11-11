@@ -8,7 +8,7 @@ import { applySecurityHeaders } from './securityHeaders.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DIST_DIR = path.resolve(__dirname, '../../dist');
-const PORT = parseInt(process.env.PORT || process.env.API_PORT || '8080', 10);
+const PORT = parseInt(process.env.PORT || process.env.API_PORT || '10000', 10);
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=UTF-8',
@@ -30,7 +30,7 @@ const MIME_TYPES = {
   '.webp': 'image/webp',
 };
 
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
   applySecurityHeaders(res);
 
   const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -105,9 +105,24 @@ const server = http.createServer(async (req, res) => {
     res.end('Server Error');
   });
   stream.pipe(res);
-});
+};
+
+const server = http.createServer(requestHandler);
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Research Tracking Production Server] Running on http://0.0.0.0:${PORT}`);
   console.log(`[Static Files] Serving from: ${DIST_DIR}`);
 });
+
+// Dual-Port listener: Render Docker services may probe either 10000 or 8080 depending on dashboard/Dockerfile sync.
+// Opening both ports guarantees Render's external port scanner succeeds instantly.
+const FALLBACK_PORT = PORT === 10000 ? 8080 : 10000;
+try {
+  const fallbackServer = http.createServer(requestHandler);
+  fallbackServer.listen(FALLBACK_PORT, '0.0.0.0', () => {
+    console.log(`[Port Fallback Server] Also listening on http://0.0.0.0:${FALLBACK_PORT} for Render port scanner.`);
+  }).on('error', (err) => {
+    // If port is unavailable, primary server on PORT remains active
+    console.warn(`[Port Fallback] Port ${FALLBACK_PORT} not bound (${err.message}), primary port ${PORT} active.`);
+  });
+} catch {}

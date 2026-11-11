@@ -16,7 +16,7 @@ FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=10000
 ENV DATA_DIR=/data
 
 # Copy built frontend assets, server handlers, and dependencies
@@ -28,6 +28,7 @@ COPY package.json ./
 # Create default data directory for SQLite database
 RUN mkdir -p /data
 
+EXPOSE 10000
 EXPOSE 8080
 
 CMD ["node", "src/server/prod.mjs"]

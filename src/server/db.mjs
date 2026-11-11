@@ -404,7 +404,7 @@ export function initDatabase() {
   const initSetting = (key, defaultValue) => {
     const existing = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
     if (!existing) {
-      db.prepare('INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)').run(
+      db.prepare('INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES (?, ?, ?)').run(
         key,
         defaultValue,
         new Date().toISOString()
@@ -422,7 +422,7 @@ export function initDatabase() {
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!existingAdmin) {
     db.prepare(`
-      INSERT INTO users (id, username, email, password, name, role, department, is_faculty, scholar_url, google_scholar_id, created_at)
+      INSERT OR IGNORE INTO users (id, username, email, password, name, role, department, is_faculty, scholar_url, google_scholar_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'admin-1',
