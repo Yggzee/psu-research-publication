@@ -346,12 +346,7 @@ export async function initTursoSchema() {
     await tursoClient.execute({
       sql: `UPDATE users 
             SET username = ?, 
-                password = 'ENV_MANAGED',
-                name = 'Sir Rodelio M. Garin',
-                email = 'rodeliogarin@gmail.com',
-                department = 'Campus Research Unit / BSIT',
-                scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
-                google_scholar_id = 'x6PdtN8AAAAJ'
+                password = 'ENV_MANAGED'
             WHERE role = 'admin'`,
       args: [adminUsername],
     });
@@ -361,10 +356,9 @@ export async function initTursoSchema() {
     });
     await tursoClient.execute({
       sql: `UPDATE researchers 
-            SET user_id = 'admin-1',
-                scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
-                google_scholar_id = 'x6PdtN8AAAAJ'
-            WHERE instructor_id = 'PSU-002' OR name LIKE '%Garin%'`,
+            SET user_id = 'admin-1'
+            WHERE (instructor_id = 'ASIN-00002' OR instructor_id = 'PSU-002' OR name LIKE '%Garin%')
+              AND (user_id IS NULL OR user_id = '')`,
       args: [],
     });
   } catch (adminErr) {
@@ -471,32 +465,15 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
       prepareFn(`
         UPDATE users 
         SET username = ?, 
-            password = 'ENV_MANAGED',
-            name = 'Sir Rodelio M. Garin',
-            email = 'rodeliogarin@gmail.com',
-            department = 'BSIT',
-            scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
-            google_scholar_id = 'x6PdtN8AAAAJ'
+            password = 'ENV_MANAGED'
         WHERE role = 'admin'
       `).run(adminUsername);
       prepareFn("DELETE FROM users WHERE id = 'user-1794223646835-yndd'").run();
       prepareFn(`
         UPDATE researchers 
-        SET user_id = 'admin-1',
-            department = 'BSIT',
-            scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
-            google_scholar_id = 'x6PdtN8AAAAJ'
-        WHERE instructor_id = 'ASIN-00002' OR instructor_id = 'PSU-002' OR name LIKE '%Garin%'
-      `).run();
-      prepareFn(`
-        UPDATE researchers 
-        SET department = 'BSIT' 
-        WHERE department LIKE '%Campus Research Unit%' OR department LIKE '%Information Technology%'
-      `).run();
-      prepareFn(`
-        UPDATE users 
-        SET department = 'BSIT' 
-        WHERE department LIKE '%Campus Research Unit%' OR department LIKE '%Information Technology%'
+        SET user_id = 'admin-1'
+        WHERE (instructor_id = 'ASIN-00002' OR instructor_id = 'PSU-002' OR name LIKE '%Garin%')
+          AND (user_id IS NULL OR user_id = '')
       `).run();
     } catch {}
 

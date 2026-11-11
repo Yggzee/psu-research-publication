@@ -429,9 +429,9 @@ export function initDatabase() {
       adminUsername,
       'rodeliogarin@gmail.com',
       'ENV_MANAGED',
-      'Sir Rodelio M. Garin',
+      'Rodelio M. Garin',
       'admin',
-      'Campus Research Unit / BSIT',
+      'BSE',
       1,
       'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
       'x6PdtN8AAAAJ',
@@ -440,16 +440,12 @@ export function initDatabase() {
     console.log('[Database] Default admin user initialized with ENV_MANAGED credentials.');
   } else {
     // Idempotent migration to ensure admin credentials match .env and are removed from database
+    // Crucial: NEVER overwrite user-edited name, department, or email!
     try {
       db.prepare(`
         UPDATE users 
         SET username = ?, 
-            password = 'ENV_MANAGED',
-            name = 'Sir Rodelio M. Garin',
-            email = 'rodeliogarin@gmail.com',
-            department = 'Campus Research Unit / BSIT',
-            scholar_url = 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
-            google_scholar_id = 'x6PdtN8AAAAJ'
+            password = 'ENV_MANAGED'
         WHERE role = 'admin'
       `).run(adminUsername);
       console.log('[Database] Admin user credentials protected via .env (password marked ENV_MANAGED).');
@@ -463,10 +459,21 @@ export function initDatabase() {
     db.prepare("DELETE FROM users WHERE id = 'user-1794223646835-yndd'").run();
   } catch { }
 
-  // Ensure Sir Rodelio M. Garin's researcher profile is linked to admin-1
+  // Clean any legacy 'Sir ' prefix from name and first_name fields across users and researchers
   try {
-    const garinRes = db.prepare(`SELECT id FROM researchers WHERE (instructor_id = 'PSU-002' OR name LIKE '%Garin%') LIMIT 1`).get();
-    if (garinRes) {
+    db.prepare("UPDATE users SET name = TRIM(SUBSTR(name, 5)) WHERE name LIKE 'Sir %'").run();
+    db.prepare("UPDATE researchers SET name = TRIM(SUBSTR(name, 5)) WHERE name LIKE 'Sir %'").run();
+    db.prepare("UPDATE researchers SET first_name = TRIM(SUBSTR(first_name, 5)) WHERE first_name LIKE 'Sir %'").run();
+    db.prepare("UPDATE users SET department = 'BSE' WHERE department LIKE '%Campus Research Unit%'").run();
+    db.prepare("UPDATE researchers SET department = 'BSE' WHERE department LIKE '%Campus Research Unit%'").run();
+  } catch (cleanErr) {
+    console.warn('[Legacy Sir Prefix / Dept Cleanup Error]:', cleanErr.message);
+  }
+
+  // Ensure Rodelio M. Garin's researcher profile is linked to admin-1
+  try {
+    const garinRes = db.prepare(`SELECT id, user_id FROM researchers WHERE (instructor_id = 'ASIN-00002' OR instructor_id = 'PSU-002' OR name LIKE '%Garin%') LIMIT 1`).get();
+    if (garinRes && (!garinRes.user_id || garinRes.user_id === '')) {
       db.prepare(`
         UPDATE researchers 
         SET user_id = 'admin-1',

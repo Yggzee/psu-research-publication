@@ -47,9 +47,9 @@ export function ProfilePage() {
     if (user.role === "admin") {
       return {
         ...user,
-        name: user.name && !user.name.toLowerCase().includes("admin") ? user.name : "Rodelio M. Garin",
+        name: user.name && !user.name.toLowerCase().includes("admin") ? user.name.replace(/^Sir\s+/i, "") : "Rodelio M. Garin",
         email: user.email && !user.email.includes("admin@") ? user.email : "rodeliogarin@gmail.com",
-        department: user.department && !user.department.includes("Information Technology") ? user.department : "BSIT",
+        department: user.department || "BSE",
         scholarUrl: user.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
         googleScholarId: user.googleScholarId || "x6PdtN8AAAAJ",
         instructorId: user.instructorId && user.instructorId !== "admin" ? user.instructorId : "ASIN-00002",
@@ -72,7 +72,7 @@ export function ProfilePage() {
     middleInitial: "",
     lastName: "",
     email: currentUser.email || "",
-    department: currentUser.department || "BSIT",
+    department: currentUser.department || "BSE",
     photoUrl: currentUser.photoUrl || "",
     scholarUrl: currentUser.scholarUrl || "",
     googleScholarId: currentUser.googleScholarId || "",
@@ -80,7 +80,8 @@ export function ProfilePage() {
 
   // Helper to cleanly parse a single full name string into First Name, Middle Initial, and Last Name
   const parseNameParts = (fullName: string) => {
-    const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
+    const clean = (fullName || "").replace(/^Sir\s+/i, "").trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
     if (parts.length === 0) return { firstName: "", middleInitial: "", lastName: "" };
     if (parts.length === 1) return { firstName: parts[0], middleInitial: "", lastName: "" };
     if (parts.length === 2) return { firstName: parts[0], middleInitial: "", lastName: parts[1] };
@@ -113,9 +114,9 @@ export function ProfilePage() {
       const resolvedUser: SessionUser = isCoordinator
         ? {
             ...activeUser,
-            name: activeUser.name && !activeUser.name.toLowerCase().includes("admin") ? activeUser.name : "Rodelio M. Garin",
+            name: activeUser.name && !activeUser.name.toLowerCase().includes("admin") ? activeUser.name.replace(/^Sir\s+/i, "") : "Rodelio M. Garin",
             email: activeUser.email && !activeUser.email.includes("admin@") ? activeUser.email : "rodeliogarin@gmail.com",
-            department: activeUser.department && !activeUser.department.includes("Information Technology") ? activeUser.department : "BSIT",
+            department: activeUser.department || "BSE",
             scholarUrl: activeUser.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
             googleScholarId: activeUser.googleScholarId || "x6PdtN8AAAAJ",
             instructorId: activeUser.instructorId && activeUser.instructorId !== "admin" ? activeUser.instructorId : "ASIN-00002",
@@ -173,7 +174,7 @@ export function ProfilePage() {
     setIdDigits(match ? match[1] : "00002");
     
     const parsed = parseNameParts(currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : ""));
-    const initialFirst = (currentUser as any).firstName || parsed.firstName || (currentUser.role === "admin" ? "Rodelio" : "");
+    const initialFirst = ((currentUser as any).firstName || parsed.firstName || (currentUser.role === "admin" ? "Rodelio" : "")).replace(/^Sir\s+/i, "");
     const initialMi = (currentUser as any).middleInitial || parsed.middleInitial || (currentUser.role === "admin" ? "M." : "");
     const initialLast = (currentUser as any).lastName || parsed.lastName || (currentUser.role === "admin" ? "Garin" : "");
 
@@ -182,7 +183,7 @@ export function ProfilePage() {
       middleInitial: initialMi,
       lastName: initialLast,
       email: currentUser.email || "",
-      department: currentUser.department || "BSIT",
+      department: currentUser.department || "BSE",
       photoUrl: currentUser.photoUrl || "",
       scholarUrl: currentUser.scholarUrl || "",
       googleScholarId: currentUser.googleScholarId || "",
@@ -404,7 +405,7 @@ export function ProfilePage() {
                   ) : (
                     <StatusBadge
                       status={currentUser.isFaculty === false ? "non-faculty" : "faculty"}
-                      label={currentUser.isFaculty === false ? "Non-Faculty" : `Faculty (${currentUser.department || "BSIT"})`}
+                      label={currentUser.isFaculty === false ? "Non-Faculty" : `Faculty (${currentUser.department || "BSE"})`}
                     />
                   )}
                 </div>
@@ -412,7 +413,7 @@ export function ProfilePage() {
                 <div className="flex flex-wrap items-center gap-3.5 text-xs text-muted-foreground">
                   <span className="flex items-center gap-1.5">
                     <Building className="w-3.5 h-3.5 text-brand" />
-                    <span>{currentUser.department || (isCoordinator ? "Campus Research Unit / BSIT" : "BSIT")}</span>
+                    <span>{currentUser.department || "BSE"}</span>
                   </span>
                   {(currentUser.email || isCoordinator) && (
                     <span className="flex items-center gap-1.5">
@@ -692,7 +693,7 @@ export function ProfilePage() {
             <div className="flex justify-between py-2 border-b border-border/60">
               <span className="text-muted-foreground">Department</span>
               <span className="font-semibold text-foreground">
-                {currentUser.department || (isCoordinator ? "Campus Research Unit / BSIT" : "General Faculty")}
+                {currentUser.department || "General Faculty"}
               </span>
             </div>
             <div className="flex justify-between py-2 border-b border-border/60">

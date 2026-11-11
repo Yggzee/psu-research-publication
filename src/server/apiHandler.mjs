@@ -671,7 +671,7 @@ export async function handleApiRequest(req, res) {
         loginAttemptTracker.recordSuccess(clientIp);
 
         const adminDb = db.prepare(`
-          SELECT u.*, r.instructor_id 
+          SELECT u.*, r.instructor_id, r.department as r_department, r.name as r_name
           FROM users u
           LEFT JOIN researchers r ON u.id = r.user_id
           WHERE u.role = 'admin'
@@ -679,33 +679,36 @@ export async function handleApiRequest(req, res) {
         `).get() || {
           id: 'admin-1',
           role: 'admin',
-          name: 'Sir Rodelio M. Garin',
+          name: 'Rodelio M. Garin',
           username: adminUserEnv,
           email: 'rodeliogarin@gmail.com',
-          department: 'Campus Research Unit / BSIT',
+          department: 'BSE',
           is_faculty: 1,
           scholar_url: 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
           google_scholar_id: 'x6PdtN8AAAAJ',
         };
 
+        const resolvedName = (adminDb.r_name || adminDb.name || 'Rodelio M. Garin').replace(/^Sir\s+/i, '');
+        const resolvedDept = adminDb.r_department || adminDb.department || 'BSE';
+
         const token = signSessionToken({
           id: adminDb.id,
           role: 'admin',
-          name: adminDb.name || 'Sir Rodelio M. Garin',
+          name: resolvedName,
           username: adminDb.username || adminUserEnv,
-          instructorId: adminDb.instructor_id || 'PSU-002',
-          department: adminDb.department || 'Campus Research Unit / BSIT',
+          instructorId: adminDb.instructor_id || 'ASIN-00002',
+          department: resolvedDept,
         });
 
         return sendJson(200, {
           user: {
             id: adminDb.id,
             role: 'admin',
-            name: adminDb.name || 'Sir Rodelio M. Garin',
+            name: resolvedName,
             username: adminDb.username || adminUserEnv,
             email: adminDb.email || 'rodeliogarin@gmail.com',
-            instructorId: adminDb.instructor_id || 'PSU-002',
-            department: adminDb.department || 'Campus Research Unit / BSIT',
+            instructorId: adminDb.instructor_id || 'ASIN-00002',
+            department: resolvedDept,
             isFaculty: true,
             photoUrl: adminDb.photo_url || null,
             scholarUrl: adminDb.scholar_url || 'https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en',
