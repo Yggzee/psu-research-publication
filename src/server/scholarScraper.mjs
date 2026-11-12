@@ -1348,10 +1348,10 @@ export function matchAuthorName(authorStr, queryWords, targetLast, targetFirst, 
 }
 
 /**
- * Direct search across regional Philippine Open Access & university journals (OJS)
- * (e.g. Southeast Asian Journal of Science and Technology / SAJST, PhilTech, PSU Open Access)
+ * Direct search across regional Open Access & university journals (OJS)
+ * (e.g. Southeast Asian Journal of Science and Technology / SAJST, Journal of Daoist Studies, PhilTech, PSU Open Access)
  */
-export async function searchPhilippineJournals(rawQuery, nameTokens = [], targetLast = '', targetFirstWords = []) {
+export async function searchAcademicOjsJournals(rawQuery, nameTokens = [], targetLast = '', targetFirstWords = []) {
   const queryStr = String(rawQuery || '').replace(/^author:\s*"?/i, '').replace(/"$/g, '').trim();
   if (!queryStr) return [];
 
@@ -1360,8 +1360,62 @@ export async function searchPhilippineJournals(rawQuery, nameTokens = [], target
 
   const ojsSearchEndpoints = [
     'https://sajst.pti.edu.ph/online/index.php/sajst/search/search',
+    'https://journalofdaoiststudies.org/index.php/journal/search/search',
   ];
 
+  // 1. Direct Article URL search: if user searched an exact article link (e.g. from OJS)
+  if (/^https?:\/\/[^\s]+\/article\/view\/\d+/i.test(queryStr)) {
+    try {
+      const artUrl = queryStr;
+      const artRes = await fetch(artUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (artRes.ok) {
+        const artHtml = await artRes.text();
+        const metas = [...artHtml.matchAll(/<meta\s+name="([^"]+)"\s+content="([^"]*)"/gi)];
+        const metaMap = {};
+        const authorsList = [];
+        for (const m of metas) {
+          const k = m[1].toLowerCase();
+          const v = cleanText(m[2]);
+          if (k === 'citation_author' || k === 'dc.creator.personalname') {
+            const split = v.split(/[,;]\s*(?=[A-Z])/).map((a) => cleanText(a)).filter(Boolean);
+            for (const a of (split.length > 1 ? split : [v])) {
+              if (!authorsList.includes(a)) authorsList.push(a);
+            }
+          } else {
+            metaMap[k] = v;
+          }
+        }
+        const title = metaMap['citation_title'] || metaMap['dc.title'] || '';
+        if (title) {
+          const artIdMatch = artUrl.match(/\/article\/view\/(\d+)/);
+          const globalId = `ojs-${artIdMatch ? artIdMatch[1] : hashString(artUrl)}`;
+          return [{
+            id: globalId,
+            title: cleanText(title),
+            authors: authorsList.length > 0 ? authorsList : ['Author'],
+            journal: metaMap['citation_journal_title'] || metaMap['dc.source'] || 'Academic Publication',
+            year: parseInt(metaMap['citation_date'] || metaMap['dc.date'], 10) || new Date().getFullYear(),
+            citations: 0,
+            abstract: metaMap['citation_abstract'] || '',
+            url: metaMap['citation_abstract_html_url'] || metaMap['dc.identifier.uri'] || artUrl,
+            pdfUrl: metaMap['citation_pdf_url'] || null,
+            citedByLink: '',
+            fromCache: false,
+            isPsu: true,
+            geo_tier: 'psu',
+            source: 'philippine_journal',
+          }];
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Query formulation: handles Author searches, Title searches, and Content searches
   const queriesToRun = [];
   if (targetLast) {
     if (Array.isArray(targetFirstWords) && targetFirstWords.length > 0) {
@@ -1369,7 +1423,12 @@ export async function searchPhilippineJournals(rawQuery, nameTokens = [], target
     }
     queriesToRun.push(targetLast);
   } else {
-    queriesToRun.push(queryStr);
+    const cleanTitle = queryStr.replace(/\([^)]*\)/g, ' ').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const titleWords = cleanTitle.split(/\s+/).filter((w) => w.length >= 3);
+    if (titleWords.length > 6) {
+      queriesToRun.push(titleWords.slice(0, 6).join(' '));
+    }
+    queriesToRun.push(cleanTitle);
   }
 
   for (const endpoint of ojsSearchEndpoints) {
@@ -1391,7 +1450,7 @@ export async function searchPhilippineJournals(rawQuery, nameTokens = [], target
         for (const artUrl of articleUrls) {
           const artIdMatch = artUrl.match(/\/article\/view\/(\d+)/);
           const artId = artIdMatch ? artIdMatch[1] : '';
-          const globalId = `sajst-${artId || hashString(artUrl)}`;
+          const globalId = `ojs-${artId || hashString(artUrl)}`;
           if (seenIds.has(globalId)) continue;
           seenIds.add(globalId);
 
@@ -1411,18 +1470,21 @@ export async function searchPhilippineJournals(rawQuery, nameTokens = [], target
             for (const m of metas) {
               const k = m[1].toLowerCase();
               const v = cleanText(m[2]);
-              if (k === 'citation_author') {
-                if (v && !authorsList.includes(v)) authorsList.push(v);
+              if (k === 'citation_author' || k === 'dc.creator.personalname') {
+                const split = v.split(/[,;]\s*(?=[A-Z])/).map((a) => cleanText(a)).filter(Boolean);
+                for (const a of (split.length > 1 ? split : [v])) {
+                  if (!authorsList.includes(a)) authorsList.push(a);
+                }
               } else {
                 metaMap[k] = v;
               }
             }
 
-            const title = metaMap['citation_title'] || '';
+            const title = metaMap['citation_title'] || metaMap['dc.title'] || '';
             if (!title) continue;
 
-            const journal = metaMap['citation_journal_title'] || 'Southeast Asian Journal of Science and Technology';
-            const year = parseInt(metaMap['citation_date'], 10) || new Date().getFullYear();
+            const journal = metaMap['citation_journal_title'] || metaMap['dc.source'] || 'Academic Publication';
+            const year = parseInt(metaMap['citation_date'] || metaMap['dc.date'], 10) || new Date().getFullYear();
             const pdfUrl = metaMap['citation_pdf_url'] || null;
 
             let abstract = metaMap['citation_abstract'] || '';
@@ -1435,13 +1497,13 @@ export async function searchPhilippineJournals(rawQuery, nameTokens = [], target
 
             results.push({
               id: globalId,
-              title,
+              title: cleanText(title),
               authors: authorsList.length > 0 ? authorsList : ['Author'],
               journal,
               year,
               citations: 0,
               abstract,
-              url: metaMap['citation_abstract_html_url'] || artUrl,
+              url: metaMap['citation_abstract_html_url'] || metaMap['dc.identifier.uri'] || artUrl,
               pdfUrl,
               citedByLink: '',
               fromCache: false,
@@ -1457,6 +1519,8 @@ export async function searchPhilippineJournals(rawQuery, nameTokens = [], target
 
   return results;
 }
+
+export const searchPhilippineJournals = searchAcademicOjsJournals;
 
 /**
  * Multi-source academic search fallback & supplement (CrossRef API + OpenAlex API + Philippine Journals)

@@ -4425,6 +4425,12 @@ export async function handleApiRequest(req, res) {
         // 1. Direct query match anywhere in title, abstract, or keywords
         if (hasWordMatch(fullContent, bareLower)) return true;
 
+        // 2. High-precision Title match: if paper title contains >= 50% of the query words
+        if (tLower && queryWords.length >= 2) {
+          const titleHits = queryWords.filter((w) => hasWordMatch(tLower, w)).length;
+          if (titleHits >= Math.ceil(queryWords.length * 0.5)) return true;
+        }
+
         // 2. Topic stem match (e.g. "farm", "farming", "crop", "crops")
         if (topicVariants.stems.some((s) => hasWordMatch(fullContent, s))) return true;
 

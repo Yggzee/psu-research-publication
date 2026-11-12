@@ -41,6 +41,7 @@ All system rules are organized into modular, `always_on` rule files in `.agents/
    - Publications: **"Publications"** (published works only, no ongoing/unpublished research).
    - SDG Analytics: **"SDG Alignment"** (tab/feature) and **"SDG Goals"** (individual targets); strict 1:1 primary Focus SDG mapping in institutional overviews with unique, non-patterned rationales.
    - Proponent Attribution: `"Developed by Julius Oscar Moreno • PSU Asingan Campus"` in public footer.
+   - **Generalized Scholarly Author Name Resolution:** Full Name + Affiliation matching with Author-Exclusive search results (no unrelated campus papers in author queries).
 
 3. **[UI & UX Design Rules](.agents/rules/ui-design.md)**
    - **No Emojis** anywhere in UI; always use `lucide-react` icons.

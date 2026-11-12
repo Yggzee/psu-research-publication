@@ -44,4 +44,10 @@ Always enforce the following standardized terminology and formatting across all 
 - Any secondary/co-aligned SDGs are preserved in the publication's metadata (`sdg_tags`) and surfaced as subtle secondary badges and within the Publication Inspector Drawer (`PublicationInspectorDrawer.tsx`) and Publication Detail page.
 - "Why this is aligned" rationales must be **unique, evidence-grounded, and specific to the individual research paper's methodology and findings**, never following repeated grammatical boilerplate formulas or identical sentence patterns across papers.
 
+## 10. Generalized Scholarly Author Name Resolution & Author-Exclusive Search
+- Always generalize name resolution, initials matching, and author indexing across all researchers rather than hardcoding or tailoring logic to specific individuals.
+- In academic searches, author claiming, and attribution, never rely strictly on Institutional IDs (`ASIN-00000`), as external and regional indexing does not always carry IDs; prioritize Name, Full Name, and Full Name + Affiliation ('Pangasinan State University' / 'PSU').
+- When searching for a researcher's name, enforce Author-Exclusive Search: return only publications where the queried author physically appears (including compound names, given-name tokens, initials sequences, and inverted formats); never pollute author results with unrelated campus papers.
+
+
 
