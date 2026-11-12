@@ -1,7 +1,7 @@
 # Graph Report - ResPub  (2026-11-12)
 
 ## Corpus Check
-- 118 files · ~137,755 words
+- 118 files · ~137,637 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: (none) 5, .css 5, .db 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2a0d6524`
+- Built from commit: `07aeb203`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -59,8 +59,8 @@
 1. `cn()` - 223 edges
 2. `ApiService` - 87 edges
 3. `Button()` - 66 edges
-4. `handleApiRequest()` - 50 edges
-5. `Badge()` - 50 edges
+4. `Badge()` - 50 edges
+5. `handleApiRequest()` - 50 edges
 6. `Card()` - 49 edges
 7. `CardContent()` - 45 edges
 8. `Input()` - 40 edges

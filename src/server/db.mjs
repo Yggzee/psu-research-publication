@@ -486,41 +486,6 @@ export function initDatabase() {
     console.warn('[Garin Researcher Link Error]:', e.message);
   }
 
-  // Ensure Dr. Mary Jane U. Quibilan's verified researcher profile and Google Scholar ID exist
-  try {
-    const quibilanRes = db.prepare(`SELECT id, google_scholar_id FROM researchers WHERE name LIKE '%Quibilan%' LIMIT 1`).get();
-    if (!quibilanRes) {
-      db.prepare(`
-        INSERT INTO researchers (id, instructor_id, first_name, last_name, middle_initial, name, email, department, is_faculty, scholar_url, google_scholar_id, status, has_scholar, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        'res-quibilan-01',
-        'ASIN-00003',
-        'Mary Jane',
-        'Quibilan',
-        'U',
-        'Mary Jane U. Quibilan',
-        'mquibilan@psu.edu.ph',
-        'BSE',
-        1,
-        'https://scholar.google.com/citations?user=oR0VPl0AAAAJ&hl=en',
-        'oR0VPl0AAAAJ',
-        'active',
-        1,
-        new Date().toISOString()
-      );
-    } else if (!quibilanRes.google_scholar_id) {
-      db.prepare(`
-        UPDATE researchers
-        SET google_scholar_id = 'oR0VPl0AAAAJ',
-            scholar_url = 'https://scholar.google.com/citations?user=oR0VPl0AAAAJ&hl=en'
-        WHERE id = ?
-      `).run(quibilanRes.id);
-    }
-  } catch (qErr) {
-    console.warn('[Quibilan Seed Warning]:', qErr.message);
-  }
-
   // Upgrade any plaintext researcher passwords to salted scrypt hashes
   migrateResearcherPasswordsToScrypt(db);
   // Re-attribute publications based strictly on verified author names (decoupling from generic uploader IDs)
