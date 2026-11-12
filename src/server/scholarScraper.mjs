@@ -90,6 +90,21 @@ export async function enrichPaperWithCrossRef(paper) {
 
     let matchedItem = null;
 
+    const existingAuthorsList = Array.isArray(paper.authors)
+      ? paper.authors
+      : typeof paper.authors === 'string'
+      ? paper.authors.split(/[,;]/).map((a) => a.trim()).filter(Boolean)
+      : [];
+    const hasRealExistingAuthors =
+      existingAuthorsList.length > 0 &&
+      !(existingAuthorsList.length === 1 && /^author$/i.test(existingAuthorsList[0].trim()));
+
+    const existingSurnames = existingAuthorsList.map((a) => {
+      const clean = String(a).toLowerCase().replace(/[^a-z\s]/g, '').trim();
+      const words = clean.split(/\s+/).filter((w) => w.length > 2);
+      return words[words.length - 1] || '';
+    }).filter(Boolean);
+
     // 1. Direct CrossRef DOI lookup if DOI is known
     if (cleanDoi) {
       try {
@@ -106,7 +121,21 @@ export async function enrichPaperWithCrossRef(paper) {
         if (res.ok) {
           const d = await res.json();
           if (d?.message && d.message.type !== 'component' && (Array.isArray(d.message.author) || d.message.published)) {
-            matchedItem = d.message;
+            const cand = d.message;
+            if (hasRealExistingAuthors && Array.isArray(cand.author) && cand.author.length > 0) {
+              const candSurnames = cand.author.map((a) => String(a.family || a.name || '').toLowerCase().replace(/[^a-z]/g, '').trim()).filter(Boolean);
+              const hasAuthorOverlap = existingSurnames.some((es) =>
+                candSurnames.some((cs) => cs === es || cs.includes(es) || es.includes(cs))
+              );
+              if (hasAuthorOverlap) {
+                matchedItem = cand;
+              } else {
+                paper.doi = '';
+                paper.doi_issn = '';
+              }
+            } else {
+              matchedItem = cand;
+            }
           }
         }
       } catch {}
@@ -205,10 +234,21 @@ export async function enrichPaperWithCrossRef(paper) {
           .filter(Boolean);
 
         if (fullAuthors.length > 0) {
-          if (Array.isArray(paper.authors)) {
-            paper.authors = fullAuthors;
-          } else {
-            paper.authors = fullAuthors.join(', ');
+          // Never overwrite real existing authors with an external list that drops all existing authors!
+          const candSurnames = fullAuthors.map((a) => {
+            const words = a.toLowerCase().replace(/[^a-z\s]/g, '').trim().split(/\s+/).filter((w) => w.length > 2);
+            return words[words.length - 1] || '';
+          }).filter(Boolean);
+          const hasAuthorOverlap = !hasRealExistingAuthors || existingSurnames.some((es) =>
+            candSurnames.some((cs) => cs === es || cs.includes(es) || es.includes(cs))
+          );
+
+          if (hasAuthorOverlap) {
+            if (Array.isArray(paper.authors)) {
+              paper.authors = fullAuthors;
+            } else {
+              paper.authors = fullAuthors.join(', ');
+            }
           }
         }
       }
@@ -315,12 +355,25 @@ export async function enrichPaperWithCrossRef(paper) {
             for (const r of results) {
               const rTitle = normalizeForMatch(r.title || '');
               if (rTitle === normTarget || rTitle.includes(normTarget) || normTarget.includes(rTitle)) {
-                best = r;
-                break;
+                // If paper already has ground-truth authors, verify author overlap before accepting OpenAlex match
+                if (hasRealExistingAuthors && Array.isArray(r.authorships) && r.authorships.length > 0) {
+                  const oaSurnames = r.authorships.map((a) => {
+                    const raw = a?.author?.display_name || '';
+                    const words = raw.toLowerCase().replace(/[^a-z\s]/g, '').trim().split(/\s+/).filter((w) => w.length > 2);
+                    return words[words.length - 1] || '';
+                  }).filter(Boolean);
+                  const hasAuthorOverlap = existingSurnames.some((es) =>
+                    oaSurnames.some((cs) => cs === es || cs.includes(es) || es.includes(cs))
+                  );
+                  if (hasAuthorOverlap) {
+                    best = r;
+                    break;
+                  }
+                } else {
+                  best = r;
+                  break;
+                }
               }
-            }
-            if (!best && results.length > 0) {
-              best = results[0];
             }
           }
         }

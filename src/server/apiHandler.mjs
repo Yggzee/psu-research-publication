@@ -3498,8 +3498,6 @@ export async function handleApiRequest(req, res) {
       let importedCount = 0;
       let updatedCount = 0;
 
-      await enrichBatchWithCrossRef(publications, 5);
-
       const allExistingPubs = db.prepare('SELECT id, title, citations, url, cited_by_link FROM publications').all();
 
       const insertPub = db.prepare(`

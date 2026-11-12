@@ -44,6 +44,16 @@ export function matchesResearcher(p, r) {
         return true;
       }
 
+      // Check 2-letter first+last initials or initials with degree (e.g. "RG MAM" for Rodelio Garin, Master of Arts in Math)
+      if (rFirst && rLast) {
+        const flInit = `${rFirst[0]}${rLast[0]}`;
+        const cleanNoPunct = clean.replace(/[^a-z0-9\s]/g, ' ');
+        const cTokens = cleanNoPunct.split(/\s+/).filter(Boolean);
+        if (cTokens.includes(flInit) || cTokens.some((t) => t.startsWith(flInit))) {
+          return true;
+        }
+      }
+
       const tokens = clean.split(' ').filter(Boolean);
       // Must contain the exact last name token as a distinct word boundary
       if (!tokens.includes(rLast)) continue;
@@ -81,11 +91,23 @@ export function matchesResearcher(p, r) {
       }
     }
 
-    // Paper has verified authors, but this researcher is NOT one of them
+    // 2. Explicit Researcher Ownership Check:
+    // If the publication is explicitly assigned/imported to this researcher's instructor ID:
+    const pOwnerId = (p.owner_id || p.ownerId || '').trim().toLowerCase();
+    if (pOwnerId && pOwnerId !== 'admin' && pOwnerId !== 'instructor') {
+      if (
+        pOwnerId === rInstId ||
+        pOwnerId === rId ||
+        (Boolean(rUserId) && pOwnerId === rUserId)
+      ) {
+        return true;
+      }
+    }
+
     return false;
   }
 
-  // 2. Fallback ONLY when authors array is completely empty or unavailable:
+  // 3. Fallback when authors array is completely empty or unavailable:
   const pOwnerId = (p.owner_id || p.ownerId || '').trim().toLowerCase();
   if (pOwnerId && pOwnerId !== 'admin' && pOwnerId !== 'instructor') {
     return (

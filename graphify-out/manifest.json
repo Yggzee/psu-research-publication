@@ -618,15 +618,15 @@
     "semantic_hash": ""
   },
   "src/server/apiHandler.mjs": {
-    "mtime": 1794441118.931275,
-    "seen": 1794441321.848046,
-    "ast_hash": "071ff8ae559047003e5d0701d8dafbc9",
+    "mtime": 1794448236.6005523,
+    "seen": 1794448397.521978,
+    "ast_hash": "fe45e44f9f60469c82f449b46ae52a70",
     "semantic_hash": ""
   },
   "src/server/authHelper.mjs": {
-    "mtime": 1794440263.8215027,
-    "seen": 1794441321.8480477,
-    "ast_hash": "0cb8185c73f81cdfa78e9329599dfa85",
+    "mtime": 1794448198.7803307,
+    "seen": 1794448397.5219834,
+    "ast_hash": "6a97a5c9664c5c10e0bdc9fddd9b35cd",
     "semantic_hash": ""
   },
   "src/server/batchTagDatabase.mjs": {
@@ -642,9 +642,9 @@
     "semantic_hash": "cdcf848a39b2b7132bc12bb807815363"
   },
   "src/server/db.mjs": {
-    "mtime": 1794441136.118137,
-    "seen": 1794441321.848053,
-    "ast_hash": "0dea8461f52dbb13116ab5f0bb8ef09d",
+    "mtime": 1794448222.4764621,
+    "seen": 1794448397.5219932,
+    "ast_hash": "3ad9216c682622842239ea46859c692e",
     "semantic_hash": ""
   },
   "src/server/emailService.mjs": {
@@ -666,9 +666,9 @@
     "semantic_hash": "3d07f5218bb4aa03a278b47b4a08c1af"
   },
   "src/server/scholarScraper.mjs": {
-    "mtime": 1794441076.0127795,
-    "seen": 1794441321.8480608,
-    "ast_hash": "519e2c6365627832276c08452de93c2f",
+    "mtime": 1794448129.273587,
+    "seen": 1794448397.5220077,
+    "ast_hash": "a1fb9a8153eabcc2d1aa217ce9bc52a0",
     "semantic_hash": ""
   },
   "src/server/securityHeaders.mjs": {

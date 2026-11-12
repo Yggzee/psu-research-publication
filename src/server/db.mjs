@@ -609,11 +609,9 @@ export function reattributePublicationsByAuthorName() {
           );
           reattributedCount++;
         }
-      } else {
-        if (pub.owner_id !== null || pub.owner_name !== null) {
-          db.prepare("UPDATE publications SET owner_id = NULL, owner_name = NULL WHERE id = ?").run(pub.id);
-          reattributedCount++;
-        }
+      } else if (pub.owner_id === 'admin' || pub.owner_id === 'instructor') {
+        db.prepare("UPDATE publications SET owner_id = NULL, owner_name = NULL WHERE id = ?").run(pub.id);
+        reattributedCount++;
       }
     }
     if (reattributedCount > 0) {
