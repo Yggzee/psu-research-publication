@@ -1,15 +1,17 @@
 {
   "0": "Button",
-  "1": "DashboardLayout.tsx",
+  "1": "AdminPage.tsx",
   "2": "chart.tsx",
   "5": "cn",
-  "9": "ref_react",
-  "10": "api.service.ts",
-  "16": "SearchEngine.tsx",
+  "9": "toggle-group.tsx",
+  "10": "chartUtils.ts",
+  "13": "dropdown-menu.tsx",
+  "16": "adminSearchStore.ts",
   "20": "sheet.tsx",
-  "21": "accordion.tsx",
-  "24": "popover.tsx",
+  "21": "PublicationInspectorDrawer.tsx",
+  "24": "App.tsx",
   "27": "CampusAIChatHistory.tsx",
   "28": "utils.ts",
-  "30": "resizable.tsx"
+  "30": "Notice.tsx",
+  "31": "sonner.tsx"
 }

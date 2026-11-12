@@ -618,15 +618,15 @@
     "semantic_hash": ""
   },
   "src/server/apiHandler.mjs": {
-    "mtime": 1794448236.6005523,
-    "seen": 1794448397.521978,
-    "ast_hash": "fe45e44f9f60469c82f449b46ae52a70",
+    "mtime": 1794473936.4154687,
+    "seen": 1794474230.8181098,
+    "ast_hash": "5e54c0124ad313a4ec9b5af41143e0cb",
     "semantic_hash": ""
   },
   "src/server/authHelper.mjs": {
-    "mtime": 1794448198.7803307,
-    "seen": 1794448397.5219834,
-    "ast_hash": "6a97a5c9664c5c10e0bdc9fddd9b35cd",
+    "mtime": 1794473956.4406722,
+    "seen": 1794474230.8181138,
+    "ast_hash": "b012d9d15faf9e4ca10fc6f3322f5192",
     "semantic_hash": ""
   },
   "src/server/batchTagDatabase.mjs": {
@@ -642,8 +642,8 @@
     "semantic_hash": "cdcf848a39b2b7132bc12bb807815363"
   },
   "src/server/db.mjs": {
-    "mtime": 1794448222.4764621,
-    "seen": 1794448397.5219932,
+    "mtime": 1794468481.115996,
+    "seen": 1794474230.818122,
     "ast_hash": "3ad9216c682622842239ea46859c692e",
     "semantic_hash": ""
   },
@@ -666,9 +666,9 @@
     "semantic_hash": "3d07f5218bb4aa03a278b47b4a08c1af"
   },
   "src/server/scholarScraper.mjs": {
-    "mtime": 1794448129.273587,
-    "seen": 1794448397.5220077,
-    "ast_hash": "a1fb9a8153eabcc2d1aa217ce9bc52a0",
+    "mtime": 1794474109.956574,
+    "seen": 1794474230.8181322,
+    "ast_hash": "56e8c36816fee51f1ea15f079b551bd2",
     "semantic_hash": ""
   },
   "src/server/securityHeaders.mjs": {

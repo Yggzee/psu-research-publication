@@ -15,7 +15,9 @@ export function matchesResearcher(p, r) {
 
   // Normalize researcher names for token-level matching
   const rName = (r.name || '').trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
-  const rFirst = (r.first_name || r.firstName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rFirst = (r.first_name || r.firstName || '').trim().toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  const rFirstTokens = rFirst.split(/\s+/).filter((w) => w.length >= 2);
+  const rPrimaryFirst = rFirstTokens[0] || '';
   const rLast = (r.last_name || r.lastName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
   const rMiddle = (r.middle_initial || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -39,14 +41,14 @@ export function matchesResearcher(p, r) {
       const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
       if (!clean) continue;
 
-      // Exact full-name match (e.g. "rodelio m garin", "rodelio garin")
-      if (clean === rName || (rFirst && rLast && clean.includes(rFirst) && clean.includes(rLast))) {
+      // Exact full-name match (e.g. "rodelio m garin", "rodelio garin", "wilmar jennie v motea")
+      if (clean === rName || (rLast && clean.includes(rLast) && rFirstTokens.some((ft) => clean.includes(ft)))) {
         return true;
       }
 
-      // Check 2-letter first+last initials or initials with degree (e.g. "RG MAM" for Rodelio Garin, Master of Arts in Math)
-      if (rFirst && rLast) {
-        const flInit = `${rFirst[0]}${rLast[0]}`;
+      // Check 2-letter first+last initials or initials with degree (e.g. "RG MAM" for Rodelio Garin, "WM" for Wilmar Motea)
+      if (rPrimaryFirst && rLast) {
+        const flInit = `${rPrimaryFirst[0]}${rLast[0]}`;
         const cleanNoPunct = clean.replace(/[^a-z0-9\s]/g, ' ');
         const cTokens = cleanNoPunct.split(/\s+/).filter(Boolean);
         if (cTokens.includes(flInit) || cTokens.some((t) => t.startsWith(flInit))) {
@@ -58,18 +60,18 @@ export function matchesResearcher(p, r) {
       // Must contain the exact last name token as a distinct word boundary
       if (!tokens.includes(rLast)) continue;
 
-      // Check if full first name matches as a token (e.g. "Rodelio" in "Rodelio Garin" or "Garin, Rodelio")
-      if (rFirst && tokens.includes(rFirst)) {
+      // Check if any full first name matches as a token (e.g. "Wilmar" or "Jennie" in "Motea, Wilmar")
+      if (rFirstTokens.some((ft) => tokens.includes(ft))) {
         return true;
       }
 
-      // Check academic initials (e.g. "RM Garin", "R. M. Garin", "R. Garin", "Garin, R. M.")
-      if (rFirst) {
-        const fInit = rFirst[0];
+      // Check academic initials (e.g. "RM Garin", "R. M. Garin", "R. Garin", "W. J. Motea")
+      if (rPrimaryFirst) {
+        const fInit = rPrimaryFirst[0];
         const otherTokens = tokens.filter((t) => t !== rLast);
 
         // Reject conflicting full first names (e.g. "Maria Garin" or "Carlo Pagano" must NEVER match "Rodelio Garin")
-        const hasConflictingFirstName = otherTokens.some((t) => t.length > 2 && t !== rFirst && !rName.includes(t));
+        const hasConflictingFirstName = otherTokens.some((t) => t.length > 2 && !rFirstTokens.includes(t) && !rName.includes(t));
         if (hasConflictingFirstName) {
           continue;
         }

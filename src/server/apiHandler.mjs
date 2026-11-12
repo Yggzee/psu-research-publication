@@ -12,6 +12,7 @@ import {
   levenshteinDistance,
   isInitialsToken,
   matchAuthorName,
+  searchPhilippineJournals,
 } from './scholarScraper.mjs';
 import {
   classifyPublicationSDG,
@@ -3722,7 +3723,7 @@ export async function handleApiRequest(req, res) {
       const isPersonNameQuery =
         isExplicitAuthorQuery ||
         (queryWords.length >= 2 &&
-          queryWords.length <= 3 &&
+          queryWords.length <= 4 &&
           !/university|college|school|campus|department|journal|republic|philippines|state|system|analysis|development|assessment|evaluation|education|technology|learning|management|farming|agriculture|arduino|iot|model|framework|study|impact|effect|design|implementation/i.test(bareQuery));
 
       const topicVariants = extractTopicVariants(bareQuery);
@@ -3730,7 +3731,9 @@ export async function handleApiRequest(req, res) {
       const targetLast = queryWords.length > 0 ? queryWords[queryWords.length - 1] : '';
       const targetFirstWords = queryWords.length > 1 ? queryWords.slice(0, queryWords.length - 1) : [];
       const targetFirst = targetFirstWords[0] || '';
-      const targetInitials = targetFirstWords.map((w) => w[0]).join('');
+      const rawTokens = bareLower.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+      const rawInitialsTokens = rawTokens.filter((t) => t.length === 1 && !['a', 'i'].includes(t));
+      const targetInitials = `${targetFirstWords.map((w) => w[0]).join('')}${rawInitialsTokens.join('')}`;
 
       const allResearchers = db.prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'").all();
       const allFacultyRows = allResearchers;
@@ -3817,7 +3820,7 @@ export async function handleApiRequest(req, res) {
 
         if (authorsArr.length > 0) {
           for (const a of authorsArr) {
-            const matchResult = matchAuthorName(a, queryWords, targetLast, targetFirst, targetInitials, isPsu);
+            const matchResult = matchAuthorName(a, queryWords, targetLast, targetFirstWords, targetInitials, isPsu);
             if (matchResult === 'strong') return 'strong';
             if (matchResult === 'weak') return 'weak';
           }
@@ -3828,7 +3831,7 @@ export async function handleApiRequest(req, res) {
 
         // 2. Fallback only if authors array is completely empty
         if (item.owner_name) {
-          const res = matchAuthorName(item.owner_name, queryWords, targetLast, targetFirst, targetInitials, isPsu);
+          const res = matchAuthorName(item.owner_name, queryWords, targetLast, targetFirstWords, targetInitials, isPsu);
           if (res) return res;
         }
 
@@ -4045,16 +4048,20 @@ export async function handleApiRequest(req, res) {
         if (page === 0 && !isPersonNameQuery) {
           queryPromises.push(
             scrapeGoogleScholarDirect(`${cleanQuery} "Pangasinan State University"`, 0, 5).catch(() => []),
-            scrapeGoogleScholarDirect(`${cleanQuery} Philippines`, 0, 8).catch(() => [])
+            scrapeGoogleScholarDirect(`${cleanQuery} Philippines`, 0, 8).catch(() => []),
+            searchPhilippineJournals(cleanQuery, queryWords, targetLast, targetFirstWords).catch(() => [])
           );
         } else if (page === 0 && (isPersonNameQuery || isExplicitAuthorQuery) && targetLast) {
+          const cleanAuthorName = `${targetFirstWords.join(' ')} ${targetLast}`.trim();
           queryPromises.push(
+            scrapeGoogleScholarDirect(`"${cleanAuthorName}"`, 0, 8).catch(() => []),
+            scrapeGoogleScholarDirect(`"${cleanAuthorName}" "Pangasinan State University"`, 0, 8)
+              .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
+              .catch(() => []),
             scrapeGoogleScholarDirect(`${targetLast} "Pangasinan State University"`, 0, 8)
               .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
               .catch(() => []),
-            scrapeGoogleScholarDirect(`${targetLast} Pangasinan`, 0, 5)
-              .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
-              .catch(() => [])
+            searchPhilippineJournals(cleanQuery, queryWords, targetLast, targetFirstWords).catch(() => [])
           );
         }
         const liveArrays = await Promise.all(queryPromises);
@@ -4332,13 +4339,12 @@ export async function handleApiRequest(req, res) {
             searchOpenAlexAndCrossRef(`${cleanQuery} Philippines`, 0, 15).catch(() => [])
           );
         } else if (page === 0 && (isPersonNameQuery || isExplicitAuthorQuery) && targetLast) {
+          const cleanAuthorName = `${targetFirstWords.join(' ')} ${targetLast}`.trim();
           hybridQueries.push(
-            searchOpenAlexAndCrossRef(`${targetLast} Pangasinan State University`, 0, 8)
+            searchOpenAlexAndCrossRef(`${cleanAuthorName} Pangasinan State University`, 0, 8)
               .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
               .catch(() => []),
-            searchOpenAlexAndCrossRef(`${targetLast} Pangasinan`, 0, 5)
-              .then((items) => items.map((it) => ({ ...it, isPsu: true, geo_tier: 'psu' })))
-              .catch(() => [])
+            searchOpenAlexAndCrossRef(cleanAuthorName, 0, 8).catch(() => [])
           );
         }
         const hybridArrays = await Promise.all(hybridQueries);
@@ -4406,11 +4412,8 @@ export async function handleApiRequest(req, res) {
 
         // When searching by researcher name or explicit author:
         if (isPersonNameQuery || isExplicitAuthorQuery) {
-          // Retain PSU campus research as secondary/related papers below the author's primary works
-          if (isPsuItem(item)) {
-            return true;
-          }
-          // If the paper is outside PSU and does NOT have the author, exclude it completely
+          // Strictly Author-Exclusive Search: Only return publications where the searched author is physically verified!
+          // Never inject arbitrary/unrelated campus papers.
           return false;
         }
 

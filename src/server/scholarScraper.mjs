@@ -477,7 +477,13 @@ export async function scrapeGoogleScholarDirect(query, pageOrOptions = 0, limit 
       captchaBlocked = true;
     } else if (res.ok) {
       const html = await res.text();
-      if (html.includes('detected unusual traffic') || html.includes('recaptcha') || html.includes('captcha')) {
+      if (
+        html.includes('detected unusual traffic') ||
+        html.includes('recaptcha') ||
+        html.includes('captcha') ||
+        html.includes('sgsync-verification') ||
+        /<title>\s*(Verifying|Sorry)\b/i.test(html)
+      ) {
         captchaBlocked = true;
       } else {
         // Robust pattern matching individual Google Scholar result blocks
@@ -1242,9 +1248,10 @@ export function isInitialsToken(token) {
 }
 
 /**
- * Advanced author matching: supports full names, initials (e.g. MJU, MJ, L),
- * typo-tolerance (Levenshtein distance <= 1 for first names), and institutional affiliation affinity.
- * Returns: 'strong' (exact name / multi-initial / PSU affiliation), 'weak' (single initial for multi-word query), or false.
+ * Advanced author matching: supports compound given names (e.g. "Wilmar Jennie"), full initials
+ * (e.g. "WJV", "W. J.", "MJU"), inverted formats ("Motea, Wilmar Jennie V."), typo-tolerance,
+ * and institutional affiliation affinity.
+ * Returns: 'strong' (exact name / compound match / multi-initial / PSU affiliation), 'weak', or false.
  */
 export function matchAuthorName(authorStr, queryWords, targetLast, targetFirst, targetInitials, isPsu = false) {
   const clean = String(authorStr || '')
@@ -1258,59 +1265,201 @@ export function matchAuthorName(authorStr, queryWords, targetLast, targetFirst, 
   const tokens = clean.split(' ').filter(Boolean);
   if (tokens.length === 0 || !targetLast) return false;
 
-  if (!tokens.includes(targetLast)) return false;
+  const tLastLower = String(targetLast).toLowerCase().trim();
+  if (!tokens.includes(tLastLower)) return false;
 
-  if (queryWords.length === 1 || !targetFirst) return 'strong';
+  // Extract all given name tokens (either from targetFirst array/string or non-last queryWords)
+  let givenNames = [];
+  if (Array.isArray(targetFirst)) {
+    givenNames = targetFirst.map((w) => String(w).toLowerCase().trim()).filter((w) => w.length >= 2);
+  } else if (typeof targetFirst === 'string' && targetFirst.trim()) {
+    givenNames = targetFirst.toLowerCase().trim().split(/\s+/).filter((w) => w.length >= 2);
+  } else if (Array.isArray(queryWords)) {
+    givenNames = queryWords
+      .map((w) => String(w).toLowerCase().trim())
+      .filter((w) => w !== tLastLower && w.length >= 2 && !['sir', 'maam', 'dr', 'prof', 'mr', 'ms', 'mrs', 'engr', 'atty'].includes(w));
+  }
 
-  const nonLast = tokens.filter((t) => t !== targetLast);
+  if (givenNames.length === 0) return 'strong';
+
+  const nonLast = tokens.filter((t) => t !== tLastLower);
   if (nonLast.length === 0) return isPsu ? 'strong' : 'weak';
 
-  // 1. Exact first name match (e.g. "mary" in "mary jane quibilan")
-  if (nonLast.includes(targetFirst)) return 'strong';
-
-  // 2. Typo tolerance on first name (Levenshtein distance <= 1, e.g. "lengrace" vs "lenigrace")
-  if (targetFirst.length >= 4 && nonLast.some((t) => t.length >= 4 && levenshteinDistance(t, targetFirst) <= 1)) {
+  // 1. Exact match on any given name token (e.g. "wilmar" or "jennie" in "wilmar jennie motea")
+  const matchedGivenTokens = givenNames.filter((gw) => nonLast.includes(gw));
+  if (matchedGivenTokens.length > 0) {
     return 'strong';
   }
 
-  // 3. Multi-letter initials matching (abbreviations like "mju" or "mj")
+  // 2. Typo tolerance on any given name (Levenshtein distance <= 1 for length >= 4)
+  const typoMatch = givenNames.some((gw) =>
+    gw.length >= 4 && nonLast.some((t) => t.length >= 4 && levenshteinDistance(t, gw) <= 1)
+  );
+  if (typoMatch) return 'strong';
+
+  // 3. Explicit conflict check: if NONE of the given names matched, and candidate has a full word (>2 chars)
+  // that does not match ANY of the given names -> conflicting individual (e.g. "edward motea" vs "wilmar motea")!
+  const hasConflictingFullName = nonLast.some((t) => {
+    if (t.length <= 2 || isInitialsToken(t)) return false;
+    const matchesAnyGiven = givenNames.some((gw) => gw === t || (t.length >= 4 && gw.length >= 4 && levenshteinDistance(t, gw) <= 1));
+    return !matchesAnyGiven;
+  });
+
+  if (hasConflictingFullName) {
+    return false;
+  }
+
+  // Compute initials sequences
+  const queryInitials = targetInitials
+    ? String(targetInitials).toLowerCase().trim()
+    : givenNames.map((w) => w[0]).join('');
+
+  // 4. Multi-letter initials abbreviations (e.g. "wjv", "wj", "wm", "mju")
   for (const t of nonLast) {
-    if (isInitialsToken(t)) {
-      if (targetInitials && targetInitials.length >= 2 && (t === targetInitials || t.startsWith(targetInitials))) {
+    if (isInitialsToken(t) && t.length >= 2) {
+      if (queryInitials && queryInitials.length >= 2 && (t === queryInitials || t.startsWith(queryInitials) || queryInitials.startsWith(t))) {
         return 'strong';
       }
     }
   }
 
-  // 4. Consecutive single-letter initials (e.g. "m" and "j" in "m. j. quibilan")
-  const initialsSequence = nonLast.filter((t) => isInitialsToken(t)).map((t) => t[0]).join('');
-  if (targetInitials && targetInitials.length >= 2 && initialsSequence.startsWith(targetInitials)) {
+  // 5. Consecutive single-letter initials (e.g. ['w', 'j', 'v'] -> "wjv")
+  const singleInitials = nonLast.filter((t) => isInitialsToken(t));
+  const initialsSequence = singleInitials.map((t) => t[0]).join('');
+  if (initialsSequence.length >= 2 && queryInitials.length >= 2) {
+    if (initialsSequence === queryInitials || initialsSequence.startsWith(queryInitials) || queryInitials.startsWith(initialsSequence)) {
+      return 'strong';
+    }
+  }
+
+  // 6. Confirmed PSU / Pangasinan affiliation affinity with initials
+  if (isPsu && singleInitials.length > 0 && givenNames.some((gw) => singleInitials.some((t) => t === gw[0]))) {
     return 'strong';
   }
 
-  // 5. If confirmed PSU / Pangasinan affiliation, match surname if no conflicting full first name
-  if (isPsu && targetFirst) {
-    const hasConflictingFullName = nonLast.some(
-      (t) => t.length > 2 && !isInitialsToken(t) && levenshteinDistance(t, targetFirst) > 1 && !targetFirst.includes(t)
-    );
-    if (!hasConflictingFullName) return 'strong';
-  }
-
-  // 6. Single initial match (e.g. "l" for "lengrace", or "m" for "mary jane")
-  for (const t of nonLast) {
-    if (isInitialsToken(t) && t === targetFirst[0]) {
-      // If query only had 1 first name (e.g. "Lengrace Mecias"), a single initial like "L." is a strong match
-      if (queryWords.length <= 2) return 'strong';
-      // If query had multiple first names (e.g. "Mary Jane"), a single initial without "J" is a weak/ambiguous match
-      return 'weak';
-    }
+  // 7. Single initial match (e.g. "w" in "w. motea")
+  const firstInitial = givenNames[0]?.[0] || '';
+  if (firstInitial && nonLast.some((t) => isInitialsToken(t) && t === firstInitial)) {
+    if (givenNames.length === 1) return 'strong';
+    return isPsu ? 'strong' : 'weak';
   }
 
   return false;
 }
 
 /**
- * Multi-source academic search fallback & supplement (CrossRef API + OpenAlex API)
+ * Direct search across regional Philippine Open Access & university journals (OJS)
+ * (e.g. Southeast Asian Journal of Science and Technology / SAJST, PhilTech, PSU Open Access)
+ */
+export async function searchPhilippineJournals(rawQuery, nameTokens = [], targetLast = '', targetFirstWords = []) {
+  const queryStr = String(rawQuery || '').replace(/^author:\s*"?/i, '').replace(/"$/g, '').trim();
+  if (!queryStr) return [];
+
+  const results = [];
+  const seenIds = new Set();
+
+  const ojsSearchEndpoints = [
+    'https://sajst.pti.edu.ph/online/index.php/sajst/search/search',
+  ];
+
+  const queriesToRun = [];
+  if (targetLast) {
+    if (Array.isArray(targetFirstWords) && targetFirstWords.length > 0) {
+      queriesToRun.push(`${targetFirstWords.join(' ')} ${targetLast}`);
+    }
+    queriesToRun.push(targetLast);
+  } else {
+    queriesToRun.push(queryStr);
+  }
+
+  for (const endpoint of ojsSearchEndpoints) {
+    for (const q of [...new Set(queriesToRun)].slice(0, 2)) {
+      try {
+        const u = `${endpoint}?query=${encodeURIComponent(q)}`;
+        const res = await fetch(u, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+          signal: AbortSignal.timeout(6000),
+        });
+        if (!res.ok) continue;
+        const html = await res.text();
+        const articleMatches = [...html.matchAll(/href="([^"]*\/article\/view\/(\d+))"/gi)];
+        const articleUrls = [...new Set(articleMatches.map((m) => m[1]))].slice(0, 5);
+
+        for (const artUrl of articleUrls) {
+          const artIdMatch = artUrl.match(/\/article\/view\/(\d+)/);
+          const artId = artIdMatch ? artIdMatch[1] : '';
+          const globalId = `sajst-${artId || hashString(artUrl)}`;
+          if (seenIds.has(globalId)) continue;
+          seenIds.add(globalId);
+
+          try {
+            const artRes = await fetch(artUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              },
+              signal: AbortSignal.timeout(6000),
+            });
+            if (!artRes.ok) continue;
+            const artHtml = await artRes.text();
+
+            const metas = [...artHtml.matchAll(/<meta\s+name="([^"]+)"\s+content="([^"]*)"/gi)];
+            const metaMap = {};
+            const authorsList = [];
+            for (const m of metas) {
+              const k = m[1].toLowerCase();
+              const v = cleanText(m[2]);
+              if (k === 'citation_author') {
+                if (v && !authorsList.includes(v)) authorsList.push(v);
+              } else {
+                metaMap[k] = v;
+              }
+            }
+
+            const title = metaMap['citation_title'] || '';
+            if (!title) continue;
+
+            const journal = metaMap['citation_journal_title'] || 'Southeast Asian Journal of Science and Technology';
+            const year = parseInt(metaMap['citation_date'], 10) || new Date().getFullYear();
+            const pdfUrl = metaMap['citation_pdf_url'] || null;
+
+            let abstract = metaMap['citation_abstract'] || '';
+            if (!abstract) {
+              const absMatch = artHtml.match(/class="[^"]*abstract[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+              if (absMatch) {
+                abstract = cleanText(absMatch[1].replace(/<[^>]+>/g, ' '));
+              }
+            }
+
+            results.push({
+              id: globalId,
+              title,
+              authors: authorsList.length > 0 ? authorsList : ['Author'],
+              journal,
+              year,
+              citations: 0,
+              abstract,
+              url: metaMap['citation_abstract_html_url'] || artUrl,
+              pdfUrl,
+              citedByLink: '',
+              fromCache: false,
+              isPsu: true,
+              geo_tier: 'psu',
+              source: 'philippine_journal',
+            });
+          } catch {}
+        }
+      } catch {}
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Multi-source academic search fallback & supplement (CrossRef API + OpenAlex API + Philippine Journals)
  * Universal academic search across titles, author names, institutions (e.g. Pangasinan State University), and topics.
  */
 export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) {
@@ -1344,7 +1493,7 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     const targetFirst = targetFirstWords[0] || '';
     const targetInitials = targetFirstWords.map((w) => w[0]).join('');
 
-    return authorsArr.some((a) => matchAuthorName(a, nameTokens, targetLast, targetFirst, targetInitials, false));
+    return authorsArr.some((a) => matchAuthorName(a, nameTokens, targetLast, targetFirstWords, targetInitials, false));
   };
 
   const results = [];
@@ -1366,71 +1515,90 @@ export async function searchOpenAlexAndCrossRef(rawQuery, page = 0, limit = 10) 
     'standard',
   ]);
 
+  // 0. Concurrently query regional Philippine journals for author/topic
+  try {
+    const targetLastToken = nameTokens.length > 0 ? nameTokens[nameTokens.length - 1] : '';
+    const targetFirstTokens = nameTokens.length > 1 ? nameTokens.slice(0, nameTokens.length - 1) : [];
+    const phPubs = await searchPhilippineJournals(cleanQ, nameTokens, targetLastToken, targetFirstTokens);
+    for (const item of phPubs) {
+      if (isPersonNameQuery && !matchesPersonAuthorList(item.authors)) continue;
+      addResult(item);
+    }
+  } catch (phErr) {
+    console.warn('[HybridSearch] Philippine journal search warning:', phErr.message);
+  }
+
   // 1. CrossRef Search: Comprehensive, un-rate-limited global academic index
   try {
-    const crQueryParam = isPersonNameQuery
-      ? `query.author=${encodeURIComponent(nameTokens.join(' '))}`
-      : `query=${encodeURIComponent(cleanQ)}`;
-    const crUrl = `https://api.crossref.org/works?${crQueryParam}&rows=25&offset=${page * 15}`;
-    const crRes = await fetch(crUrl, {
-      headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
-    });
-    if (crRes.ok) {
-      const crData = await crRes.json();
-      for (const item of crData?.message?.items || []) {
-        // Strictly exclude component/reference/dictionary items and supplementary files (.s001, etc.)
-        if (EXCLUDED_CROSSREF_TYPES.has(item.type) || (item.DOI && /(\.s\d+|\/benz\/)/i.test(item.DOI))) continue;
-        const cTitle = Array.isArray(item.title) ? cleanText(item.title[0]) : '';
-        if (!cTitle) continue;
-        const cAuthors = Array.isArray(item.author)
-          ? item.author
-              .map((a) => [a.given, a.family].filter(Boolean).join(' ') || a.name || '')
-              .filter(Boolean)
-          : [];
+    const crQueries = [];
+    if (isPersonNameQuery) {
+      crQueries.push(`query.author=${encodeURIComponent(nameTokens.join(' '))}`);
+      crQueries.push(`query.bibliographic=${encodeURIComponent(`${nameTokens.join(' ')} Pangasinan State University`)}`);
+    } else {
+      crQueries.push(`query=${encodeURIComponent(cleanQ)}`);
+    }
 
-        // Never fabricate authors on anonymous/dictionary entries
-        if (cAuthors.length === 0) continue;
-        if (isPersonNameQuery && !matchesPersonAuthorList(cAuthors)) continue;
+    for (const qParam of crQueries) {
+      const crUrl = `https://api.crossref.org/works?${qParam}&rows=20&offset=${page * 15}`;
+      const crRes = await fetch(crUrl, {
+        headers: { 'User-Agent': 'PSUResearchPortal/1.0 (mailto:research@psu.edu.ph)' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (crRes.ok) {
+        const crData = await crRes.json();
+        for (const item of crData?.message?.items || []) {
+          if (EXCLUDED_CROSSREF_TYPES.has(item.type) || (item.DOI && /(\.s\d+|\/benz\/)/i.test(item.DOI))) continue;
+          const cTitle = Array.isArray(item.title) ? cleanText(item.title[0]) : '';
+          if (!cTitle) continue;
+          const cAuthors = Array.isArray(item.author)
+            ? item.author
+                .map((a) => [a.given, a.family].filter(Boolean).join(' ') || a.name || '')
+                .filter(Boolean)
+            : [];
 
-        const cJournal =
-          (Array.isArray(item['container-title']) && item['container-title'][0]) ||
-          item.publisher ||
-          'Academic Publication';
-        if (/\b(benezit dictionary|oxford art online|who's who)\b/i.test(cJournal)) continue;
+          if (cAuthors.length === 0) continue;
+          if (isPersonNameQuery && !matchesPersonAuthorList(cAuthors)) continue;
 
-        const crAffiliations = [];
-        if (Array.isArray(item.author)) {
-          for (const a of item.author) {
-            if (Array.isArray(a.affiliation)) {
-              for (const aff of a.affiliation) {
-                if (aff?.name) crAffiliations.push(aff.name);
+          const cJournal =
+            (Array.isArray(item['container-title']) && item['container-title'][0]) ||
+            item.publisher ||
+            'Academic Publication';
+          if (/\b(benezit dictionary|oxford art online|who's who)\b/i.test(cJournal)) continue;
+
+          const crAffiliations = [];
+          if (Array.isArray(item.author)) {
+            for (const a of item.author) {
+              if (Array.isArray(a.affiliation)) {
+                for (const aff of a.affiliation) {
+                  if (aff?.name) crAffiliations.push(aff.name);
+                }
               }
             }
           }
+          const cAffiliation = [...new Set(crAffiliations)].join('; ');
+
+          const dateParts =
+            item.published?.['date-parts']?.[0] ||
+            item['published-print']?.['date-parts']?.[0] ||
+            item['published-online']?.['date-parts']?.[0] ||
+            [];
+          const cYear = dateParts[0] || new Date().getFullYear();
+
+          addResult({
+            id: `cr-${hashString(item.DOI || cTitle)}`,
+            title: cTitle,
+            authors: cAuthors,
+            journal: cleanText(cJournal),
+            affiliation: cAffiliation,
+            year: Number(cYear),
+            citations: Number(item['is-referenced-by-count']) || 0,
+            abstract: item.abstract ? cleanText(item.abstract) : '',
+            url: item.DOI ? `https://doi.org/${item.DOI}` : item.URL || '',
+            pdfUrl: Array.isArray(item.link) ? item.link.find((l) => l['content-type']?.includes('pdf'))?.URL || null : null,
+            citedByLink: '',
+            fromCache: false,
+          });
         }
-        const cAffiliation = [...new Set(crAffiliations)].join('; ');
-
-        const dateParts =
-          item.published?.['date-parts']?.[0] ||
-          item['published-print']?.['date-parts']?.[0] ||
-          item['published-online']?.['date-parts']?.[0] ||
-          [];
-        const cYear = dateParts[0] || new Date().getFullYear();
-
-        addResult({
-          id: `cr-${hashString(item.DOI || cTitle)}`,
-          title: cTitle,
-          authors: cAuthors,
-          journal: cleanText(cJournal),
-          affiliation: cAffiliation,
-          year: Number(cYear),
-          citations: Number(item['is-referenced-by-count']) || 0,
-          abstract: item.abstract ? cleanText(item.abstract) : '',
-          url: item.DOI ? `https://doi.org/${item.DOI}` : item.URL || '',
-          pdfUrl: Array.isArray(item.link) ? item.link.find((l) => l['content-type']?.includes('pdf'))?.URL || null : null,
-          citedByLink: '',
-          fromCache: false,
-        });
       }
     }
   } catch (crErr) {
