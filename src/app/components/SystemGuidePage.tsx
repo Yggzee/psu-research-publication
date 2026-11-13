@@ -47,6 +47,9 @@ import {
   BarChart3,
   AlertTriangle,
   Lock,
+  FileSpreadsheet,
+  FolderArchive,
+  Layers,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -1059,24 +1062,62 @@ const coordinatorGuideCategories: GuideCategory[] = [
   {
     id: "reports",
     number: 7,
-    title: "Reports",
-    subtitle: "Exporting official Excel spreadsheets and printable PDF reports for CHED and AACCUP accreditation",
+    title: "Reports & Export Studio",
+    subtitle: "Exporting official Excel spreadsheets, department portfolios, and printable PDF reports for CHED and AACCUP accreditation",
     icon: FileBarChart,
     narrativeParagraphs: [
-      "The 'Reports' page is organized into three streamlined tabs designed to eliminate manual spreadsheet formatting before CHED, AACCUP, or university evaluations: 'Faculty Spreadsheets', 'Accreditation & SUC Matrix', and 'Executive Summary'.",
-      "In 'Faculty Spreadsheets', you can filter researchers by academic department or publication year, select individual researchers or click 'Select All', and download their complete research and citation spreadsheets. Exporting a single researcher produces a ready-to-use Microsoft Excel workbook (.xlsx), while selecting multiple researchers automatically packages them into an organized ZIP archive. In 'Accreditation & SUC Matrix', you review verified papers categorized by Scopus/WoS and refereed indexing, with a one-click 'Print Dossier' action. In 'Executive Summary', campus leaders can review and print high-level productivity benchmarks.",
+      "The 'Reports' page houses the institutional 'Export Studio & Spreadsheets', 'Accreditation & SUC Matrix', and 'Executive Summary' tabs designed to eliminate manual spreadsheet formatting before CHED, AACCUP, or university evaluations.",
+      "The Export Studio provides three flexible modes: (1) 'By Researcher(s)', allowing you to select researchers and download either individual .xlsx workbooks, an organized ZIP archive with department subfolders ('Department/Researcher_Name/'), or a single consolidated workbook containing a Master Publication Sheet, Master Citation Sheet, and dedicated individual tabs; (2) 'By Whole Department', to export an entire academic department's portfolio (BSIT, BSBA, BSE, BTLED, BIT, BEE, or Non-Faculty) in one click; and (3) 'By Selected Publications', featuring an interactive custom paper picker where you can check any combination of publications to export an official 2-sheet dossier. Additionally, one-click Excel exports are available directly from the Publications repository floating dock, publication inspector drawer, and researcher profile headers.",
     ],
     clickableItems: [
       {
-        label: "Export Spreadsheets Button",
+        label: "Export Mode Switcher (By Researcher / Department / Papers)",
+        visualReplica: (
+          <div className="inline-flex items-center gap-1 p-1 bg-muted/60 rounded-lg border border-border/60 text-xs font-semibold">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-background text-foreground shadow-2xs">
+              <Users className="w-3.5 h-3.5 text-blue-600" />
+              <span>By Researcher</span>
+            </span>
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-muted-foreground">
+              <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>By Department</span>
+            </span>
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-muted-foreground">
+              <FileText className="w-3.5 h-3.5 text-purple-600" />
+              <span>By Selected Papers</span>
+            </span>
+          </div>
+        ),
+        explanation:
+          "Switches between exporting researchers, whole academic departments, or custom selected publications.",
+      },
+      {
+        label: "Organized ZIP Folders vs. Single Consolidated Excel",
+        visualReplica: (
+          <div className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-blue-600/40 bg-blue-50/50 dark:bg-blue-950/20 text-blue-700 dark:text-blue-300 text-xs font-semibold">
+              <FolderArchive className="w-3.5 h-3.5 text-blue-600" />
+              <span>Organized ZIP (.zip)</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-emerald-600/40 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+              <Layers className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Single Excel (.xlsx)</span>
+            </span>
+          </div>
+        ),
+        explanation:
+          "Choose between packaging multiple researcher workbooks into organized department folder ZIPs, or compiling everyone into 1 master Excel file with individual tabs.",
+      },
+      {
+        label: "Export Spreadsheets Action Button",
         visualReplica: (
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold shadow-2xs">
-            <Download className="w-3.5 h-3.5" />
-            <span>Export Researcher Spreadsheets (.zip / .xlsx)</span>
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Export Researcher Spreadsheets (.xlsx / .zip)</span>
           </span>
         ),
         explanation:
-          "Generates formatted Excel spreadsheets for all selected researchers, packaging multiple files into an organized ZIP archive.",
+          "Generates formatted Excel spreadsheets preserving the official 8-column Publication Sheet and 15-column Citation Sheet templates.",
       },
       {
         label: "Print Dossier / Summary Button",

@@ -12,9 +12,9 @@
     "semantic_hash": "09514423cc15a4f534cb5e890e03cf98"
   },
   "src/app/components/AdminPage.tsx": {
-    "mtime": 1794353800.10579,
-    "seen": 1794354205.8150103,
-    "ast_hash": "203b13af952cba6e76814d53e6486a79",
+    "mtime": 1794490706.7407167,
+    "seen": 1794498866.9999762,
+    "ast_hash": "ebd5e1ee401bba7ae7baf6815c1b55f8",
     "semantic_hash": ""
   },
   "src/app/components/ApifyTokenManager.tsx": {
@@ -114,27 +114,27 @@
     "semantic_hash": ""
   },
   "src/app/components/PublicationInspectorDrawer.tsx": {
-    "mtime": 1794362180.788189,
-    "seen": 1794363140.033838,
-    "ast_hash": "a2583ee564eaf14cc2f7091a696cbf0e",
+    "mtime": 1794498525.5061498,
+    "seen": 1794498867.0000424,
+    "ast_hash": "4368d4d759314845ec3d444182ae1c4f",
     "semantic_hash": ""
   },
   "src/app/components/PublicationsPage.tsx": {
-    "mtime": 1794249858.964517,
-    "seen": 1794322751.1462626,
-    "ast_hash": "6864a4a63236e859419c9b7772382b91",
-    "semantic_hash": "6864a4a63236e859419c9b7772382b91"
+    "mtime": 1794498487.9767573,
+    "seen": 1794498867.0000465,
+    "ast_hash": "4507d3f27e1d34c01eca8731b3a0f31d",
+    "semantic_hash": ""
   },
   "src/app/components/ReportsPage.tsx": {
-    "mtime": 1794333432.6884184,
-    "seen": 1794338216.0099823,
-    "ast_hash": "9957ad5b4093ffef5f936a9b413ca357",
+    "mtime": 1794498775.5618098,
+    "seen": 1794498867.0000505,
+    "ast_hash": "3bee4a9c71cb9f547f973258ac5d117a",
     "semantic_hash": ""
   },
   "src/app/components/ResearcherProfile.tsx": {
-    "mtime": 1794333432.9678159,
-    "seen": 1794338216.0099857,
-    "ast_hash": "73bcc9476471ecbcd1427d0f1817bafb",
+    "mtime": 1794498564.9913225,
+    "seen": 1794498867.0000546,
+    "ast_hash": "fc0585a4b491363ffd4f961ed09e9839",
     "semantic_hash": ""
   },
   "src/app/components/ResearchersPage.tsx": {
@@ -174,9 +174,9 @@
     "semantic_hash": "0b8b1b54da27f8809f99dcb72475c933"
   },
   "src/app/components/SystemGuidePage.tsx": {
-    "mtime": 1794362181.4188457,
-    "seen": 1794363140.0338578,
-    "ast_hash": "aeb8996caa03edb5471d91190a9cc33f",
+    "mtime": 1794498604.3869946,
+    "seen": 1794498867.0000823,
+    "ast_hash": "10cdffee888469822cf4b3906c8bad9c",
     "semantic_hash": ""
   },
   "src/app/components/VerifyEmailPage.tsx": {
@@ -558,9 +558,9 @@
     "semantic_hash": "08776ac6888f04e8a56eb257253d8d4e"
   },
   "src/app/services/api.service.ts": {
-    "mtime": 1794441144.5508912,
-    "seen": 1794441321.8480258,
-    "ast_hash": "c93ac7632c9406e46cd2407b5b4c6041",
+    "mtime": 1794490706.9196138,
+    "seen": 1794498867.0003173,
+    "ast_hash": "1d0edefc7040a5493ff54441f6ec9364",
     "semantic_hash": ""
   },
   "src/app/utils/adminSearchStore.ts": {
@@ -582,10 +582,10 @@
     "semantic_hash": ""
   },
   "src/app/utils/excelExportUtils.ts": {
-    "mtime": 1794037702.8983734,
-    "seen": 1794322751.1464171,
-    "ast_hash": "513cdc8914ba2dd55ea1c86938435c81",
-    "semantic_hash": "513cdc8914ba2dd55ea1c86938435c81"
+    "mtime": 1794498051.944793,
+    "seen": 1794498867.00033,
+    "ast_hash": "cf8289db314aeb53c06c777bd1908fd9",
+    "semantic_hash": ""
   },
   "src/app/utils/facultyUtils.ts": {
     "mtime": 1793829878.9134414,
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "src/server/apiHandler.mjs": {
-    "mtime": 1794488918.6789398,
-    "seen": 1794489256.9334328,
-    "ast_hash": "e9dff2ead23b96ac67142ffcd51c9240",
+    "mtime": 1794490707.6315012,
+    "seen": 1794498867.0003479,
+    "ast_hash": "4202f596e12dc00d7e3269a175845cfd",
     "semantic_hash": ""
   },
   "src/server/authHelper.mjs": {
@@ -642,8 +642,8 @@
     "semantic_hash": "cdcf848a39b2b7132bc12bb807815363"
   },
   "src/server/db.mjs": {
-    "mtime": 1794489625.517378,
-    "seen": 1794489830.1524568,
+    "mtime": 1794489914.4737191,
+    "seen": 1794490673.1790018,
     "ast_hash": "3ad9216c682622842239ea46859c692e",
     "semantic_hash": ""
   },

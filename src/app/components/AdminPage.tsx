@@ -136,7 +136,7 @@ export function AdminPage() {
   const [loadingOutbox, setLoadingOutbox] = useState(false);
 
   // Delete Researcher Confirmation
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; instructorId?: string; name: string } | null>(null);
 
   // Reject Registration Confirmation
   const [rejectTarget, setRejectTarget] = useState<{ instructorId: string; name: string } | null>(null);
@@ -410,10 +410,13 @@ export function AdminPage() {
 
   const confirmDeleteResearcher = async () => {
     if (!deleteTarget) return;
-    const { id, name } = deleteTarget;
+    const { id, instructorId, name } = deleteTarget;
     setDeleteTarget(null);
     try {
       const res: any = await apiService.deleteResearcher(id);
+      if (instructorId) {
+        removeResearcherRecordsFromLocal(instructorId, name);
+      }
       removeResearcherRecordsFromLocal(id, name);
       toast.success(
         res?.message ||
@@ -1109,7 +1112,7 @@ export function AdminPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => setDeleteTarget({ id: researcher.instructorId, name: researcher.name })}
+                              onClick={() => setDeleteTarget({ id: researcher.id || researcher.instructorId, instructorId: researcher.instructorId, name: researcher.name })}
                               className="h-8 w-8 p-0 text-danger hover:bg-danger-soft hover:text-danger"
                               title="Remove researcher"
                             >

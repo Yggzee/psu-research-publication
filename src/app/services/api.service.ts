@@ -463,7 +463,7 @@ class ApiService {
   }
 
   async deleteResearcher(id: string) {
-    return this.request(`/researchers/${id}`, {
+    return this.request(`/researchers/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
   }

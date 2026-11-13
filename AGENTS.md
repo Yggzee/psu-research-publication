@@ -31,7 +31,7 @@ All system rules are organized into modular, `always_on` rule files in `.agents/
    - Schema & migration parity between `db.mjs` and `turso.mjs` (`initTursoSchema` and `columnMigrations`).
    - Cold-start rehydration sync in `turso.mjs` and `apiHandler.mjs` (`POST /api/turso/sync`).
    - Database writes via `runInTransaction` / `db.prepare().run()`, waiting on `dbReadyPromise`.
-   - Render production compatibility (`npm.cmd run build`) and auto-deploy (`git push origin main`).
+   - Render production compatibility (`npm.cmd run build`); **Manual Git Operations Only** (never auto-commit or auto-push; git operations are executed manually by the user or when explicitly instructed).
 
 2. **[System Terminology & ID Invariants](.agents/rules/terminology.md)**
    - **Researchers** (group) & **Researcher** (individual) across the entire system.
@@ -42,6 +42,7 @@ All system rules are organized into modular, `always_on` rule files in `.agents/
    - SDG Analytics: **"SDG Alignment"** (tab/feature) and **"SDG Goals"** (individual targets); strict 1:1 primary Focus SDG mapping in institutional overviews with unique, non-patterned rationales.
    - Proponent Attribution: `"Developed by Julius Oscar Moreno • PSU Asingan Campus"` in public footer.
    - **Generalized Scholarly Author Name Resolution:** Full Name + Affiliation matching with Author-Exclusive search results (no unrelated campus papers in author queries).
+   - **Strict Prohibition on Adding/Seeding Researchers:** Never add, seed, register, or invite a researcher automatically or on your own. Researcher registration requires explicit administrative action and user permission to prevent unauthorized account creation and unintended automated email dispatches.
 
 3. **[UI & UX Design Rules](.agents/rules/ui-design.md)**
    - **No Emojis** anywhere in UI; always use `lucide-react` icons.

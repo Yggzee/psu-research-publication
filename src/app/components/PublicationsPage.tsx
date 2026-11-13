@@ -23,6 +23,7 @@ import {
   ArrowUp,
   ArrowDown,
   X,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -30,6 +31,7 @@ import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { filterFacultyPublications, getFacultyList, matchesResearcher } from "../utils/facultyUtils";
+import { exportSelectedPublicationsToExcel } from "../utils/excelExportUtils";
 import { apiService } from "../services/api.service";
 import { PublicationInspectorDrawer, type InspectedPublication } from "./PublicationInspectorDrawer";
 import { PageHeader, EmptyState } from "./common";
@@ -264,6 +266,22 @@ export function PublicationsPage() {
       .join("\n\n");
     navigator.clipboard.writeText(text);
     toast.success(`Copied ${selectedPapers.length} APA citations to clipboard!`);
+  };
+
+  // Batch Export to Excel (.xlsx)
+  const handleBatchExportExcel = () => {
+    const selectedPapers = allPublications.filter((p) => selectedIds.includes(p.id));
+    if (selectedPapers.length === 0) return;
+    try {
+      const res = exportSelectedPublicationsToExcel(selectedPapers);
+      toast.success(
+        res.count === 1
+          ? `Exported official Excel report for "${selectedPapers[0]?.title?.slice(0, 35)}..."`
+          : `Exported official 2-sheet Excel report for ${res.count} publications!`
+      );
+    } catch (err: any) {
+      toast.error(`Excel export failed: ${err.message || "Unknown error"}`);
+    }
   };
 
   // Batch Auto-Tag
@@ -742,12 +760,21 @@ export function PublicationsPage() {
 
           <Button
             size="sm"
+            onClick={handleBatchExportExcel}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 gap-1.5 shadow-xs font-semibold"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            <span>Export to Excel (.xlsx)</span>
+          </Button>
+
+          <Button
+            size="sm"
             variant="secondary"
             onClick={handleBatchExportAPA}
             className="text-xs h-8 gap-1.5"
           >
             <Copy className="h-3.5 w-3.5" />
-            Copy APA Citations
+            <span>Copy APA</span>
           </Button>
 
           <Button

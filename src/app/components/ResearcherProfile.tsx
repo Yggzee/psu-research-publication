@@ -11,13 +11,16 @@ import {
   Shield,
   Building,
   BarChart3,
+  FileSpreadsheet,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { getFacultyPhoto, isPSUPaper, hasExternalCollaborators, categorizeAuthors } from "../utils/facultyUtils";
 import { apiService } from "../services/api.service";
+import { exportPerResearcherReportsByDepartment } from "../utils/excelExportUtils";
 import { PageHeader, StatCard, StatusBadge, EmptyState } from "./common";
 
 type SortOption = "year" | "citations" | "journal";
@@ -28,6 +31,27 @@ export function ResearcherProfile() {
   const [sortBy, setSortBy] = useState<SortOption>("year");
   const [researcher, setResearcher] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportProfileExcel = async () => {
+    if (!researcher) return;
+    setIsExporting(true);
+    toast.loading(`Generating Excel spreadsheet for ${researcher.name}...`, { id: "profile-export" });
+    try {
+      const res = await exportPerResearcherReportsByDepartment({
+        selectedResearchers: [researcher],
+        publications: researcher.publications || [],
+        exportYear: "all",
+      });
+      if (res.success) {
+        toast.success(`Exported Excel spreadsheet for ${researcher.name}!`, { id: "profile-export" });
+      }
+    } catch (err: any) {
+      toast.error(`Export failed: ${err.message || "Unknown error"}`, { id: "profile-export" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     async function loadResearcher() {
@@ -109,6 +133,16 @@ export function ResearcherProfile() {
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Researchers</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportProfileExcel}
+              disabled={isExporting}
+              className="text-xs h-8 gap-1.5 border-emerald-600/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-semibold"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Export Excel (.xlsx)</span>
             </Button>
             {researcher.scholarUrl && (
               <Button size="sm" asChild className="text-xs h-8 gap-1.5 bg-brand hover:bg-brand/90 text-white">

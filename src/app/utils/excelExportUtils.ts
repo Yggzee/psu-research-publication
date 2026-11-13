@@ -185,28 +185,39 @@ function sanitizeFileSegment(name: string): string {
   );
 }
 
-/**
- * Builds the 2-sheet Excel Workbook (Publication Sheet + Citation Sheet) for a single researcher
- * matching the official PSU Asingan Campus Research Coordinator format.
- */
-export function buildResearcherWorkbook(
-  researcher: any,
-  researcherPublications: any[],
-  exportYear = "all"
-): any {
-  const workbook = XLSX.utils.book_new();
-  const researcherName = researcher?.name || "Faculty Researcher";
-  const department = researcher?.department || "Unassigned";
+export function sanitizeSheetName(name: string, fallback = "Sheet"): string {
+  let clean = String(name || fallback)
+    .replace(/[\\/?*:[\]]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 31);
+  return clean || fallback.slice(0, 31);
+}
 
-  // ==========================================================================
-  // SHEET 1: PUBLICATION SHEET (8 Official Columns)
-  // ==========================================================================
+/**
+ * Builds the official 8-column Publication Worksheet matching institutional PSU guidelines
+ */
+export function buildPublicationWorksheet(options: {
+  mainTitle?: string;
+  subtitle?: string;
+  publications: any[];
+  researcherName?: string;
+  department?: string;
+  exportYear?: string;
+}): any {
   const wsPub: any = {};
+  const mainTitle = options.mainTitle || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS";
+  const researcherName = options.researcherName || "Faculty Researcher";
+  const department = options.department || "General";
+  const exportYear = options.exportYear || "all";
+  const subtitle =
+    options.subtitle ||
+    `PUBLICATION SHEET • Researcher: ${researcherName} (${department})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
 
   // Title Block
   wsPub["A1"] = {
     t: "s",
-    v: `PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS`,
+    v: mainTitle,
     s: {
       font: { name: "Calibri", sz: 14, bold: true, color: { rgb: COLOR_NAVY } },
       alignment: { horizontal: "left", vertical: "center" },
@@ -214,7 +225,7 @@ export function buildResearcherWorkbook(
   };
   wsPub["A2"] = {
     t: "s",
-    v: `PUBLICATION SHEET • Researcher: ${researcherName} (${department})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`,
+    v: subtitle,
     s: {
       font: { name: "Calibri", sz: 11, bold: true, color: { rgb: COLOR_TEXT_SUBTLE } },
       alignment: { horizontal: "left", vertical: "center" },
@@ -251,16 +262,17 @@ export function buildResearcherWorkbook(
     { hpt: 30 },
   ];
 
-  if (researcherPublications.length === 0) {
+  const pubs = options.publications || [];
+  if (pubs.length === 0) {
     wsPub[`A${pubRow}`] = createTextCell("No publications recorded for the selected filter.", {
       italic: true,
     });
     rowHeightsPub.push({ hpt: 24 });
     pubRow++;
   } else {
-    researcherPublications.forEach((pub, idx) => {
+    pubs.forEach((pub, idx) => {
       const bg = idx % 2 === 1 ? COLOR_ROW_ALT : "FFFFFF";
-      const allAuthorsStr = formatAllAuthors(pub.authors, researcherName);
+      const allAuthorsStr = formatAllAuthors(pub.authors, pub.owner_name || pub.ownerName || researcherName);
       const authorLines = allAuthorsStr.split("\n").length;
 
       const pubDate =
@@ -309,16 +321,32 @@ export function buildResearcherWorkbook(
     { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
   ];
 
-  XLSX.utils.book_append_sheet(workbook, wsPub, "Publication Sheet");
+  return wsPub;
+}
 
-  // ==========================================================================
-  // SHEET 2: CITATION SHEET (15 Official Columns — Name of Publisher removed)
-  // ==========================================================================
+/**
+ * Builds the official 15-column Citation Worksheet matching institutional PSU guidelines
+ */
+export function buildCitationWorksheet(options: {
+  mainTitle?: string;
+  subtitle?: string;
+  publications: any[];
+  researcherName?: string;
+  department?: string;
+  exportYear?: string;
+}): any {
   const wsCite: any = {};
+  const mainTitle = options.mainTitle || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS";
+  const researcherName = options.researcherName || "Faculty Researcher";
+  const department = options.department || "General";
+  const exportYear = options.exportYear || "all";
+  const subtitle =
+    options.subtitle ||
+    `CITATION SHEET • Researcher: ${researcherName} (${department})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
 
   wsCite["A1"] = {
     t: "s",
-    v: `PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS`,
+    v: mainTitle,
     s: {
       font: { name: "Calibri", sz: 14, bold: true, color: { rgb: COLOR_NAVY } },
       alignment: { horizontal: "left", vertical: "center" },
@@ -326,7 +354,7 @@ export function buildResearcherWorkbook(
   };
   wsCite["A2"] = {
     t: "s",
-    v: `CITATION SHEET • Researcher: ${researcherName} (${department})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`,
+    v: subtitle,
     s: {
       font: { name: "Calibri", sz: 11, bold: true, color: { rgb: COLOR_TEXT_SUBTLE } },
       alignment: { horizontal: "left", vertical: "center" },
@@ -335,7 +363,7 @@ export function buildResearcherWorkbook(
 
   // 15 Columns:
   // Columns A–H (1–8): Parent PSU Research Output
-  // Columns I–O (9–15): Citing Articles (with "Name of Publisher" removed as requested)
+  // Columns I–O (9–15): Citing Articles
   const citeHeaders = [
     { label: "Title of Research Output", wch: 40, isCitingSide: false },
     { label: "Keywords", wch: 26, isCitingSide: false },
@@ -377,16 +405,17 @@ export function buildResearcherWorkbook(
     { s: { r: 1, c: 0 }, e: { r: 1, c: 14 } },
   ];
 
-  if (researcherPublications.length === 0) {
+  const pubs = options.publications || [];
+  if (pubs.length === 0) {
     wsCite[`A${citeRow}`] = createTextCell("No citation records found for the selected filter.", {
       italic: true,
     });
     rowHeightsCite.push({ hpt: 24 });
     citeRow++;
   } else {
-    researcherPublications.forEach((pub, pubIdx) => {
+    pubs.forEach((pub, pubIdx) => {
       const bg = pubIdx % 2 === 1 ? COLOR_ROW_ALT : "FFFFFF";
-      const parentAuthors = formatAllAuthors(pub.authors, researcherName);
+      const parentAuthors = formatAllAuthors(pub.authors, pub.owner_name || pub.ownerName || researcherName);
       const keywords = deriveKeywords(pub);
       const journal = pub.journal || "Academic Publication";
       const issnDoi =
@@ -441,8 +470,6 @@ export function buildResearcherWorkbook(
           }
         }
 
-        // Render 1st row with Parent (Cols A–H) + 1st Citing Paper (Cols I–O),
-        // and subsequent rows with styled Cols A–H (merged into 1st row) + Nth Citing Paper (Cols I–O)
         citingList.forEach((cp: any, citeIdx: number) => {
           if (citeIdx === 0) {
             wsCite[`A${citeRow}`] = createTextCell(pub.title || "Untitled Publication", {
@@ -509,6 +536,36 @@ export function buildResearcherWorkbook(
   wsCite["!rows"] = rowHeightsCite;
   wsCite["!merges"] = citeMerges;
 
+  return wsCite;
+}
+
+/**
+ * Builds the 2-sheet Excel Workbook (Publication Sheet + Citation Sheet) for a single researcher
+ * matching the official PSU Asingan Campus Research Coordinator format.
+ */
+export function buildResearcherWorkbook(
+  researcher: any,
+  researcherPublications: any[],
+  exportYear = "all"
+): any {
+  const workbook = XLSX.utils.book_new();
+  const researcherName = researcher?.name || "Faculty Researcher";
+  const department = researcher?.department || "Unassigned";
+
+  const wsPub = buildPublicationWorksheet({
+    researcherName,
+    department,
+    exportYear,
+    publications: researcherPublications,
+  });
+  XLSX.utils.book_append_sheet(workbook, wsPub, "Publication Sheet");
+
+  const wsCite = buildCitationWorksheet({
+    researcherName,
+    department,
+    exportYear,
+    publications: researcherPublications,
+  });
   XLSX.utils.book_append_sheet(workbook, wsCite, "Citation Sheet");
 
   return workbook;
@@ -646,18 +703,30 @@ export interface MultiResearcherExportOptions {
   exportYear: string;
 }
 
+export interface ExportReportResult {
+  success: boolean;
+  count: number;
+  exportedFiles: number;
+  departments: string[];
+  isZip: boolean;
+  mode: "single" | "zip";
+  filename: string;
+}
+
 /**
  * Generates individual Excel reports per selected researcher:
  * - If 1 researcher: downloads the single .xlsx file directly (NO zip).
- * - If multiple researchers: packages them into a clean .zip archive organized by department.
+ * - If multiple researchers: packages them into a clean .zip archive organized by department and researcher folder.
+ *   Hierarchy inside ZIP: Department / Researcher_Name / Researcher_Name_Year.xlsx
  */
 export async function exportPerResearcherReportsByDepartment(
   options: MultiResearcherExportOptions
-): Promise<{ exportedFiles: number; departments: string[]; isZip: boolean }> {
+): Promise<ExportReportResult> {
   const { selectedResearchers, publications, exportYear } = options;
 
   const generatedFiles: {
     department: string;
+    cleanName: string;
     fileName: string;
     prefixedFileName: string;
     relativePath: string;
@@ -688,9 +757,10 @@ export async function exportPerResearcherReportsByDepartment(
 
     generatedFiles.push({
       department: dept,
+      cleanName,
       fileName,
       prefixedFileName,
-      relativePath: `${dept}/${fileName}`,
+      relativePath: `${dept}/${cleanName}/${fileName}`,
       bytes,
     });
   }
@@ -704,15 +774,19 @@ export async function exportPerResearcherReportsByDepartment(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
     return {
+      success: true,
+      count: 1,
       exportedFiles: 1,
       departments: Array.from(deptSet),
       isZip: false,
+      mode: "single",
+      filename: singleFile.fileName,
     };
   }
 
-  // Case 2: Multiple researchers — package into a single clean ZIP archive
+  // Case 2: Multiple researchers — package into an organized ZIP archive: Department / Researcher / Researcher.xlsx
   const zipEntries: ZipEntryFile[] = generatedFiles.map((item) => ({
-    path: `${item.department}/${item.fileName}`,
+    path: `${item.department}/${item.cleanName}/${item.fileName}`,
     data: item.bytes,
   }));
   const zipBytes = buildZipArchive(zipEntries);
@@ -720,9 +794,185 @@ export async function exportPerResearcherReportsByDepartment(
   triggerBlobDownload(zipBytes, zipName, "application/zip");
 
   return {
+    success: true,
+    count: generatedFiles.length,
     exportedFiles: generatedFiles.length,
     departments: Array.from(deptSet),
     isZip: true,
+    mode: "zip",
+    filename: zipName,
+  };
+}
+
+/**
+ * Exports multiple researchers into ONE single Excel file:
+ * - Sheet 1: Master "Publication Sheet" (combined papers for all selected researchers)
+ * - Sheet 2: Master "Citation Sheet" (combined citations for all selected researchers)
+ * - Subsequent Sheets: Dedicated individual tabs for each researcher
+ */
+export function exportCombinedResearchersToSingleWorkbook(options: {
+  selectedResearchers: any[];
+  publications: any[];
+  exportYear?: string;
+  filename?: string;
+  title?: string;
+}): ExportReportResult {
+  const { selectedResearchers, publications, exportYear = "all" } = options;
+  if (!selectedResearchers || selectedResearchers.length === 0) {
+    throw new Error("No researchers selected for export.");
+  }
+
+  const workbook = XLSX.utils.book_new();
+
+  // Find all publications belonging to the selected researchers
+  const targetPubs = publications.filter((pub: any) => {
+    const matchesYear = exportYear === "all" || String(pub.year) === String(exportYear);
+    const belongsToSelected = selectedResearchers.some((r: any) => matchesResearcher(pub, r));
+    return matchesYear && belongsToSelected;
+  });
+
+  const yearSuffix = exportYear === "all" ? "All_Years" : exportYear;
+  const masterTitle = options.title || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS";
+  const masterPubSub = `PUBLICATION SHEET • Master Campus / Multi-Researcher Matrix (${selectedResearchers.length} Researchers)${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
+  const masterCiteSub = `CITATION SHEET • Master Campus / Multi-Researcher Matrix (${selectedResearchers.length} Researchers)${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
+
+  // Sheet 1: Combined Master Publication Sheet (8 official columns)
+  const masterWsPub = buildPublicationWorksheet({
+    mainTitle: masterTitle,
+    subtitle: masterPubSub,
+    publications: targetPubs,
+    researcherName: "All Selected Researchers",
+    department: "Campus",
+    exportYear,
+  });
+  XLSX.utils.book_append_sheet(workbook, masterWsPub, "Publication Sheet");
+
+  // Sheet 2: Combined Master Citation Sheet (15 official columns)
+  const masterWsCite = buildCitationWorksheet({
+    mainTitle: masterTitle,
+    subtitle: masterCiteSub,
+    publications: targetPubs,
+    researcherName: "All Selected Researchers",
+    department: "Campus",
+    exportYear,
+  });
+  XLSX.utils.book_append_sheet(workbook, masterWsCite, "Citation Sheet");
+
+  // Subsequent Sheets: Dedicated tab per selected researcher
+  const usedSheetNames = new Set<string>(["publication sheet", "citation sheet"]);
+  for (const researcher of selectedResearchers) {
+    const researcherPubs = publications.filter(
+      (pub: any) =>
+        matchesResearcher(pub, researcher) &&
+        (exportYear === "all" || String(pub.year) === String(exportYear))
+    );
+    const rawName = researcher.name || researcher.instructorId || "Researcher";
+    const baseSheetName = sanitizeSheetName(rawName, "Researcher");
+    let finalSheetName = baseSheetName;
+    let counter = 1;
+    while (usedSheetNames.has(finalSheetName.toLowerCase())) {
+      const suffix = `_${counter}`;
+      finalSheetName = `${baseSheetName.slice(0, 31 - suffix.length)}${suffix}`;
+      counter++;
+    }
+    usedSheetNames.add(finalSheetName.toLowerCase());
+
+    const wsResearcherPub = buildPublicationWorksheet({
+      mainTitle: masterTitle,
+      subtitle: `PUBLICATION SHEET • ${researcher.name} (${researcher.department || "General"})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`,
+      publications: researcherPubs,
+      researcherName: researcher.name,
+      department: researcher.department,
+      exportYear,
+    });
+    XLSX.utils.book_append_sheet(workbook, wsResearcherPub, finalSheetName);
+  }
+
+  const wbArrayBuffer: ArrayBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const bytes = new Uint8Array(wbArrayBuffer);
+  const outFilename =
+    options.filename ||
+    `PSU_Combined_${selectedResearchers.length}_Researchers_${yearSuffix}.xlsx`;
+
+  triggerBlobDownload(
+    bytes,
+    outFilename,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+
+  const deptSet = new Set<string>(selectedResearchers.map((r: any) => r.department || "General"));
+
+  return {
+    success: true,
+    count: selectedResearchers.length,
+    exportedFiles: 1,
+    departments: Array.from(deptSet),
+    isZip: false,
+    mode: "single",
+    filename: outFilename,
+  };
+}
+
+/**
+ * Exports 1 or more specific publications selected by the user into an official Excel file
+ * (Sheet 1: Publication Sheet with the exact 8 columns; Sheet 2: Citation Sheet with the exact 15 columns).
+ */
+export function exportSelectedPublicationsToExcel(
+  selectedPublications: any[],
+  options?: { title?: string; filename?: string; exportYear?: string }
+): ExportReportResult {
+  if (!selectedPublications || selectedPublications.length === 0) {
+    throw new Error("No publications selected for export.");
+  }
+
+  const workbook = XLSX.utils.book_new();
+  const exportYear = options?.exportYear || "all";
+  const yearSuffix = exportYear === "all" ? "All_Years" : exportYear;
+  const count = selectedPublications.length;
+
+  const subtitlePub = `PUBLICATION SHEET • Selected Works (${count} ${count === 1 ? "Publication" : "Publications"})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
+  const subtitleCite = `CITATION SHEET • Selected Works (${count} ${count === 1 ? "Publication" : "Publications"})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
+
+  const wsPub = buildPublicationWorksheet({
+    mainTitle: options?.title || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS",
+    subtitle: subtitlePub,
+    publications: selectedPublications,
+    researcherName: count === 1 ? (selectedPublications[0].owner_name || selectedPublications[0].ownerName || "Researcher") : "Selected Researchers",
+    exportYear,
+  });
+  XLSX.utils.book_append_sheet(workbook, wsPub, "Publication Sheet");
+
+  const wsCite = buildCitationWorksheet({
+    mainTitle: options?.title || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS",
+    subtitle: subtitleCite,
+    publications: selectedPublications,
+    researcherName: count === 1 ? (selectedPublications[0].owner_name || selectedPublications[0].ownerName || "Researcher") : "Selected Researchers",
+    exportYear,
+  });
+  XLSX.utils.book_append_sheet(workbook, wsCite, "Citation Sheet");
+
+  const wbArrayBuffer: ArrayBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const bytes = new Uint8Array(wbArrayBuffer);
+  const outFilename =
+    options?.filename ||
+    (count === 1
+      ? `${sanitizeFileSegment(String(selectedPublications[0].title || "Publication").slice(0, 45))}_Report.xlsx`
+      : `PSU_Selected_${count}_Publications_${yearSuffix}.xlsx`);
+
+  triggerBlobDownload(
+    bytes,
+    outFilename,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+
+  return {
+    success: true,
+    count,
+    exportedFiles: 1,
+    departments: [],
+    isZip: false,
+    mode: "single",
+    filename: outFilename,
   };
 }
 
@@ -731,22 +981,7 @@ export async function exportPerResearcherReportsByDepartment(
  * directly as an .xlsx file.
  */
 export function exportSinglePublicationToExcel(publication: any): void {
-  const ownerName = publication.owner_name || publication.ownerName || "PSU_Researcher";
-  const wb = buildResearcherWorkbook(
-    { name: ownerName, instructorId: publication.owner_id || publication.ownerId || "" },
-    [publication]
-  );
-  const wbArrayBuffer = XLSX.write(wb, {
-    bookType: "xlsx",
-    type: "array",
-  });
-  const bytes = new Uint8Array(wbArrayBuffer);
-  const safeTitle = sanitizeFileSegment(String(publication.title || "Publication").slice(0, 45));
-  triggerBlobDownload(
-    bytes,
-    `${safeTitle}_Report.xlsx`,
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  );
+  exportSelectedPublicationsToExcel([publication]);
 }
 
 /**

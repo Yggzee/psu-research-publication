@@ -2484,16 +2484,20 @@ export async function handleApiRequest(req, res) {
 
     // DELETE /api/researchers/:id
     if (pathname.startsWith('/api/researchers/') && method === 'DELETE') {
-      const id = pathname.replace('/api/researchers/', '');
+      const rawId = pathname.replace('/api/researchers/', '');
+      const id = decodeURIComponent(rawId).trim();
       const caller = authenticateCaller(req);
       if (!isCallerAdmin(caller)) {
         return sendJson(403, { error: 'Forbidden: Only administrators can remove researcher records.' });
       }
 
       const current = db.prepare('SELECT * FROM researchers WHERE id = ? OR LOWER(instructor_id) = LOWER(?)').get(id, id);
+      if (!current) {
+        return sendJson(404, { error: `Researcher record not found for ID: ${id}` });
+      }
+
       let deletedPubsCount = 0;
-      if (current) {
-        // 1. Gather publication snapshot for the archive
+      // 1. Gather publication snapshot for the archive
         const rInstId = (current.instructor_id || '').trim().toLowerCase();
         const rId = (current.id || '').trim().toLowerCase();
         const rUserId = (current.user_id || '').trim().toLowerCase();
@@ -2560,19 +2564,16 @@ export async function handleApiRequest(req, res) {
         } else if (current.instructor_id) {
           db.prepare("DELETE FROM users WHERE LOWER(username) = LOWER(?) AND role != 'admin'").run(current.instructor_id);
         }
+
+        // 6. Clean up any remaining orphaned publications
+        cleanupOrphanedPublications(db);
+
+        return sendJson(200, {
+          success: true,
+          deletedPublicationsCount: deletedPubsCount,
+          message: `Archived researcher ${current.name} and removed ${deletedPubsCount} publication(s) from the active repository. Instructor ID ${current.instructor_id} is now available.`,
+        });
       }
-
-      // 6. Clean up any remaining orphaned publications
-      cleanupOrphanedPublications(db);
-
-      return sendJson(200, {
-        success: true,
-        deletedPublicationsCount: deletedPubsCount,
-        message: current
-          ? `Archived researcher ${current.name} and removed ${deletedPubsCount} publication(s) from the active repository. Instructor ID ${current.instructor_id} is now available.`
-          : 'Researcher deleted successfully',
-      });
-    }
 
     // ----------------------------------------------------
     // ADMIN: GET /api/admin/archived-researchers

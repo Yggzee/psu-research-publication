@@ -49,5 +49,10 @@ Always enforce the following standardized terminology and formatting across all 
 - In academic searches, author claiming, and attribution, never rely strictly on Institutional IDs (`ASIN-00000`), as external and regional indexing does not always carry IDs; prioritize Name, Full Name, and Full Name + Affiliation ('Pangasinan State University' / 'PSU').
 - When searching for a researcher's name, enforce Author-Exclusive Search: return only publications where the queried author physically appears (including compound names, given-name tokens, initials sequences, and inverted formats); never pollute author results with unrelated campus papers.
 
+## 11. Strict Prohibition on Adding or Seeding Researchers
+- Never add, seed, register, or invite a researcher automatically or on your own.
+- Creating or inviting a researcher account requires explicit human administrative action and direct user authorization.
+- Unauthorized creation of researcher records risks sending unapproved automated invitation/verification emails to real faculty members and corrupts institutional directory records.
+
 
 
