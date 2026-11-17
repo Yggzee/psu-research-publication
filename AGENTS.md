@@ -52,6 +52,8 @@ All system rules are organized into modular, `always_on` rule files in `.agents/
    - **Pre-Change Breakdown:** Provide clear issue breakdown and file plan before writing code.
    - **Web Security, SEO & Accessibility Audit:** HSTS, CSP, COOP, robots.txt, and WCAG AA contrast.
    - **UI Chrome Text Selection & Caret Suppression:** Non-editable UI headers, navigation, and badges disable text selection and suppress blinking carets; form inputs and scholarly research text remain selectable.
+   - **Centralized Export Policy:** All spreadsheet and Excel exports are centralized exclusively in the Reports tab (`/reports`); no export buttons on individual cards, drawers, or detail views.
+   - **Public Campus AI Privacy Guardrails:** Public mode AI assistant answers general campus FAQs and statistics, but strictly redacts and refuses disclosure of Instructor IDs (`ASIN-...`), personal emails, credentials, and unpublished records.
 
 4. **[Infrastructure & Tooling Rules](.agents/rules/tooling-infrastructure.md)**
    - **100% Free-Tier & Zero-Cost:** Never introduce paid external APIs, vector databases, or LLM tokens.

@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "dataflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\candidate.json",
+    "sha256": "16bdec361bdfe26e4a9df718134a5da4c666f23d8a4e76e1d86be475fb6125f1",
+    "bytes": 8013
+  },
+  "artifact": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\onboarding-dfd.html",
+    "sha256": "5855ce07104df1dd40f6f4b5008e7a007d8a156588d572f30dff8404c20dcc21",
+    "bytes": 850063
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\onboarding-dfd.finalize.json",
+    "summaryReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\onboarding-dfd.finalize-summary.json",
+    "browserCheckReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\onboarding-dfd.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-17T05:41:45.282Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 8536,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  },
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "resolvedCrossovers": 1,
+      "routesOverSuggestedBends": 1
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [
+        {
+          "left": {
+            "id": "verifier-to-active",
+            "from": "email_verifier",
+            "to": "active_directory",
+            "label": "password + active",
+            "collectionIndex": 7,
+            "artifactIndex": 8
+          },
+          "right": {
+            "id": "coord-to-declined",
+            "from": "coordinator_review",
+            "to": "declined_archive",
+            "label": "dismiss / decline",
+            "collectionIndex": 8,
+            "artifactIndex": 9
+          },
+          "point": [
+            637.5,
+            280
+          ]
+        }
+      ],
+      "detours": [
+        {
+          "relationship": {
+            "id": "coord-to-mailer",
+            "from": "coordinator_review",
+            "to": "email_dispatcher",
+            "label": "invite / admit mail",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "bends": 4,
+          "stretch": 1.276
+        }
+      ],
+      "truncated": false
+    },
+    "repair": "Advisory only: this mode places or routes these relationships itself. Report them; do not remove relationships or meaning to reduce crossings."
+  }
+}

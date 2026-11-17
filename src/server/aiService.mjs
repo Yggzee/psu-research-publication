@@ -185,8 +185,13 @@ function retrieveRelevantPapers(publications, question, limit = 8) {
 /**
  * Code-only router: determines the specific intent of the question.
  */
-function routeQuestion(q, publications = []) {
+function routeQuestion(q, publications = [], meta = {}) {
   const s = q.toLowerCase().trim();
+
+  // 0. Public Privacy & Data Protection Guardrail (Instructor IDs, credentials, private contact data)
+  if (meta?.isPublic && /\b(instructor\s*id|employee\s*id|asin-\d+|password|auth\s*token|jwt|token|email address|phone number|contact number|credential)\b/i.test(s)) {
+    return 'privacy_refusal';
+  }
 
   // 1. Casual Greetings & Mood Inquiries
   if (/^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings|kumusta|magandang\s*(araw|umaga|hapon|gabi))([\s!.,?]+(there|bot|ai|assistant|campus\s*ai)?)?[\s!.,?]*$/i.test(s)) {
@@ -206,9 +211,19 @@ function routeQuestion(q, publications = []) {
     return 'persona_identity';
   }
 
+  // How to Join / Register / Be Part of the System
+  if (/\b(how (can|do) (i|we) (be part of|join|register|sign up|participate in|get access to|create an account|get an account)|how to (join|register|sign up|be part of)|join the system|register as researcher|ask for invitation)\b/i.test(s)) {
+    return 'how_to_join';
+  }
+
   // System Overview / About the platform
-  if (/\b(what is this (system|website|portal|project|app|tool|platform)|what does this (system|website|portal|app) do|explain (this|the) (system|portal|project|website)|about (this|the) (system|portal|website)|what is psu research|tell me about (this|the) system)\b/i.test(s)) {
+  if (/\b(what is this (system|website|portal|project|app|tool|platform)|what is this system for|what does this (system|website|portal|app) do|explain (this|the) (system|portal|project|website)|about (this|the) (system|portal|website)|what is psu research|tell me about (this|the) system)\b/i.test(s)) {
     return 'system_overview';
+  }
+
+  // Research Tracks / Research Areas
+  if (/\b(research tracks?|top tracks?|research areas?|research priorities?|research pillars?|priority disciplines?)\b/i.test(s)) {
+    return 'research_tracks';
   }
 
   // How to Claim / Add / Submit Publication
@@ -345,11 +360,32 @@ This platform is the official institutional repository and research intelligence
 
 1. Institutional Repository: Centralized tracking of published research authored by university researchers across all academic departments.
 2. Global Academic Search: Multi-engine scholarly search across Google Scholar, CrossRef, and OpenAlex with automated campus-priority ranking and duplicate prevention.
-3. Publication Claiming: 3-step workflow for researchers to claim publications using their Instructor ID (ASIN-00000) for Research Coordinator verification.
+3. Publication Claiming: 3-step workflow for researchers to claim publications using their Instructor ID (ASIN- followed by 1 to 12 digits, e.g., ASIN-00002) for Research Coordinator verification.
 4. UN SDG & CHED Impact Matrix: Automated classification across all 17 UN Sustainable Development Goals and Philippine CHED national priority disciplines.
 5. JC3 / KRA II Evaluator: Real-time DBM-CHED Joint Circular No. 3 (JC3) points and authorship contribution calculations.
 6. Accreditation & SUC Reports: Export-ready reports for CHED audits, SUC Leveling, and AACCUP accreditation cycles.
 7. Campus AI Assistant: Instant campus research insights and intelligent publication analysis.`;
+
+    case 'privacy_refusal':
+      return "For institutional privacy, personnel protection, and compliance with data privacy standards, Instructor IDs (ASIN numbers), personal email addresses, account credentials, and unapproved records are not disclosed to public visitors. If you are a campus researcher or faculty member needing your Instructor ID or account credentials, please sign in or coordinate directly with Research Coordinator Sir Rodelio M. Garin.";
+
+    case 'how_to_join':
+      return `To become part of the PSU Asingan Research Publication Tracking System:
+
+1. Click "Sign In" at the top-right of the portal.
+2. Underneath the sign-in fields, click "Ask for Invitation" (or "Register as Researcher").
+3. Complete the request form with your Name, Institutional Email (@psu.edu.ph), Department, and Instructor ID (format: ASIN- followed by your numeric digits).
+4. Your request will be forwarded to Research Coordinator Sir Rodelio M. Garin for administrative review and identity verification.
+5. Once approved, you will receive an invitation email with a secure link to activate your account and begin managing your published research.`;
+
+    case 'research_tracks':
+      return `Pangasinan State University - Asingan Campus focuses on key scholarly research tracks aligned with national development and UN Sustainable Development Goals:
+
+1. Educational Pedagogy & Teaching Strategies (SDG 4 - Quality Education): Mathematics and STEM education, modern instructional methods, reading comprehension, and teacher professional growth.
+2. Information Technology & Applied Systems (SDG 9 - Industry, Innovation & Infrastructure): Institutional automation, scholarly tracking systems, and digital management platforms.
+3. Business Administration & Economics (SDG 8 - Decent Work & Economic Growth): Microenterprise management, entrepreneurial resilience, and local business leadership.
+4. Community Health & Physical Wellness (SDG 3 - Good Health & Well-being): Health practices, physiological fitness, and community-centered health interventions.
+5. Technical-Vocational & Livelihood Education (SDG 2 & SDG 12): Applied skills development, livelihood sustainability, and technical pedagogy.`;
 
     case 'how_to_claim':
       return `How to Claim Your Publication in 3 Easy Steps:
@@ -360,7 +396,7 @@ This platform is the official institutional repository and research intelligence
 
 2. Click "Claim Publication":
    • On the search result card, click the "Claim" button.
-   • Enter your Instructor ID in the standard format (ASIN-00000). The prefix ASIN- is locked; enter your 5 assigned numeric digits.
+   • Enter your Instructor ID in the standard format (ASIN- followed by 1 to 12 digits, e.g., ASIN-00002). The prefix ASIN- is locked; enter your 1 to 12 assigned numeric digits.
    • Specify your authorship role (e.g., Lead Author, Co-Author, or Corresponding Author).
 
 3. Research Coordinator Review:
@@ -394,7 +430,7 @@ This platform is the official institutional repository and research intelligence
 
 If you are looking for their research:
 1. Search their name in "Global Academic Search" (/search) to retrieve records from Google Scholar, CrossRef, or OpenAlex.
-2. If they are a university researcher, they can claim their publications using their Instructor ID (ASIN-00000).`;
+2. If they are a university researcher, they can claim their publications using their Instructor ID (ASIN- followed by 1 to 12 digits, e.g., ASIN-00002).`;
       }
 
       const totalCitations = matchingPubs.reduce((sum, p) => sum + (Number(p.citations) || 0), 0);
@@ -1405,7 +1441,7 @@ export async function askCampusIntelligence(question, publications = [], systemM
   }
 
   // Agent 1: code-only router for fast, 100% accurate, specific answers
-  const route = routeQuestion(trimmedQ, publications || []);
+  const route = routeQuestion(trimmedQ, publications || [], systemMetadata);
   if (route !== 'paper') {
     let citedPapers = [];
     if (typeof route === 'object' && route.paper) {
@@ -1721,7 +1757,7 @@ USER QUESTION: "${trimmedQ}"`;
 • Applied Computing & Information Systems (SDG 9): Mobile learning applications, educational tools, and institutional automation.
 • Community Development & Socio-Economics (SDG 8): Tracer studies, workforce readiness, and micro-enterprise growth.
 
-To discover or index related literature, you can use "Global Academic Search" (/search) to query Google Scholar, CrossRef, and OpenAlex, or claim relevant publications using your Instructor ID (ASIN-00000).`,
+To discover or index related literature, you can use "Global Academic Search" (/search) to query Google Scholar, CrossRef, and OpenAlex, or claim relevant publications using your Instructor ID (ASIN- followed by 1 to 12 digits, e.g., ASIN-00002).`,
       citedPapers: [],
       source: 'local-rag',
     };

@@ -45,4 +45,14 @@ Always maintain the following user interface standards across the application:
 - Form fields (`input`, `textarea`, `[contenteditable="true"]`) must retain standard text selection and visible insertion carets (`caret-color: auto; user-select: text;`).
 - Scholarly research content (abstracts, publication text, citations, DOIs) must explicitly remain selectable (`user-select: text;`) so researchers can copy references and scholarly findings.
 
+## 9. Centralized Spreadsheet & Excel Export Policy
+- All spreadsheet and Excel export functionality (`.xlsx`, `.csv`, `.tsv`) must be centralized exclusively in the **Reports** tab (`/reports`).
+- Do not place spreadsheet export buttons on individual publication cards, within the Publication Inspector Drawer (`PublicationInspectorDrawer.tsx`), or on the Full Page & Citation view (`PublicationDetail.tsx`).
+
+## 10. Public Campus AI Privacy Guardrails
+- The Public Campus AI assistant on the Public Search Portal (`PublicRepositoryPortal.tsx`) runs in unauthenticated Public Safe Mode using client-side `sessionStorage` (`psu_public_ai_messages`).
+- Public responses are restricted to general system overviews, public research tracks, participation/invitation instructions, and aggregated campus metrics.
+- The system must strictly redact and refuse disclosure of Instructor IDs (`ASIN-...`), personal email addresses, account passwords/credentials, and unpublished pending research claims. Inside the authenticated Admin/Dashboard system, Campus AI retains full operational capabilities.
+
+
 

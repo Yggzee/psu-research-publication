@@ -13,7 +13,7 @@ import { Input } from "./ui/input";
 import { apiService } from "../services/api.service";
 import { getResearchRecords } from "../utils/researchStore";
 import { findAuthorFacultyProfile } from "../utils/facultyUtils";
-import { exportSinglePublicationToExcel } from "../utils/excelExportUtils";
+
 import {
   ArrowLeft,
   BookOpen,
@@ -227,6 +227,22 @@ export function PublicationDetail() {
     }
   };
 
+  const handleReloadCitation = async () => {
+    if (!id) return;
+    setRefreshing(true);
+    try {
+      toast.loading("Reloading live Google Scholar citations...", { id: "reload-cit" });
+      const decodedId = decodeURIComponent(id);
+      const res = await apiService.reloadPublicationCitation(decodedId);
+      toast.success(res.message || `Citations reloaded: ${res.citations} citation(s).`, { id: "reload-cit" });
+      await loadData(false);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reload citations.", { id: "reload-cit" });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     setCitingPage(1);
     loadData(false);
@@ -433,7 +449,7 @@ export function PublicationDetail() {
 
   // Format SDGs
   const rawSdgTags = publication.sdg_tags || publication.sdgTags;
-  const sdgList: string[] = Array.isArray(rawSdgTags)
+  const parsedSdgList: string[] = Array.isArray(rawSdgTags)
     ? rawSdgTags
     : typeof rawSdgTags === "string"
     ? (() => {
@@ -445,6 +461,13 @@ export function PublicationDetail() {
         }
       })()
     : ["Pending Review"];
+
+  const sdgList = parsedSdgList.filter(
+    (s): s is string => Boolean(s) && typeof s === "string" && s.trim().length > 0
+  );
+  if (sdgList.length === 0) {
+    sdgList.push("Pending Review");
+  }
 
   const rawEvidence = publication.sdg_evidence;
   let evidenceObj: any = null;
@@ -460,7 +483,8 @@ export function PublicationDetail() {
     sdgList.length === 0 ||
     sdgList.every((s) => s === "Pending Review" || s === "General Research");
 
-  const getSdgColor = (sdgName: string) => {
+  const getSdgColor = (sdgName?: string | null) => {
+    if (!sdgName || typeof sdgName !== "string") return "#10b981";
     const m = sdgName.match(/\bSDG\s*(\d{1,2})\b/i);
     if (!m) return "#10b981";
     return SDG_COLORS[`SDG ${m[1]}`] || "#10b981";
@@ -479,14 +503,16 @@ export function PublicationDetail() {
     }
   }
 
-  const getRationaleForSDG = (sdgName: string) => {
-    if (!rationalesMap) return null;
-    const extractNum = (str: string) => {
+  const getRationaleForSDG = (sdgName?: string | null) => {
+    if (!rationalesMap || !sdgName || typeof sdgName !== "string") return null;
+    const extractNum = (str?: string | null) => {
+      if (!str || typeof str !== "string") return null;
       const m = str.match(/\bSDG\s*(\d{1,2})\b/i);
       return m ? parseInt(m[1], 10) : null;
     };
     const targetNum = extractNum(sdgName);
     for (const [k, v] of Object.entries(rationalesMap)) {
+      if (!k || typeof k !== "string") continue;
       if (k === sdgName || k.toLowerCase() === sdgName.toLowerCase()) return v;
       const kNum = extractNum(k);
       if (targetNum !== null && kNum !== null && targetNum === kNum) return v;
@@ -543,14 +569,7 @@ export function PublicationDetail() {
     }
   };
 
-  const handleExportSingleExcel = () => {
-    try {
-      exportSinglePublicationToExcel(publication);
-      toast.success("Exported official 2-Sheet Excel report (Publication Sheet + Citation Sheet)!");
-    } catch (err: any) {
-      toast.error(`Excel export failed: ${err?.message || "Unknown error"}`);
-    }
-  };
+
 
   const totalFilteredCitations = filteredCitingPapers.length;
   const totalCitingPages = Math.max(
@@ -566,8 +585,8 @@ export function PublicationDetail() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Top Bar: Navigation & Export / Enrich Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Top Bar: Navigation */}
+      <div className="flex items-center justify-between gap-3">
         <Button
           variant="ghost"
           onClick={() =>
@@ -580,28 +599,6 @@ export function PublicationDetail() {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Publications
         </Button>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadData(true)}
-            disabled={refreshing}
-            className="gap-1.5 text-xs"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Enriching Metadata & Citations..." : "Refresh & Enrich Data"}
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={handleExportSingleExcel}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 text-xs font-semibold shadow-xs"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Export Paper Excel (.xlsx)
-          </Button>
-        </div>
       </div>
 
       {/* Main Publication Header Card */}
@@ -1025,18 +1022,16 @@ export function PublicationDetail() {
                 <Quote className="w-4 h-4 text-teal-600" />
                 <CardTitle className="text-sm font-bold flex items-center gap-2 flex-wrap">
                   <span>Official Citation Sheet — Papers Citing This Research ({citingPapers.length} Recorded / {publication.citations || 0} Total)</span>
-                  {citingPapers.length < (publication.citations || 0) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 px-2 text-[10px] gap-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 hover:bg-amber-500/20"
-                      onClick={() => loadData(true)}
-                      disabled={refreshing}
-                    >
-                      <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
-                      Sync Remaining Citations ({publication.citations - citingPapers.length} pending)
-                    </Button>
-                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-[10px] gap-1 border-teal-500/30 text-teal-700 dark:text-teal-300 hover:bg-teal-500/10"
+                    onClick={() => handleReloadCitation()}
+                    disabled={refreshing}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} />
+                    <span>Reload Citation</span>
+                  </Button>
                 </CardTitle>
               </div>
               <CardDescription className="text-[11px] mt-0.5">
@@ -1395,7 +1390,7 @@ export function PublicationDetail() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {publication.citations > 0
-                    ? 'Click "Refresh & Enrich Data" above or view external source to inspect citing articles.'
+                    ? 'Click "Reload Citation" above or view external source to inspect citing articles.'
                     : "When external researchers cite this paper in indexed journals, their full author list and article details will appear here automatically."}
                 </p>
               </div>

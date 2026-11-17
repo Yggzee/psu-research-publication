@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "cd618f2b-34b6-4147-a518-77fe27f282ae",
+  "status": "current",
+  "command": "deliver",
+  "type": "erd",
+  "input": "D:\\Acts\\Research\\ResPub\\.archify\\erd-core-schema-20261117-134100\\candidate.json",
+  "output": "D:\\Acts\\Research\\ResPub\\.archify\\erd-core-schema-20261117-134100\\core-schema.html",
+  "specification": {
+    "sha256": "bba58a710bcb63a9c608ff5f100b02f3831c83459b681d6db5819bb7857841e9",
+    "bytes": 11119
+  },
+  "artifact": {
+    "sha256": "5c7fe1cc711351d315febb2c7eaf8730e0155a04a0bd05ba0baef782a47e0bad",
+    "bytes": 893329
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "390b1c02-7d25-4171-b9bf-e24c4b46c65c",
+  "status": "current",
+  "command": "deliver",
+  "type": "dataflow",
+  "input": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\candidate.json",
+  "output": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\onboarding-dfd.html",
+  "specification": {
+    "sha256": "46eb497ce5870145099e0db35b2425c0068cf155bb2bd75b7fc6f6983f2d3c0a",
+    "bytes": 8013
+  },
+  "artifact": {
+    "sha256": "ebfa1f834913d510054050ce7eb50daacfc65238b69d2fabc943cf05e0bb532e",
+    "bytes": 849285
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "SOO 1": [
+    {
+      "title": "An Assessment on the Access And Use of the Institutional Repository among Users: A Case of Mbeya University of Science and Technology Library.",
+      "authors": [
+        "Leah Sylvester Makiria"
+      ],
+      "year": 2024,
+      "repo": "The Open University of Tanzania Repository (The Open University of Tanzania)",
+      "landing": "http://repository.out.ac.tz/5100/1/DISSERTATION%20LEAH%20MAKIRIA.pdf",
+      "pdf": "http://repository.out.ac.tz/5100/1/DISSERTATION%20LEAH%20MAKIRIA.pdf",
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Carving Space for Staff Agency in a Faculty of Medicine: A Foucauldian-inspired Discourse Analysis of Administrative Staff and Faculty Relations",
+      "authors": [
+        "Morag Carol Paton"
+      ],
+      "year": 2023,
+      "repo": "TSpace (University of Toronto)",
+      "landing": "http://hdl.handle.net/1807/128146",
+      "pdf": "https://utoronto.scholaris.ca/bitstreams/e27f702b-48ec-444f-8652-9492bb810a17/download",
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Long-term university research rankings based on publications in the top five economics journals",
+      "authors": [
+        "Mathew Johnson"
+      ],
+      "year": 2026,
+      "repo": "Open University of Cape Town (University of Cape Town)",
+      "landing": "http://hdl.handle.net/11427/43354",
+      "pdf": null,
+      "status_land": "HTTP/1.1 200 OK"
+    }
+  ],
+  "SOO 2": [
+    {
+      "title": "Custom Named Construct Recognition in the Business and Management Literature",
+      "authors": [
+        "Abhijeet Bhattacharya"
+      ],
+      "year": 2023,
+      "repo": "Carleton University's Institutional Repository (MacOdrum Library, Carleton University)",
+      "landing": "https://doi.org/10.22215/etd/2023-15467",
+      "pdf": "http://repository.library.carleton.ca/downloads/8336h3013",
+      "status_land": "HTTP/1.1 200 OK"
+    }
+  ],
+  "SOO 3": [
+    {
+      "title": "Automated Extraction and Curation of Materials Information from Scientific Literature",
+      "authors": [
+        "Luca Foppiano"
+      ],
+      "year": 2023,
+      "repo": "HAL",
+      "landing": "https://hal.science/tel-04465467",
+      "pdf": "https://hal.science/tel-04465467/document",
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Automatic Classification of Purpose of software usages in scholarly articles",
+      "authors": [
+        "Bekalue Tadesse Kobro"
+      ],
+      "year": 2022,
+      "repo": "Zenodo (CERN European Organization for Nuclear Research)",
+      "landing": "https://doi.org/10.5281/zenodo.6509907",
+      "pdf": null,
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Citation behavior patterns and sentiments towards retracted articles: a comparison of pre- and post-retraction citations",
+      "authors": [
+        "Kathleen Joan Padova",
+        "Erjia Yan"
+      ],
+      "year": 2021,
+      "repo": "iDEA - Drexel University Institutional Repository",
+      "landing": "https://doi.org/10.17918/00000893",
+      "pdf": null,
+      "status_land": "HTTP/1.1 200"
+    }
+  ],
+  "SOO 4": [
+    {
+      "title": "Comparisons of different software development lifecycles",
+      "authors": [
+        "Miha Grubelnik"
+      ],
+      "year": 2025,
+      "repo": "University of Maribor digital library (University of Maribor)",
+      "landing": "https://dk.um.si/IzpisGradiva.php?id=91998",
+      "pdf": "https://dk.um.si/Dokument.php?id=189390&dn=",
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Generative AI in Software Development: Developing an ordering system using ChatGPT and GitHub Copilot",
+      "authors": [
+        "Leevi Saarinen"
+      ],
+      "year": 2024,
+      "repo": "Tampere University Institutional Repository (Tampere University)",
+      "landing": "https://trepo.tuni.fi/handle/10024/160928",
+      "pdf": "https://trepo.tuni.fi/bitstream/10024/160928/2/SaarinenLeevi.pdf",
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Design and Assessment of DevSecOps exercise for Secure Software Development Education",
+      "authors": [
+        "Md. Musfiqur Rahman Milton"
+      ],
+      "year": 2025,
+      "repo": "Tampere University Institutional Repository (Tampere University)",
+      "landing": "https://trepo.tuni.fi/handle/10024/228239",
+      "pdf": "https://trepo.tuni.fi/bitstream/10024/228239/2/MiltonMdMusfiqurRahman.pdf",
+      "status_land": "HTTP/1.1 200 OK"
+    }
+  ],
+  "SOO 5": [
+    {
+      "title": "Design and Evaluation of a Software Tool for Foreign Language Learning",
+      "authors": [
+        "D. A. Lukov",
+        "O. M. Khoshaba"
+      ],
+      "year": 2025,
+      "repo": "Repository of Vinnytsia National Technical University (Vinnytsia National Technical University)",
+      "landing": "https://ir.lib.vntu.edu.ua/handle/123456789/50173",
+      "pdf": "https://ir.lib.vntu.edu.ua/bitstream/123456789/50173/2/189176.pdf",
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Exploring the Software Quality Maze: Detecting Scattered and Tangled Crosscutting Quality Concerns in Source Code in Support of Maintenance Tasks",
+      "authors": [
+        "Rrezarta Krasniqi"
+      ],
+      "year": 2024,
+      "repo": "University of North Texas Digital Library (University of North Texas)",
+      "landing": "https://doi.org/10.12794/metadc2332577",
+      "pdf": null,
+      "status_land": "HTTP/1.1 200 OK"
+    },
+    {
+      "title": "Analysis of the quality of prototype software solutions developed with the help of artificial intelligence",
+      "authors": [
+        "Peter Vezjak"
+      ],
+      "year": 2026,
+      "repo": "University of Maribor digital library (University of Maribor)",
+      "landing": "https://dk.um.si/IzpisGradiva.php?id=98183",
+      "pdf": "https://dk.um.si/Dokument.php?id=207402&dn=",
+      "status_land": "HTTP/1.1 200 OK"
+    }
+  ]
+}

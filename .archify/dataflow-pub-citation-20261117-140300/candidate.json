@@ -1,0 +1,265 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Publication & Citation Harvesting Data Flow",
+    "subtitle": "Streamlined 5-Stage Core Pipeline • OpenAlex, CrossRef, Google Scholar to RDO Excel Reports",
+    "locale": "en",
+    "output": ".archify/dataflow-pub-citation-20261117-140300/pub-citation-dfd.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Yggzee/psu-research-publication.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "6d13895dca5d7ff9ebe1493d6d4dc9030b40b7a0"
+    },
+    "views": [
+      {
+        "id": "ingest-enrich",
+        "label": "Harvest & Attribution",
+        "focus": ["external_sources", "researcher_ui", "harvester", "pub_api", "citation_sync", "sdg_classifier"],
+        "note": "Multi-source lookup, deduplication, author-exclusive matching, and 1:1 Focus SDG mapping."
+      },
+      {
+        "id": "store-consume",
+        "label": "Persistence & Export",
+        "focus": ["sqlite_db", "turso_cloud", "analytics_ui", "excel_export"],
+        "note": "Dual SQLite/Turso replication feeding executive dashboards, SDG Alignment, and RDO Excel reports."
+      }
+    ]
+  },
+  "stages": [
+    { "label": "Sources" },
+    { "label": "Ingest" },
+    { "label": "Enrich & Attribute" },
+    { "label": "Store" },
+    { "label": "Consume & Export" }
+  ],
+  "nodes": [
+    {
+      "id": "external_sources",
+      "type": "external",
+      "label": "Academic Indexes",
+      "sublabel": "OpenAlex, CrossRef, Scholar",
+      "tag": "External APIs",
+      "stage": 0,
+      "row": 0,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 3662, "end_line": 3670, "label": "scholar search API" }
+      ]
+    },
+    {
+      "id": "researcher_ui",
+      "type": "frontend",
+      "label": "Researcher Portal",
+      "sublabel": "Search, DOI & Manual Add",
+      "tag": "Web Client",
+      "stage": 0,
+      "row": 2,
+      "sources": [
+        { "path": "src/app/routes.tsx", "line": 166, "end_line": 176, "label": "search & pub routes" }
+      ]
+    },
+    {
+      "id": "harvester",
+      "type": "cloud",
+      "label": "Citation Harvester",
+      "sublabel": "Multi-source lookup & parse",
+      "tag": "Retrieval",
+      "stage": 1,
+      "row": 0,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 3219, "end_line": 3250, "label": "fetch-profile route" },
+        { "path": "src/server/apiHandler.mjs", "line": 3387, "end_line": 3408, "label": "scholar import route" }
+      ]
+    },
+    {
+      "id": "pub_api",
+      "type": "backend",
+      "label": "Publications API",
+      "sublabel": "Validate & deduplicate",
+      "tag": "REST Ingest",
+      "stage": 1,
+      "row": 2,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 2852, "end_line": 2870, "label": "POST /publications" },
+        { "path": "src/server/apiHandler.mjs", "line": 2924, "end_line": 2943, "label": "title deduplication" }
+      ]
+    },
+    {
+      "id": "citation_sync",
+      "type": "backend",
+      "label": "Attribution Engine",
+      "sublabel": "Author match & cite sync",
+      "tag": "Normalization",
+      "stage": 2,
+      "row": 0,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 588, "end_line": 616, "label": "author reattribution" },
+        { "path": "src/server/db.mjs", "line": 628, "end_line": 646, "label": "citation sync" }
+      ]
+    },
+    {
+      "id": "sdg_classifier",
+      "type": "backend",
+      "label": "SDG Classifier",
+      "sublabel": "1:1 Focus SDG & CrossRef",
+      "tag": "Classification",
+      "stage": 2,
+      "row": 2,
+      "sources": [
+        { "path": "src/server/aiService.mjs", "line": 1138, "end_line": 1170, "label": "classifyPublicationSDG" },
+        { "path": "src/server/apiHandler.mjs", "line": 2969, "end_line": 2997, "label": "SDG & CrossRef enrich" }
+      ]
+    },
+    {
+      "id": "sqlite_db",
+      "type": "database",
+      "label": "SQLite Repository",
+      "sublabel": "publications & citing_papers",
+      "tag": "Local WAL",
+      "stage": 3,
+      "row": 1,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 131, "end_line": 151, "label": "publications table" },
+        { "path": "src/server/db.mjs", "line": 237, "end_line": 262, "label": "trends & citing tables" }
+      ]
+    },
+    {
+      "id": "turso_cloud",
+      "type": "database",
+      "label": "Turso Cloud SQLite",
+      "sublabel": "Replicated cloud store",
+      "tag": "Cloud Sync",
+      "stage": 3,
+      "row": 2,
+      "sources": [
+        { "path": "src/server/turso.mjs", "line": 47, "end_line": 74, "label": "Turso replication" },
+        { "path": "src/server/db.mjs", "line": 40, "end_line": 56, "label": "prepare write hook" }
+      ]
+    },
+    {
+      "id": "analytics_ui",
+      "type": "frontend",
+      "label": "Impact & SDG Views",
+      "sublabel": "Dashboard, h-index & SDG Goals",
+      "tag": "Analytics UI",
+      "stage": 4,
+      "row": 0,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 1771, "end_line": 1800, "label": "dashboard stats" },
+        { "path": "src/server/apiHandler.mjs", "line": 5198, "end_line": 5220, "label": "SDG alignment stats" }
+      ]
+    },
+    {
+      "id": "excel_export",
+      "type": "frontend",
+      "label": "RDO Excel Studio",
+      "sublabel": "Publication & Citation sheets",
+      "tag": "Export",
+      "stage": 4,
+      "row": 2,
+      "sources": [
+        { "path": "src/app/utils/excelExportUtils.ts", "line": 187, "end_line": 210, "label": "Publication sheet" },
+        { "path": "src/app/utils/excelExportUtils.ts", "line": 324, "end_line": 350, "label": "Citation sheet" }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "ext-to-harvester",
+      "from": "external_sources",
+      "to": "harvester",
+      "label": "works + cites",
+      "variant": "default"
+    },
+    {
+      "id": "ui-to-harvester",
+      "from": "researcher_ui",
+      "to": "harvester",
+      "label": "author query",
+      "variant": "default"
+    },
+    {
+      "id": "ui-to-pubapi",
+      "from": "researcher_ui",
+      "to": "pub_api",
+      "label": "DOI / manual pub",
+      "variant": "emphasis"
+    },
+    {
+      "id": "harvester-to-sync",
+      "from": "harvester",
+      "to": "citation_sync",
+      "label": "citing metadata",
+      "variant": "default"
+    },
+    {
+      "id": "harvester-to-pubapi",
+      "from": "harvester",
+      "to": "pub_api",
+      "label": "parsed import",
+      "variant": "emphasis"
+    },
+    {
+      "id": "pubapi-to-sdg",
+      "from": "pub_api",
+      "to": "sdg_classifier",
+      "label": "deduped record",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sync-to-sqlite",
+      "from": "citation_sync",
+      "to": "sqlite_db",
+      "label": "owner + citing rows",
+      "variant": "default"
+    },
+    {
+      "id": "sdg-to-sqlite",
+      "from": "sdg_classifier",
+      "to": "sqlite_db",
+      "label": "SDG + enriched pub",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sqlite-to-turso",
+      "from": "sqlite_db",
+      "to": "turso_cloud",
+      "label": "async batch sync",
+      "variant": "dashed"
+    },
+    {
+      "id": "sqlite-to-analytics",
+      "from": "sqlite_db",
+      "to": "analytics_ui",
+      "label": "metrics + SDG data",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sqlite-to-excel",
+      "from": "sqlite_db",
+      "to": "excel_export",
+      "label": "verified records",
+      "variant": "default"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Streamlined Lineage",
+      "items": [
+        "Follows scholarly metadata from external APIs and researcher submissions to structured reporting.",
+        "Dedupes titles and normalizes author attribution before writing to local SQLite and Turso Cloud."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Outputs & Exports",
+      "items": [
+        "Dashboards render citation velocity, h-index, and 1:1 Focus SDG Alignment charts.",
+        "Export Studio generates RDO-compliant Publication (8-col) and Citation (16-col) Excel sheets."
+      ]
+    }
+  ]
+}

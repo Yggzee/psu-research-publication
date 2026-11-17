@@ -207,7 +207,7 @@ export function ScholarImportModal({
           <DialogDescription>
             Fetch and review verified publications for{" "}
             <span className="font-semibold text-gray-900">{researcherName}</span> (ID:{" "}
-            {instructorId}). Select publications to permanently record in SQLite.
+            {instructorId}). Select publications to record in SQLite. Non-admin imports require Research Coordinator review and approval (pending status) before appearing in the institutional repository.
           </DialogDescription>
         </DialogHeader>
 

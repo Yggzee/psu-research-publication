@@ -1,0 +1,48 @@
+{
+  "SOO4": [
+    {
+      "soo": "SOO4",
+      "title": "Structured software development versus agile software development: a comparative analysis",
+      "authors": [
+        "Alok Mishra",
+        "Yehia Ibrahim Alzoubi"
+      ],
+      "year": 2023,
+      "journal": "International Journal of Systems Assurance Engineering and Management",
+      "doi": "https://doi.org/10.1007/s13198-023-01958-5",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s13198-023-01958-5.pdf",
+      "local_pdf": "RRL_SOO4_Mishra2023_Structuredsoftwaredevel.pdf",
+      "size_kb": 809
+    },
+    {
+      "soo": "SOO4",
+      "title": "Transition from Waterfall to Agile Methodology - An Action Research Study",
+      "authors": [
+        "Thamizhiniyan Natarajan",
+        "Shanmugavadivu Pichai"
+      ],
+      "year": 2024,
+      "journal": "IEEE Access",
+      "doi": "https://doi.org/10.1109/access.2024.3384097",
+      "pdf_url": "https://ieeexplore.ieee.org/ielx7/6287639/6514899/10488855.pdf",
+      "local_pdf": "RRL_SOO4_Natarajan2024_TransitionfromWaterfall.pdf",
+      "size_kb": 891
+    },
+    {
+      "soo": "SOO4",
+      "title": "A teamwork effectiveness model for agile software development",
+      "authors": [
+        "Diane E. Strode",
+        "Torgeir Dings\u00f8yr",
+        "Yngve Lindsj\u00f8rn"
+      ],
+      "year": 2022,
+      "journal": "Empirical Software Engineering",
+      "doi": "https://doi.org/10.1007/s10664-021-10115-0",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s10664-021-10115-0.pdf",
+      "local_pdf": "RRL_SOO4_Strode2022_Ateamworkeffectiveness.pdf",
+      "size_kb": 970
+    }
+  ],
+  "SOO5": []
+}

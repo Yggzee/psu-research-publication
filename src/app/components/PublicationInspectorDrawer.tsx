@@ -11,7 +11,6 @@ import {
   BookOpen,
   Quote,
   ArrowUpRight,
-  FileSpreadsheet,
   User,
   AlertTriangle,
 } from "lucide-react";
@@ -19,7 +18,6 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { apiService } from "../services/api.service";
-import { exportSinglePublicationToExcel } from "../utils/excelExportUtils";
 import { toast } from "sonner";
 
 export interface InspectedPublication {
@@ -96,7 +94,7 @@ export function PublicationInspectorDrawer({
 
   // Format SDGs safely
   const rawSdgTags = publication.sdg_tags || publication.sdgTags;
-  const sdgList: string[] = Array.isArray(rawSdgTags)
+  const parsedSdgList: string[] = Array.isArray(rawSdgTags)
     ? rawSdgTags
     : typeof rawSdgTags === "string"
     ? (() => {
@@ -108,6 +106,13 @@ export function PublicationInspectorDrawer({
         }
       })()
     : ["Pending Review"];
+
+  const sdgList = parsedSdgList.filter(
+    (s): s is string => Boolean(s) && typeof s === "string" && s.trim().length > 0
+  );
+  if (sdgList.length === 0) {
+    sdgList.push("Pending Review");
+  }
 
   const isPendingReview =
     sdgList.length === 0 ||
@@ -124,14 +129,16 @@ export function PublicationInspectorDrawer({
     } catch {}
   }
 
-  const getRationaleForSDG = (sdgName: string) => {
-    if (!rationalesMap) return null;
-    const extractNum = (str: string) => {
+  const getRationaleForSDG = (sdgName?: string | null) => {
+    if (!rationalesMap || !sdgName || typeof sdgName !== "string") return null;
+    const extractNum = (str?: string | null) => {
+      if (!str || typeof str !== "string") return null;
       const m = str.match(/\bSDG\s*(\d{1,2})\b/i);
       return m ? parseInt(m[1], 10) : null;
     };
     const targetNum = extractNum(sdgName);
     for (const [k, v] of Object.entries(rationalesMap)) {
+      if (!k || typeof k !== "string") continue;
       if (k === sdgName || k.toLowerCase() === sdgName.toLowerCase()) return v;
       const kNum = extractNum(k);
       if (targetNum !== null && kNum !== null && targetNum === kNum) return v;
@@ -191,14 +198,7 @@ export function PublicationInspectorDrawer({
     navigate(`/dashboard/publication/${encodeURIComponent(publication.id)}`);
   };
 
-  const handleExportPaperExcel = () => {
-    try {
-      exportSinglePublicationToExcel(publication);
-      toast.success("Exported official 2-sheet Excel report (Publication Sheet + Citation Sheet)!");
-    } catch (err: any) {
-      toast.error(`Excel export failed: ${err?.message || "Unknown error"}`);
-    }
-  };
+
 
   const assignedResearcher = publication.owner_name || publication.ownerName;
   const citedByUrl = publication.cited_by_link || publication.citedByLink;
@@ -246,23 +246,15 @@ export function PublicationInspectorDrawer({
             </Button>
           </div>
 
-          {/* Primary Actions: Open Full Paper & Direct Excel Export */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Primary Action: Open Full Paper */}
+          <div>
             <Button
               onClick={handleOpenFullPaper}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-10 gap-2 shadow-xs"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-10 gap-2 shadow-xs"
             >
               <FileText className="h-4 w-4" />
               <span>Full Paper & Citations</span>
               <ArrowUpRight className="h-4 w-4 ml-auto" />
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleExportPaperExcel}
-              className="border-emerald-600/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-semibold text-xs h-10 gap-2 shadow-xs"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Export Paper (.xlsx)</span>
             </Button>
           </div>
         </div>

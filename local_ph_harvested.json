@@ -1,0 +1,81 @@
+{
+  "SOO1": {
+    "title": "Evaluating the research productivity of a state university in Central Luzon, Philippines: Basis for policy recommendations",
+    "authors": [
+      "Danilo V. Rogayan",
+      "Luz N. Corpuz"
+    ],
+    "year": 2022,
+    "institution": "President Ramon Magsaysay State University (PRMSU)",
+    "journal": "International Journal of Evaluation and Research in Education (IJERE)",
+    "doi": "https://doi.org/10.11591/ijere.v11i1.22099",
+    "pdf_url": "https://ijere.iaescore.com/index.php/IJERE/article/download/22099/13264",
+    "rrl_filename": "RRL_SOO1_Local_Rogayan2022_EvaluatingtheResearch.pdf",
+    "rrs_filename": "RRS_SOO1_Local_Rogayan2022_EvaluatingtheResearch.pdf",
+    "soo_rationale": "Directly analyzes faculty research productivity metrics, publication outputs, and institutional monitoring policies in a Philippine State University, providing localized empirical benchmarks for PSU Asingan.",
+    "size_kb": 262
+  },
+  "SOO2": {
+    "title": "Digital Learning Policies and Library Governance: A Comparative Policy Analysis of CHED and DepEd Initiatives in the Philippines",
+    "authors": [
+      "Maria Teresa S. Salcedo",
+      "Ramon C. Castillo"
+    ],
+    "year": 2026,
+    "institution": "Philippine Normal University / Commission on Higher Education (CHED)",
+    "journal": "International Journal For Multidisciplinary Research (IJFMR)",
+    "doi": "https://doi.org/10.36948/ijfmr.2026.v08i04.83521",
+    "pdf_url": "https://www.ijfmr.com/papers/2026/4/83521.pdf",
+    "rrl_filename": "RRL_SOO2_Local_Salcedo2026_DigitalLearningPolicies.pdf",
+    "rrs_filename": "RRS_SOO2_Local_Salcedo2026_DigitalLearningPolicies.pdf",
+    "soo_rationale": "Investigates national Philippine digital repository governance, scholarly indexing standards, and institutional author identity metadata compliant with CHED institutional tracking criteria.",
+    "size_kb": 582
+  },
+  "SOO3": {
+    "title": "Integrating sustainable development goals in Philippine higher education: Research agendas and community engagement",
+    "authors": [
+      "Daisy R. Palompon",
+      "Monique Cordova"
+    ],
+    "year": 2024,
+    "institution": "Cebu Normal University (CNU)",
+    "journal": "Frontiers in Education",
+    "doi": "https://doi.org/10.3389/feduc.2024.1330034",
+    "pdf_url": "https://www.frontiersin.org/articles/10.3389/feduc.2024.1330034/pdf?isPublishedV2=False",
+    "rrl_filename": "RRL_SOO3_Local_Palompon2024_IntegratingSustainable.pdf",
+    "rrs_filename": "RRS_SOO3_Local_Palompon2024_IntegratingSustainable.pdf",
+    "soo_rationale": "Examines the concrete operationalization of the UN Sustainable Development Goals (SDGs) within Philippine state colleges and universities, validating PSU Asingan\u2019s SDG research alignment module.",
+    "size_kb": 242
+  },
+  "SOO4": {
+    "title": "MediCord: A Web-Based Health Record Management System Using Agile Software Development Lifecycle",
+    "authors": [
+      "Renz M. Bautista",
+      "Kenneth C. Ramos",
+      "Arnel C. Fajardo"
+    ],
+    "year": 2022,
+    "institution": "Nueva Ecija University of Science and Technology (NEUST)",
+    "journal": "Journal of Humanities, Technologies and Social Sciences",
+    "doi": "https://doi.org/10.55529/jhtd25.35.45",
+    "pdf_url": "http://journal.hmjournals.com/index.php/JHTD/article/download/123/112",
+    "rrl_filename": "RRL_SOO4_Local_Bautista2022_MediCordAWebBasedSystem.pdf",
+    "rrs_filename": "RRS_SOO4_Local_Bautista2022_MediCordAWebBasedSystem.pdf",
+    "soo_rationale": "Provides local architectural and agile development lifecycle documentation for engineering responsive web-based management platforms in Central Luzon state university settings."
+  },
+  "SOO5": {
+    "title": "Empowering Bantayan Island Through a Centralized Digital Repository: An Evaluation Using ISO/IEC 25010 and UTAUT",
+    "authors": [
+      "Mary Jane C. Ilustrisimo",
+      "Reynaldo R. Inocian"
+    ],
+    "year": 2026,
+    "institution": "Cebu Technological University (CTU)",
+    "journal": "International Journal of Educational Research and Interdisciplinary Studies",
+    "doi": "https://doi.org/10.5281/zenodo.19429378",
+    "pdf_url": "https://ijerip.erio.org.ph/index.php/articles/article/download/43/39",
+    "rrl_filename": "RRL_SOO5_Local_Ilustrisimo2026_EmpoweringBantayanIsland.pdf",
+    "rrs_filename": "RRS_SOO5_Local_Ilustrisimo2026_EmpoweringBantayanIsland.pdf",
+    "soo_rationale": "Conducts rigorous software quality evaluation using the ISO/IEC 25010 international standard (functional suitability, performance, usability) in a Philippine university deployed web system."
+  }
+}

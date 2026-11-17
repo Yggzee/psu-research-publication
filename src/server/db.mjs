@@ -20,7 +20,7 @@ if (fs.existsSync(rootEnvPath) && typeof process.loadEnvFile === 'function') {
 }
 
 // Ensure data directory exists (support custom mount via DATA_DIR)
-const dataDir = process.env.DATA_DIR || path.resolve(__dirname, '../../data');
+export const dataDir = process.env.DATA_DIR || path.resolve(__dirname, '../../data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
@@ -37,6 +37,7 @@ let pendingTursoBatch = [];
 
 // Wrap db.prepare to replicate write queries to Turso Cloud SQLite automatically
 const originalPrepare = db.prepare.bind(db);
+export const rawPrepare = originalPrepare;
 db.prepare = (sql) => {
   const statement = originalPrepare(sql);
   const originalRun = statement.run.bind(statement);
@@ -400,6 +401,49 @@ export function initDatabase() {
     );
   `);
 
+  // 13. Publication-Researchers Join Table (Many-to-Many Ownership & Co-Author Approval State)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS publication_researchers (
+      publication_id TEXT NOT NULL,
+      instructor_id TEXT NOT NULL,
+      approval_status TEXT NOT NULL DEFAULT 'approved',
+      assigned_by TEXT DEFAULT 'system',
+      claim_source TEXT DEFAULT 'manual',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (publication_id, instructor_id),
+      FOREIGN KEY (publication_id) REFERENCES publications(id) ON DELETE CASCADE
+    );
+  `);
+  try { db.exec(`ALTER TABLE publication_researchers ADD COLUMN claim_source TEXT DEFAULT 'manual'`); } catch { }
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_pub_researchers_inst ON publication_researchers(instructor_id, approval_status);
+      CREATE INDEX IF NOT EXISTS idx_pub_researchers_pub ON publication_researchers(publication_id, approval_status);
+    `);
+  } catch { }
+
+  // 14. Database Backups Table (Automated 12:00 AM Asia/Manila & Manual Snapshots)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS db_backups (
+      id TEXT PRIMARY KEY,
+      backup_type TEXT NOT NULL DEFAULT 'manual',
+      manila_date TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      table_counts_json TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      created_by TEXT DEFAULT 'system',
+      local_path TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_db_backups_type_date ON db_backups(backup_type, manila_date);
+      CREATE INDEX IF NOT EXISTS idx_db_backups_created ON db_backups(created_at DESC);
+    `);
+  } catch { }
+
   // Seed default system settings if missing
   const initSetting = (key, defaultValue) => {
     const existing = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key);
@@ -422,14 +466,15 @@ export function initDatabase() {
   const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' LIMIT 1").get();
   if (!existingAdmin) {
     db.prepare(`
-      INSERT OR IGNORE INTO users (id, username, email, password, name, role, department, is_faculty, scholar_url, google_scholar_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO users (id, username, email, password, name, middle_initial, role, department, is_faculty, scholar_url, google_scholar_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       'admin-1',
       adminUsername,
       'rodeliogarin@gmail.com',
       'ENV_MANAGED',
       'Rodelio M. Garin',
+      'M.',
       'admin',
       'BSE',
       1,
@@ -453,6 +498,16 @@ export function initDatabase() {
       console.warn('[Admin Upgrade Error]:', e.message);
     }
   }
+
+  try {
+    db.prepare(`
+      UPDATE users
+      SET middle_initial = 'M.'
+      WHERE id = 'admin-1'
+        AND (middle_initial IS NULL OR TRIM(middle_initial) = '')
+        AND name LIKE '% M. %'
+    `).run();
+  } catch { }
 
   // Delete duplicate orphaned test account from earlier experiments
   try {
@@ -488,15 +543,126 @@ export function initDatabase() {
 
   // Upgrade any plaintext researcher passwords to salted scrypt hashes
   migrateResearcherPasswordsToScrypt(db);
-  // Re-attribute publications based strictly on verified author names (decoupling from generic uploader IDs)
-  reattributePublicationsByAuthorName();
+  // Repair any legacy split middle initials (e.g., first_name: 'Rodelio M.', middle_initial: null)
+  repairSplitMiddleInitials(db);
   // Purge any stale scraped profile cache so verified Google Scholar author arrays populate cleanly
   try {
     db.prepare("DELETE FROM scraped_publications WHERE id LIKE 'gsp-%'").run();
   } catch {}
-  // Call on startup audit to recalibrate any inflated citation counts
-  auditAndSyncResearcherCitations();
-  autoBackfillMissingSDGs();
+  if (!isTursoConfigured) {
+    backfillPublicationResearchers(db);
+    reattributePublicationsByAuthorName(db);
+    auditAndSyncResearcherCitations(db);
+    autoBackfillMissingSDGs();
+  }
+}
+
+/**
+ * One-time / idempotent repair for researchers whose middle initial was stored at the end of first_name
+ * (e.g., first_name = 'Rodelio M.', middle_initial = NULL -> first_name = 'Rodelio', middle_initial = 'M.')
+ */
+export function repairSplitMiddleInitials(dbInstance = db) {
+  try {
+    const rows = dbInstance.prepare(`
+      SELECT id, user_id, first_name, last_name, middle_initial, name
+      FROM researchers
+      WHERE middle_initial IS NULL OR TRIM(middle_initial) = ''
+    `).all();
+
+    let fixed = 0;
+    for (const r of rows) {
+      const firstRaw = String(r.first_name || '').trim();
+      const m = firstRaw.match(/^(.+?)\s+([A-Za-z]\.?)$/);
+      if (!m) continue;
+      const cleanFirst = m[1].trim();
+      const rawMi = m[2].trim();
+      const cleanMi = rawMi.endsWith('.') ? rawMi : `${rawMi}.`;
+      if (!cleanFirst) continue;
+
+      const fullName = r.last_name
+        ? `${cleanFirst} ${cleanMi} ${String(r.last_name).trim()}`
+        : (r.name || cleanFirst);
+
+      dbInstance.prepare(`
+        UPDATE researchers
+        SET first_name = ?, middle_initial = ?, name = ?
+        WHERE id = ?
+      `).run(cleanFirst, cleanMi, fullName, r.id);
+
+      if (r.user_id) {
+        dbInstance.prepare(`
+          UPDATE users
+          SET middle_initial = COALESCE(NULLIF(TRIM(middle_initial), ''), ?),
+              name = ?
+          WHERE id = ?
+        `).run(cleanMi, fullName, r.user_id);
+      }
+      fixed++;
+    }
+    if (fixed > 0) {
+      console.log(`[Profile Repair] Separated trailing middle initial for ${fixed} researcher record(s).`);
+    }
+  } catch (err) {
+    console.warn('[Profile Repair Error]:', err.message);
+  }
+}
+
+/**
+ * One-time idempotent backfill of the publication_researchers join table from legacy publications rows.
+ * Guarded by system_settings key 'pub_researchers_backfilled' = '1' so unassigned papers are never re-attached.
+ */
+export function backfillPublicationResearchers(dbInstance = db) {
+  try {
+    const flag = dbInstance.prepare("SELECT value FROM system_settings WHERE key = 'pub_researchers_backfilled'").get();
+    if (flag?.value === '1') return;
+
+    const researchers = dbInstance.prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'").all();
+    const publications = dbInstance.prepare('SELECT * FROM publications').all();
+    const now = new Date().toISOString();
+
+    const insertLink = dbInstance.prepare(`
+      INSERT OR IGNORE INTO publication_researchers (
+        publication_id, instructor_id, approval_status, assigned_by, claim_source, created_at
+      ) VALUES (?, ?, ?, 'backfill', ?, ?)
+    `);
+
+    const executeBackfill = () => {
+      for (const pub of publications) {
+        const linkStatus = pub.approval_status === 'approved'
+          ? 'approved'
+          : (pub.approval_status === 'rejected' ? 'rejected' : 'pending');
+        const claimSource = pub.source || 'manual';
+        const pOwnerId = (pub.owner_id || '').trim().toLowerCase();
+
+        for (const r of researchers) {
+          const rInstId = (r.instructor_id || '').trim().toLowerCase();
+          const rId = (r.id || '').trim().toLowerCase();
+          const rUserId = (r.user_id || '').trim().toLowerCase();
+          const isExplicitOwner = Boolean(
+            pOwnerId && (pOwnerId === rInstId || pOwnerId === rId || (rUserId && pOwnerId === rUserId))
+          );
+          if (isExplicitOwner || matchesResearcher(pub, r)) {
+            insertLink.run(pub.id, r.instructor_id, linkStatus, claimSource, pub.created_at || now);
+          }
+        }
+      }
+
+      dbInstance.prepare(`
+        INSERT INTO system_settings (key, value, updated_at)
+        VALUES ('pub_researchers_backfilled', '1', ?)
+        ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = excluded.updated_at
+      `).run(now);
+    };
+
+    if (dbInstance === db) {
+      runInTransaction(executeBackfill);
+    } else {
+      executeBackfill();
+    }
+    console.log(`[Backfill] Populated publication_researchers for ${publications.length} publication(s).`);
+  } catch (err) {
+    console.warn('[Backfill publication_researchers Error]:', err.message);
+  }
 }
 
 /**
@@ -585,10 +751,43 @@ export function autoBackfillMissingSDGs() {
  * Re-attribute all publications in database based strictly on verified author names,
  * purging any false ownership stamps caused by uploader/import shortcuts.
  */
-export function reattributePublicationsByAuthorName() {
+export function reattributePublicationsByAuthorName(dbInstance = db) {
   try {
-    const researchers = db.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
-    const publications = db.prepare("SELECT id, title, authors, owner_id, owner_name FROM publications").all();
+    const backfilled = dbInstance.prepare("SELECT value FROM system_settings WHERE key = 'pub_researchers_backfilled'").get()?.value === '1';
+    if (backfilled) {
+      // Once publication_researchers is backfilled, NEVER re-attach via matchesResearcher;
+      // only align owner_id/owner_name with an existing linked researcher in publication_researchers.
+      const publications = dbInstance.prepare('SELECT id, owner_id, owner_name FROM publications').all();
+      const getLinks = dbInstance.prepare(`
+        SELECT pr.instructor_id, r.name
+        FROM publication_researchers pr
+        JOIN researchers r ON LOWER(r.instructor_id) = LOWER(pr.instructor_id)
+        WHERE pr.publication_id = ?
+          AND (r.status IS NULL OR r.status != 'rejected')
+        ORDER BY CASE WHEN pr.approval_status = 'approved' THEN 0 ELSE 1 END, pr.created_at ASC
+      `);
+      let aligned = 0;
+      for (const pub of publications) {
+        const links = getLinks.all(pub.id);
+        if (links.length === 0) continue;
+        const ownerValid = links.some((l) => String(l.instructor_id).toLowerCase() === String(pub.owner_id || '').toLowerCase());
+        if (!ownerValid) {
+          dbInstance.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE id = ?').run(
+            links[0].instructor_id,
+            links[0].name,
+            pub.id
+          );
+          aligned++;
+        }
+      }
+      if (aligned > 0) {
+        console.log(`[Reattribution] Aligned ${aligned} publication owner(s) to publication_researchers.`);
+      }
+      return;
+    }
+
+    const researchers = dbInstance.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
+    const publications = dbInstance.prepare("SELECT id, title, authors, owner_id, owner_name FROM publications").all();
 
     let reattributedCount = 0;
     for (const pub of publications) {
@@ -602,7 +801,7 @@ export function reattributePublicationsByAuthorName() {
 
       if (matchingResearcher) {
         if (pub.owner_id !== matchingResearcher.instructor_id || pub.owner_name !== matchingResearcher.name) {
-          db.prepare("UPDATE publications SET owner_id = ?, owner_name = ? WHERE id = ?").run(
+          dbInstance.prepare("UPDATE publications SET owner_id = ?, owner_name = ? WHERE id = ?").run(
             matchingResearcher.instructor_id,
             matchingResearcher.name,
             pub.id
@@ -610,7 +809,7 @@ export function reattributePublicationsByAuthorName() {
           reattributedCount++;
         }
       } else if (pub.owner_id === 'admin' || pub.owner_id === 'instructor') {
-        db.prepare("UPDATE publications SET owner_id = NULL, owner_name = NULL WHERE id = ?").run(pub.id);
+        dbInstance.prepare("UPDATE publications SET owner_id = NULL, owner_name = NULL WHERE id = ?").run(pub.id);
         reattributedCount++;
       }
     }
@@ -625,17 +824,43 @@ export function reattributePublicationsByAuthorName() {
 /**
  * Recalculate publication counts and citation sums for all researchers using strict attribution
  */
-export function auditAndSyncResearcherCitations() {
+export function auditAndSyncResearcherCitations(dbInstance = db) {
   try {
-    const researchers = db.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
-    const allApproved = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
+    const backfilled = dbInstance.prepare("SELECT value FROM system_settings WHERE key = 'pub_researchers_backfilled'").get()?.value === '1';
+    const researchers = dbInstance.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
+
+    if (backfilled) {
+      const countStmt = dbInstance.prepare(`
+        SELECT COUNT(DISTINCT p.id) AS pubCount, COALESCE(SUM(p.citations), 0) AS citCount
+        FROM publication_researchers pr
+        JOIN publications p ON p.id = pr.publication_id
+        WHERE LOWER(pr.instructor_id) = LOWER(?)
+          AND pr.approval_status = 'approved'
+          AND p.approval_status = 'approved'
+      `);
+      for (const r of researchers) {
+        const row = countStmt.get(r.instructor_id) || { pubCount: 0, citCount: 0 };
+        const pubCount = Number(row.pubCount) || 0;
+        const citCount = Number(row.citCount) || 0;
+        if (r.total_publications !== pubCount || r.total_citations !== citCount) {
+          dbInstance.prepare(`
+            UPDATE researchers
+            SET total_publications = ?, total_citations = ?
+            WHERE id = ?
+          `).run(pubCount, citCount, r.id);
+        }
+      }
+      return;
+    }
+
+    const allApproved = dbInstance.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
 
     for (const r of researchers) {
       const matching = allApproved.filter((p) => matchesResearcher(p, r));
       const pubCount = matching.length;
       const citCount = matching.reduce((sum, p) => sum + (p.citations || 0), 0);
       if (r.total_publications !== pubCount || r.total_citations !== citCount) {
-        db.prepare(`
+        dbInstance.prepare(`
           UPDATE researchers
           SET total_publications = ?, total_citations = ?
           WHERE id = ?
@@ -648,6 +873,19 @@ export function auditAndSyncResearcherCitations() {
   }
 }
 
+/**
+ * Deletes a publication and all dependent child records (citing_papers,
+ * citation_trends, publication_researchers) using .prepare().run() so
+ * Turso Cloud replication stays in sync.
+ */
+export function deletePublicationCascade(pubId, dbInstance = db) {
+  if (!pubId) return;
+  dbInstance.prepare('DELETE FROM citing_papers WHERE publication_id = ?').run(pubId);
+  dbInstance.prepare('DELETE FROM citation_trends WHERE publication_id = ?').run(pubId);
+  dbInstance.prepare('DELETE FROM publication_researchers WHERE publication_id = ?').run(pubId);
+  dbInstance.prepare('DELETE FROM publications WHERE id = ?').run(pubId);
+}
+
 // Call on import to guarantee schema existence
 initDatabase();
 
@@ -655,17 +893,27 @@ initDatabase();
 const TURSO_SYNC_TIMEOUT_MS = 6000;
 
 const tursoSyncWithTimeout = async () => {
+  let postSyncDone = false;
+  const runPostSyncMigrations = () => {
+    if (postSyncDone) return;
+    postSyncDone = true;
+    repairSplitMiddleInitials(db);
+    backfillPublicationResearchers(db);
+    reattributePublicationsByAuthorName(db);
+    auditAndSyncResearcherCitations(db);
+    autoBackfillMissingSDGs();
+  };
+
   const syncTask = (async () => {
     await initTursoSchema();
     await rehydrateFromTurso(db, originalPrepare);
-    reattributePublicationsByAuthorName();
-    auditAndSyncResearcherCitations();
-    autoBackfillMissingSDGs();
+    runPostSyncMigrations();
   })();
 
   const timeoutTask = new Promise((resolve) => {
     setTimeout(() => {
       console.warn(`[Turso Sync] Startup sync exceeded ${TURSO_SYNC_TIMEOUT_MS}ms timeout. Continuing with local SQLite cache to keep web service responsive.`);
+      runPostSyncMigrations();
       resolve();
     }, TURSO_SYNC_TIMEOUT_MS);
   });

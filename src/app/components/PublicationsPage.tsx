@@ -131,6 +131,33 @@ export function PublicationsPage() {
     return filterFacultyPublications(publicationsList);
   }, [publicationsList]);
 
+  const [isReloadingCitations, setIsReloadingCitations] = useState(false);
+  const handleReloadAllCitations = async () => {
+    setIsReloadingCitations(true);
+    try {
+      toast.loading("Reloading live Google Scholar citations for all repository publications...", { id: "reload-cits" });
+      const res = await apiService.reloadAllCitations();
+      toast.success(`Successfully reloaded citations for ${res.updatedCount || 0} publication(s).`, { id: "reload-cits" });
+      await loadPublications();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reload citations.", { id: "reload-cits" });
+    } finally {
+      setIsReloadingCitations(false);
+    }
+  };
+
+  const handleUnassignPublication = async (pubId: string, title: string, instructorId?: string) => {
+    if (!window.confirm(`Unassign researcher from "${title}"?`)) return;
+    try {
+      toast.loading("Unassigning researcher...", { id: "unassign-pub" });
+      const res = await apiService.unassignPublication(pubId, instructorId);
+      toast.success(res.message || "Researcher unassigned successfully.", { id: "unassign-pub" });
+      await loadPublications();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unassign researcher.", { id: "unassign-pub" });
+    }
+  };
+
   // Compute years based on actual database publications
   const years = useMemo(() => {
     if (allPublications.length === 0) return [];
@@ -349,12 +376,12 @@ export function PublicationsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={loadPublications}
-              disabled={loading}
+              onClick={handleReloadAllCitations}
+              disabled={isReloadingCitations || loading}
               className="text-xs h-8 gap-1.5 text-muted-foreground hover:text-foreground"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              <span>Refresh</span>
+              <RefreshCw className={`h-3.5 w-3.5 ${isReloadingCitations ? "animate-spin" : ""}`} />
+              <span>Reload Citations</span>
             </Button>
           </div>
         }
@@ -629,9 +656,20 @@ export function PublicationsPage() {
                       </td>
                       <td className="p-3.5">
                         {registeredName ? (
-                          <div className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2.5 py-1 rounded-full">
+                          <div className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-2.5 py-1 rounded-full group/chip">
                             <User className="w-3 h-3 text-blue-600 shrink-0" />
                             <span className="truncate max-w-[130px]" title={registeredName}>{registeredName}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUnassignPublication(pub.id, pub.title, pub.owner_id || pub.ownerId);
+                              }}
+                              title="Unassign researcher from publication"
+                              className="text-muted-foreground hover:text-destructive ml-0.5"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
                           </div>
                         ) : (
                           <span className="text-muted-foreground/60 text-[11px] italic">Unassigned</span>

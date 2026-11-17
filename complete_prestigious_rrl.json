@@ -1,0 +1,250 @@
+{
+  "SOO1": [
+    {
+      "soo": "SOO1",
+      "title": "The effects of citation-based research evaluation schemes on self-citation behavior",
+      "authors": [
+        "Giovanni Abramo",
+        "Ciriaco Andrea D\u2019Angelo",
+        "Leonardo Grilli"
+      ],
+      "year": 2021,
+      "journal": "Journal of Informetrics",
+      "doi": "https://doi.org/10.1016/j.joi.2021.101204",
+      "landing_url": "https://doi.org/10.1016/j.joi.2021.101204",
+      "pdf_url": "http://arxiv.org/pdf/2102.05358",
+      "local_pdf": "RRL_SOO1_Abramo2021_Theeffectsofcitationb.pdf",
+      "size_kb": 798
+    },
+    {
+      "soo": "SOO1",
+      "title": "Open access research outputs receive more diverse citations",
+      "authors": [
+        "Chun\u2010Kai Huang",
+        "Cameron Neylon",
+        "Lucy Montgomery",
+        "Richard Hosking",
+        "James P. Diprose",
+        "R.N. Handcock",
+        "Katie Wilson"
+      ],
+      "year": 2024,
+      "journal": "Scientometrics",
+      "doi": "https://doi.org/10.1007/s11192-023-04894-0",
+      "landing_url": "https://doi.org/10.1007/s11192-023-04894-0",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s11192-023-04894-0.pdf",
+      "local_pdf": "RRL_SOO1_Huang2024_Openaccessresearchoutp.pdf",
+      "size_kb": 930
+    },
+    {
+      "soo": "SOO1",
+      "title": "Faculty Development and Pre-Faculty Development in Japan: A Dual-Track Analysis of Institutional Practices and Challenges",
+      "authors": [
+        "Yan Jiang",
+        "Linfeng Wang",
+        "Mana Taguchi"
+      ],
+      "year": 2026,
+      "journal": "Frontiers of digital education.",
+      "doi": "https://doi.org/10.1007/s44366-027-0115-5",
+      "landing_url": "https://doi.org/10.1007/s44366-027-0115-5",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s44366-027-0115-5.pdf",
+      "local_pdf": "RRL_SOO1_Jiang2026_FacultyDevelopmentandP.pdf",
+      "size_kb": 781
+    }
+  ],
+  "SOO2": [
+    {
+      "soo": "SOO2",
+      "title": "A knowledge graph embeddings based approach for author name disambiguation using literals",
+      "authors": [
+        "Cristian Santini",
+        "Genet Asefa Gesese",
+        "Silvio Peroni",
+        "Aldo Gangemi A",
+        "Harald Sack",
+        "Mehwish Alam"
+      ],
+      "year": 2022,
+      "journal": "Scientometrics",
+      "doi": "https://doi.org/10.1007/s11192-022-04426-2",
+      "landing_url": "https://doi.org/10.1007/s11192-022-04426-2",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s11192-022-04426-2.pdf",
+      "local_pdf": "RRL_SOO2_Santini2022_Aknowledgegraphembeddi.pdf",
+      "size_kb": 1372
+    },
+    {
+      "soo": "SOO2",
+      "title": "ORCID-linked labeled data for evaluating author name disambiguation at scale",
+      "authors": [
+        "Jinseok Kim",
+        "Jason David Owen-Smith"
+      ],
+      "year": 2021,
+      "journal": "Scientometrics",
+      "doi": "https://doi.org/10.1007/s11192-020-03826-6",
+      "landing_url": "https://doi.org/10.1007/s11192-020-03826-6",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s11192-020-03826-6.pdf",
+      "local_pdf": "RRL_SOO2_Kim2021_ORCIDlinkedlabeleddata.pdf",
+      "size_kb": 2772
+    },
+    {
+      "soo": "SOO2",
+      "title": "Disambiguation of author entities in ADS using supervised learning and graph theory methods",
+      "authors": [
+        "Helena Mihaljevi\u0107",
+        "Luc\u00eda Santamar\u00eda"
+      ],
+      "year": 2021,
+      "journal": "Scientometrics",
+      "doi": "https://doi.org/10.1007/s11192-021-03951-w",
+      "landing_url": "https://doi.org/10.1007/s11192-021-03951-w",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s11192-021-03951-w.pdf",
+      "local_pdf": "RRL_SOO2_Mihaljevi\u01072021_Disambiguationofauthor.pdf",
+      "size_kb": 1311
+    }
+  ],
+  "SOO3": [
+    {
+      "soo": "SOO3",
+      "title": "Impact of the Sustainable Development Goals on the academic research agenda. A scientometric analysis",
+      "authors": [
+        "Antonio Sianes",
+        "Alejandro Vega-Mu\u00f1oz",
+        "Pilar Tirado Valencia",
+        "Antonio Ariza\u2010Montes"
+      ],
+      "year": 2022,
+      "journal": "PLoS ONE",
+      "doi": "https://doi.org/10.1371/journal.pone.0265409",
+      "landing_url": "https://doi.org/10.1371/journal.pone.0265409",
+      "pdf_url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0265409&type=printable",
+      "local_pdf": "RRL_SOO3_Sianes2022_ImpactoftheSustainable.pdf",
+      "size_kb": 1594
+    },
+    {
+      "soo": "SOO3",
+      "title": "Research contribution of bibliometric studies related to sustainable development goals and sustainability",
+      "authors": [
+        "Raghu Raman R",
+        "Hiran Haridas Lathabai",
+        "Debidutta Pattnaik",
+        "Chandan Kumar",
+        "Prema Nedungadi"
+      ],
+      "year": 2024,
+      "journal": "Discover Sustainability",
+      "doi": "https://doi.org/10.1007/s43621-024-00182-w",
+      "landing_url": "https://doi.org/10.1007/s43621-024-00182-w",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s43621-024-00182-w.pdf",
+      "local_pdf": "RRL_SOO3_R2024_Researchcontributionof.pdf",
+      "size_kb": 6625
+    },
+    {
+      "soo": "SOO3",
+      "title": "Green finance and sustainability: mapping research development through bibliometric analysis",
+      "authors": [
+        "Renju Chandran",
+        "M. C. Sarath Chandran"
+      ],
+      "year": 2024,
+      "journal": "Discover Sustainability",
+      "doi": "https://doi.org/10.1007/s43621-024-00549-z",
+      "landing_url": "https://doi.org/10.1007/s43621-024-00549-z",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s43621-024-00549-z.pdf",
+      "local_pdf": "RRL_SOO3_Chandran2024_Greenfinanceandsustain.pdf",
+      "size_kb": 1615
+    }
+  ],
+  "SOO4": [
+    {
+      "soo": "SOO4",
+      "title": "Structured software development versus agile software development: a comparative analysis",
+      "authors": [
+        "Alok Mishra",
+        "Yehia Ibrahim Alzoubi"
+      ],
+      "year": 2023,
+      "journal": "International Journal of Systems Assurance Engineering and Management",
+      "doi": "https://doi.org/10.1007/s13198-023-01958-5",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s13198-023-01958-5.pdf",
+      "local_pdf": "RRL_SOO4_Mishra2023_Structuredsoftwaredevel.pdf",
+      "size_kb": 809
+    },
+    {
+      "soo": "SOO4",
+      "title": "Transition from Waterfall to Agile Methodology - An Action Research Study",
+      "authors": [
+        "Thamizhiniyan Natarajan",
+        "Shanmugavadivu Pichai"
+      ],
+      "year": 2024,
+      "journal": "IEEE Access",
+      "doi": "https://doi.org/10.1109/access.2024.3384097",
+      "pdf_url": "https://ieeexplore.ieee.org/ielx7/6287639/6514899/10488855.pdf",
+      "local_pdf": "RRL_SOO4_Natarajan2024_TransitionfromWaterfall.pdf",
+      "size_kb": 891
+    },
+    {
+      "soo": "SOO4",
+      "title": "A teamwork effectiveness model for agile software development",
+      "authors": [
+        "Diane E. Strode",
+        "Torgeir Dings\u00f8yr",
+        "Yngve Lindsj\u00f8rn"
+      ],
+      "year": 2022,
+      "journal": "Empirical Software Engineering",
+      "doi": "https://doi.org/10.1007/s10664-021-10115-0",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s10664-021-10115-0.pdf",
+      "local_pdf": "RRL_SOO4_Strode2022_Ateamworkeffectiveness.pdf",
+      "size_kb": 970
+    }
+  ],
+  "SOO5": [
+    {
+      "soo": "SOO5",
+      "title": "Towards automatic evaluation of the Quality-in-Use in context-aware software systems",
+      "authors": [
+        "Zeinab Borhanifard",
+        "Mina Zolfy Lighvan",
+        "Siamak Aram"
+      ],
+      "year": 2022,
+      "journal": "Journal of Ambient Intelligence and Humanized Computing",
+      "doi": "https://doi.org/10.1007/s12652-021-03693-w",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s12652-021-03693-w.pdf",
+      "local_pdf": "RRL_SOO5_Borhanifard2022_Towardsautomaticevalu.pdf",
+      "size_kb": 2762
+    },
+    {
+      "soo": "SOO5",
+      "title": "Estimation of software quality parameters for hybrid agile process model",
+      "authors": [
+        "Manoj Kumar",
+        "Arun Sharma",
+        "Rajesh Kumar"
+      ],
+      "year": 2021,
+      "journal": "SN Applied Sciences",
+      "doi": "https://doi.org/10.1007/s42452-021-04305-0",
+      "pdf_url": "https://link.springer.com/content/pdf/10.1007/s42452-021-04305-0.pdf",
+      "local_pdf": "RRL_SOO5_Kumar2021_Estimationofsoftware.pdf",
+      "size_kb": 1185
+    },
+    {
+      "soo": "SOO5",
+      "title": "Mapping the Evolution and Future Directions of ISO/IEC 25010: A Bibliometric and Thematic Analysis",
+      "authors": [
+        "Rafa E. Al-Qutaish",
+        "Mohammad A. Mezher"
+      ],
+      "year": 2024,
+      "journal": "Engineering Technology & Applied Science Research",
+      "doi": "https://doi.org/10.48084/etasr.11772",
+      "pdf_url": "https://etasr.com/index.php/ETASR/article/download/11772/5623",
+      "local_pdf": "RRL_SOO5_AlQutaish2024_MappingtheEvolution.pdf",
+      "size_kb": 1873
+    }
+  ]
+}

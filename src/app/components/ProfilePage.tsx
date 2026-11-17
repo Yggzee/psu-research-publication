@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
-import { getCurrentUser, updateCurrentUser, SessionUser } from "../utils/researchStore";
+import { getCurrentUser, updateCurrentUser, isCoordinator as checkIsCoordinator, SessionUser } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -44,18 +44,10 @@ export function ProfilePage() {
   const [currentUser, setCurrentUserState] = useState<SessionUser>(() => {
     const user = getCurrentUser();
     if (!user) return { role: "instructor", name: "Researcher" };
-    if (user.role === "admin") {
-      return {
-        ...user,
-        name: user.name && !user.name.toLowerCase().includes("admin") ? user.name.replace(/^Sir\s+/i, "") : "Rodelio M. Garin",
-        email: user.email && !user.email.includes("admin@") ? user.email : "rodeliogarin@gmail.com",
-        department: user.department || "BSE",
-        scholarUrl: user.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-        googleScholarId: user.googleScholarId || "x6PdtN8AAAAJ",
-        instructorId: user.instructorId && user.instructorId !== "admin" ? user.instructorId : "ASIN-00002",
-      };
-    }
-    return user;
+    return {
+      ...user,
+      name: (user.name || (user.role === "admin" ? "Rodelio M. Garin" : "Researcher")).replace(/^Sir\s+/i, ""),
+    };
   });
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -85,13 +77,24 @@ export function ProfilePage() {
     if (parts.length === 0) return { firstName: "", middleInitial: "", lastName: "" };
     if (parts.length === 1) return { firstName: parts[0], middleInitial: "", lastName: "" };
     if (parts.length === 2) return { firstName: parts[0], middleInitial: "", lastName: parts[1] };
-    if (parts[1].length <= 2 || parts[1].endsWith(".")) {
+
+    const isMi = (token: string) => /^(?:[A-Za-z]\.?|Ma\.?)$/i.test(token);
+    let miIndex = -1;
+    for (let i = 1; i < parts.length - 1; i++) {
+      if (isMi(parts[i])) {
+        miIndex = i;
+        break;
+      }
+    }
+
+    if (miIndex !== -1) {
       return {
-        firstName: parts[0],
-        middleInitial: parts[1],
-        lastName: parts.slice(2).join(" "),
+        firstName: parts.slice(0, miIndex).join(" "),
+        middleInitial: parts[miIndex],
+        lastName: parts.slice(miIndex + 1).join(" "),
       };
     }
+
     return {
       firstName: parts.slice(0, -1).join(" "),
       middleInitial: "",
@@ -104,53 +107,40 @@ export function ProfilePage() {
     setLoadingPubs(true);
     try {
       const activeUser = getCurrentUser() || currentUser;
-      const isCoordinator =
-        activeUser.role === "admin" ||
-        (activeUser.name && activeUser.name.toLowerCase().includes("garin")) ||
-        activeUser.instructorId === "ASIN-00002" ||
-        activeUser.instructorId === "PSU-002";
+      const isCoord = checkIsCoordinator(activeUser);
 
-      // If Research Coordinator, guarantee default scholar credentials if missing
-      const resolvedUser: SessionUser = isCoordinator
-        ? {
-            ...activeUser,
-            name: activeUser.name && !activeUser.name.toLowerCase().includes("admin") ? activeUser.name.replace(/^Sir\s+/i, "") : "Rodelio M. Garin",
-            email: activeUser.email && !activeUser.email.includes("admin@") ? activeUser.email : "rodeliogarin@gmail.com",
-            department: activeUser.department || "BSE",
-            scholarUrl: activeUser.scholarUrl || "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en",
-            googleScholarId: activeUser.googleScholarId || "x6PdtN8AAAAJ",
-            instructorId: activeUser.instructorId && activeUser.instructorId !== "admin" ? activeUser.instructorId : "ASIN-00002",
-          }
-        : activeUser;
+      const resolvedUser: SessionUser = {
+        ...activeUser,
+        name: (activeUser.name || (isCoord ? "Rodelio M. Garin" : "Researcher")).replace(/^Sir\s+/i, ""),
+        instructorId:
+          activeUser.instructorId && activeUser.instructorId !== "admin"
+            ? activeUser.instructorId
+            : isCoord
+            ? "ASIN-00002"
+            : activeUser.instructorId,
+      };
 
       setCurrentUserState(resolvedUser);
 
       // Fetch all publications from repository
       const allPubs = await apiService.getPublications();
-      const userPubs = (allPubs as any[]).filter((p) => {
-        const ownerId = (p.ownerId || p.owner_id || "").trim().toLowerCase();
-        const ownerName = (p.ownerName || p.owner_name || "").trim().toLowerCase();
-        const targetInstId = (resolvedUser.instructorId || (isCoordinator ? "psu-002" : "")).toLowerCase();
-        const targetUsername = (resolvedUser.username || "").toLowerCase();
-        const targetId = (resolvedUser.id || "").toLowerCase();
+      const targetInstId = (resolvedUser.instructorId || "").toLowerCase();
+      const targetUsername = (resolvedUser.username || "").toLowerCase();
+      const targetId = (resolvedUser.id || "").toLowerCase();
+      const myName = (resolvedUser.name || "").toLowerCase();
 
-        // 1. Explicit ID matches
+      const userPubs = (allPubs as any[]).filter((p) => {
+        if (Array.isArray(p.assignedResearcherIds) && targetInstId) {
+          return p.assignedResearcherIds.some(
+            (id: string) => String(id).trim().toLowerCase() === targetInstId
+          );
+        }
+        const ownerId = (p.ownerId || p.owner_id || "").trim().toLowerCase();
         if (ownerId && (ownerId === targetInstId || ownerId === targetUsername || ownerId === targetId)) {
           return true;
         }
-
-        // 2. Research Coordinator specific attribution
-        if (isCoordinator) {
-          if (ownerId === "psu-002" || ownerName.includes("garin")) return true;
-          const authors = Array.isArray(p.authors) ? p.authors : [];
-          return authors.some((a: string) => a.toLowerCase().includes("garin"));
-        }
-
-        // 3. Exact or token author match
-        const myName = (resolvedUser.name || "").toLowerCase();
-        if (ownerName && myName && ownerName === myName) return true;
-        const authors = Array.isArray(p.authors) ? p.authors : [];
-        return authors.some((a: string) => a.toLowerCase().includes(myName));
+        const ownerName = (p.ownerName || p.owner_name || "").trim().toLowerCase();
+        return Boolean(ownerName && myName && ownerName === myName);
       });
 
       setPublications(userPubs);
@@ -170,7 +160,7 @@ export function ProfilePage() {
 
   const handleOpenEdit = () => {
     const rawId = currentUser.instructorId || "";
-    const match = rawId.match(/ASIN-(\d{5})/i) || rawId.match(/(\d{5})/);
+    const match = rawId.match(/ASIN-(\d{1,12})/i) || rawId.match(/(\d{1,12})/);
     setIdDigits(match ? match[1] : "00002");
     
     const parsed = parseNameParts(currentUser.name || (currentUser.role === "admin" ? "Rodelio M. Garin" : ""));
@@ -194,7 +184,7 @@ export function ProfilePage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const fullInstructorId = `ASIN-${idDigits.padStart(5, "0")}`;
+    const fullInstructorId = `ASIN-${idDigits}`;
     const cleanFirst = formData.firstName.trim();
     const cleanMi = formData.middleInitial.trim();
     const cleanLast = formData.lastName.trim();
@@ -313,29 +303,22 @@ export function ProfilePage() {
   }, [publications, sortBy]);
 
   // Reliable Google Scholar Link Resolution
-  const isCoordinator =
-    currentUser.role === "admin" ||
-    (currentUser.name && currentUser.name.toLowerCase().includes("garin")) ||
-    currentUser.instructorId === "PSU-002";
+  const isCoordinator = checkIsCoordinator(currentUser);
 
   const effectiveScholarUrl =
     currentUser.scholarUrl && currentUser.scholarUrl.trim()
       ? currentUser.scholarUrl.startsWith("http")
         ? currentUser.scholarUrl
         : `https://scholar.google.com/citations?user=${currentUser.scholarUrl}&hl=en`
-      : isCoordinator
-      ? "https://scholar.google.com/citations?user=x6PdtN8AAAAJ&hl=en"
       : undefined;
 
   const effectiveScholarId =
     currentUser.googleScholarId ||
     (effectiveScholarUrl && effectiveScholarUrl.includes("user=")
       ? effectiveScholarUrl.split("user=")[1]?.split("&")[0]
-      : isCoordinator
-      ? "x6PdtN8AAAAJ"
       : undefined);
 
-  const effectiveName = currentUser.name || (isCoordinator ? "Rodelio M. Garin" : "Researcher");
+  const effectiveName = (currentUser.name || (isCoordinator ? "Rodelio M. Garin" : "Researcher")).replace(/^Sir\s+/i, "");
   const facultyPhoto = currentUser.photoUrl || getFacultyPhoto(effectiveName);
 
   return (
@@ -528,10 +511,10 @@ export function ProfilePage() {
                     id="prof-inst-id"
                     type="text"
                     inputMode="numeric"
-                    pattern="[0-9]{5}"
-                    maxLength={5}
+                    pattern="[0-9]{1,12}"
+                    maxLength={12}
                     value={idDigits}
-                    onChange={(e) => setIdDigits(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    onChange={(e) => setIdDigits(e.target.value.replace(/\D/g, "").slice(0, 12))}
                     placeholder="00000"
                     className="flex-1 bg-transparent px-3 py-2 text-xs font-mono font-semibold text-foreground focus:outline-none tracking-widest"
                     required

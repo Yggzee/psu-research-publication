@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "dataflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-pub-citation-20261117-140300\\candidate.json",
+    "sha256": "1a5470ba5d6c1e17e10b539872422b865205548d39030ebaa54a56f083743afd",
+    "bytes": 8159
+  },
+  "artifact": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-pub-citation-20261117-140300\\pub-citation-dfd.html",
+    "sha256": "7cb6815a6e6340bc288752a73138a0b3f5765640a20580ab2129c6f7b4374366",
+    "bytes": 849163
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-pub-citation-20261117-140300\\pub-citation-dfd.finalize.json",
+    "summaryReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-pub-citation-20261117-140300\\pub-citation-dfd.finalize-summary.json",
+    "browserCheckReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-pub-citation-20261117-140300\\pub-citation-dfd.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-17T05:41:45.282Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 6192,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

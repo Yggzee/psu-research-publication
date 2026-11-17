@@ -45,14 +45,6 @@ export function getFacultyMember(name: string): FacultyMember | undefined {
 }
 
 /**
- * Check if a researcher is a faculty member
- */
-export function isFacultyMember(researcherName: string): boolean {
-  const facultyList = getFacultyList();
-  return facultyList.includes(researcherName);
-}
-
-/**
  * Check if a publication has at least one faculty author (PSU Paper)
  */
 export function hasFacultyAuthor(authors: string[]): boolean {
@@ -112,30 +104,15 @@ export function filterFacultyResearchers<T extends { name: string }>(
 }
 
 /**
- * Filter publications to only include those with faculty authors (PSU papers)
+ * Filter publications to only include approved institutional works
  */
 export function filterFacultyPublications<T extends { authors: string[] }>(
   publications: T[]
 ): T[] {
-  // Exclude pending or rejected claims from the main repository view
-  const approvedOnly = publications.filter((pub) => {
+  return publications.filter((pub) => {
     const status = ((pub as any).approval_status || (pub as any).approvalStatus || "approved").toLowerCase();
     return status === "approved";
   });
-
-  const facultyList = getFacultyList();
-  // If faculty list is empty, show all approved publications
-  if (facultyList.length === 0) {
-    return approvedOnly;
-  }
-  // Include approved publications that are assigned to a researcher or have a registered faculty author
-  return approvedOnly.filter(
-    (pub) =>
-      Boolean((pub as any).owner_id || (pub as any).ownerId) ||
-      hasFacultyAuthor(pub.authors) ||
-      (pub as any).approvalStatus === 'approved' ||
-      (pub as any).approval_status === 'approved'
-  );
 }
 
 /**
@@ -192,7 +169,8 @@ export function hasExternalCollaborators(authors: string[]): boolean {
 }
 
 /**
- * Normalize publication title to prevent duplicate saves and cross-reference search results
+ * Normalize publication title to prevent duplicate saves and cross-reference search results.
+ * Keep in sync with normalizeTitle() in src/server/cleanDuplicates.mjs.
  */
 export function normalizeTitle(t?: string | null): string {
   if (!t) return "";
@@ -208,8 +186,8 @@ export function normalizeTitle(t?: string | null): string {
 }
 
 /**
- * Check if a publication belongs to a specific researcher
- * Matches by owner ID, owner name, or academic author patterns
+ * Check if a publication belongs to a specific researcher.
+ * Matches by owner ID, owner name, or academic author patterns (server counterpart: src/server/authHelper.mjs).
  */
 export function matchesResearcher(p: any, r: any): boolean {
   if (!r || !p) return false;
@@ -253,8 +231,6 @@ export function matchesResearcher(p: any, r: any): boolean {
 
   return false;
 }
-
-export const publicationMatchesResearcher = matchesResearcher;
 
 /**
  * Find a matching registered researcher profile for an author string

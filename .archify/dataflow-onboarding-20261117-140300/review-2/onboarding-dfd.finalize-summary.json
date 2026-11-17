@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "dataflow",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\candidate.json",
+    "sha256": "46eb497ce5870145099e0db35b2425c0068cf155bb2bd75b7fc6f6983f2d3c0a",
+    "bytes": 8013
+  },
+  "artifact": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\onboarding-dfd.html",
+    "sha256": "ebfa1f834913d510054050ce7eb50daacfc65238b69d2fabc943cf05e0bb532e",
+    "bytes": 849285
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\review-2\\onboarding-dfd.finalize.json",
+    "summaryReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\review-2\\onboarding-dfd.finalize-summary.json",
+    "browserCheckReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-onboarding-20261117-140300\\review-2\\onboarding-dfd.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-17T05:41:45.282Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 6794,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

@@ -1,4 +1,4 @@
-import { db, dbReadyPromise } from './db.mjs';
+import { db, dbReadyPromise, deletePublicationCascade } from './db.mjs';
 
 export function normalizeTitle(t) {
   if (!t) return '';
@@ -24,10 +24,10 @@ export function deduplicateDatabase() {
     if (map.has(norm)) {
       const existing = map.get(norm);
       if ((p.citations > existing.citations) || (p.abstract && p.abstract.length > (existing.abstract || '').length)) {
-        toDelete.push(existing.id);
+        toDelete.push({ dropId: existing.id, norm });
         map.set(norm, p);
       } else {
-        toDelete.push(p.id);
+        toDelete.push({ dropId: p.id, norm });
       }
     } else {
       map.set(norm, p);
@@ -36,14 +36,16 @@ export function deduplicateDatabase() {
 
   if (toDelete.length > 0) {
     console.log(`[Deduplication] Removing ${toDelete.length} duplicate publication records...`);
-    const delPub = db.prepare('DELETE FROM publications WHERE id = ?');
-    const delCiting = db.prepare('DELETE FROM citing_papers WHERE publication_id = ?');
-    const delTrends = db.prepare('DELETE FROM citation_trends WHERE publication_id = ?');
+    const migrateLinks = db.prepare(
+      'UPDATE OR IGNORE publication_researchers SET publication_id = ? WHERE publication_id = ?'
+    );
 
-    toDelete.forEach((id) => {
-      delPub.run(id);
-      delCiting.run(id);
-      delTrends.run(id);
+    toDelete.forEach(({ dropId, norm }) => {
+      const keepId = map.get(norm)?.id;
+      if (keepId && keepId !== dropId) {
+        migrateLinks.run(keepId, dropId);
+      }
+      deletePublicationCascade(dropId, db);
     });
   }
 

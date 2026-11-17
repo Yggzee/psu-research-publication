@@ -19,10 +19,10 @@ Always enforce the following standardized terminology and formatting across all 
   - **`Faculty (<Department>)`** (e.g., `Faculty (BSIT)`, `Faculty (BSBA)`) for faculty researchers.
   - **`Non-Faculty`** for non-faculty researchers.
 
-## 4. Instructor ID (`ASIN-00000` Format)
+## 4. Instructor ID (`ASIN-` + 1–12 Digits Format)
 - Always call their identifier **"Instructor ID"** (never "Employee ID" or "Instructor / Employee ID").
-- Both Faculty and Non-Faculty use the exact same format: **`ASIN-00000`** (`ASIN-` prefix followed by 5 digits).
-- In all invitation channels (**"Ask for Invitation"** modal on `LoginScreen.tsx` and **"Invite Researcher"** form in `AdminPage.tsx`), the **`ASIN-`** prefix must be locked/non-editable and only the **5 numeric digits (`00000`)** are editable.
+- Both Faculty and Non-Faculty use the exact same format: **`ASIN-`** prefix followed by **1 to 12 numeric digits** (e.g., `ASIN-1`, `ASIN-00002`, `ASIN-123456789012`), validated against `/^ASIN-\d{1,12}$/` with uppercase `ASIN-` normalization and no forced zero-padding.
+- In all invitation, registration, admin, and profile channels (**"Ask for Invitation"** modal on `LoginScreen.tsx`, **"Invite Researcher"** form in `AdminPage.tsx`, and **Profile** forms), the **`ASIN-`** prefix must be locked/non-editable and only the **1 to 12 numeric digits** are editable.
 
 ## 5. Research Coordinator (Sir Rodelio M. Garin)
 - Always refer to Sir Rodelio M. Garin's role as **"Research Coordinator"** (never "Campus Research Administrator", "Research Administrator", "Campus Research Coordinator", or "System Administrator").

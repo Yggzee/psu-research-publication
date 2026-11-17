@@ -4,38 +4,29 @@ import { matchesResearcher } from "./facultyUtils";
 // Safe reference for bundlers (handles default or namespace import)
 const XLSX: any = (XLSXStyle as any)?.default || XLSXStyle;
 
-// Brand Colors (Pangasinan State University Institutional Palette)
-const COLOR_NAVY = "1E3A8A";       // Primary Brand Navy
-const COLOR_HEADER_BG = "1E3A8A";   // Column Header Background
-const COLOR_CITE_HDR_BG = "0F766E"; // Teal-700 for Citing Articles Header
-const COLOR_HEADER_TEXT = "FFFFFF"; // Column Header Text
-const COLOR_TEXT_MAIN = "0F172A";   // Slate-900 for Primary Text
-const COLOR_TEXT_SUBTLE = "334155"; // Slate-700
-const COLOR_TEXT_MUTED = "64748B";  // Slate-500
-const COLOR_LINK = "1D4ED8";        // Blue-700 for Hyperlinks
-const COLOR_ROW_ALT = "F8FAFC";     // Alternating Paper Group Background
-const COLOR_BORDER = "CBD5E1";      // Slate-300 Border
+const COLOR_BLACK = "000000";
 
-const thinBorder = {
-  top: { style: "thin", color: { rgb: COLOR_BORDER } },
-  bottom: { style: "thin", color: { rgb: COLOR_BORDER } },
-  left: { style: "thin", color: { rgb: COLOR_BORDER } },
-  right: { style: "thin", color: { rgb: COLOR_BORDER } },
-};
+export interface BoxBorderEdges {
+  isTop?: boolean;
+  isBottom?: boolean;
+  isLeft?: boolean;
+  isRight?: boolean;
+}
 
-const tableHeaderStyle = {
-  font: { name: "Calibri", sz: 10, bold: true, color: { rgb: COLOR_HEADER_TEXT } },
-  fill: { fgColor: { rgb: COLOR_HEADER_BG } },
-  alignment: { horizontal: "center", vertical: "center", wrapText: true },
-  border: thinBorder,
-};
-
-const citingHeaderStyle = {
-  font: { name: "Calibri", sz: 10, bold: true, color: { rgb: COLOR_HEADER_TEXT } },
-  fill: { fgColor: { rgb: COLOR_CITE_HDR_BG } },
-  alignment: { horizontal: "center", vertical: "center", wrapText: true },
-  border: thinBorder,
-};
+/**
+ * Builds cell borders where the outermost perimeter of a publication block uses
+ * a larger ('medium') border and all interior cell boundaries use standard ('thin') borders.
+ */
+function buildBoxBorder(edges: BoxBorderEdges = {}) {
+  const thin = { style: "thin", color: { rgb: COLOR_BLACK } };
+  const outer = { style: "medium", color: { rgb: COLOR_BLACK } };
+  return {
+    top: edges.isTop ? outer : thin,
+    bottom: edges.isBottom ? outer : thin,
+    left: edges.isLeft ? outer : thin,
+    right: edges.isRight ? outer : thin,
+  };
+}
 
 function escapeFormula(str: string): string {
   return String(str || "").replace(/"/g, '""');
@@ -47,13 +38,12 @@ function createTextCell(
     bold?: boolean;
     align?: "left" | "center" | "right";
     vAlign?: "top" | "center" | "bottom";
-    bg?: string;
     italic?: boolean;
+    edges?: BoxBorderEdges;
   } = {}
 ) {
-  const bg = options.bg || "FFFFFF";
   const align = options.align || "left";
-  const vAlign = options.vAlign || "center";
+  const vAlign = options.vAlign || "top";
   const isNum = typeof value === "number" && !Number.isNaN(value);
 
   return {
@@ -65,11 +55,10 @@ function createTextCell(
         sz: 10,
         bold: Boolean(options.bold),
         italic: Boolean(options.italic),
-        color: { rgb: COLOR_TEXT_MAIN },
+        color: { rgb: COLOR_BLACK },
       },
       alignment: { horizontal: align, vertical: vAlign, wrapText: true },
-      fill: { fgColor: { rgb: bg } },
-      border: thinBorder,
+      border: buildBoxBorder(options.edges),
     },
   };
 }
@@ -81,16 +70,15 @@ function createHyperlinkCell(
     bold?: boolean;
     align?: "center" | "left";
     vAlign?: "top" | "center" | "bottom";
-    bg?: string;
+    edges?: BoxBorderEdges;
   } = {}
 ) {
   const cleanUrl = String(url || "").trim();
-  const bg = options.bg || "FFFFFF";
   const align = options.align || "left";
-  const vAlign = options.vAlign || "center";
+  const vAlign = options.vAlign || "top";
 
   if (!cleanUrl || cleanUrl === "#" || cleanUrl === "—") {
-    return createTextCell("", { align, vAlign, bg });
+    return createTextCell("", { align, vAlign, edges: options.edges });
   }
 
   const label = (displayUrlOrLabel || cleanUrl).trim();
@@ -102,14 +90,13 @@ function createHyperlinkCell(
     s: {
       font: {
         name: "Calibri",
-        sz: 9.5,
+        sz: 10,
         bold: Boolean(options.bold),
-        color: { rgb: COLOR_LINK },
+        color: { rgb: COLOR_BLACK },
         underline: true,
       },
       alignment: { horizontal: align, vertical: vAlign, wrapText: true },
-      fill: { fgColor: { rgb: bg } },
-      border: thinBorder,
+      border: buildBoxBorder(options.edges),
     },
   };
 }
@@ -137,7 +124,6 @@ function formatAllAuthors(authorsInput: any, fallbackName = ""): string {
         // Ignore JSON parse error
       }
     }
-    // Split comma-separated authors onto clean lines if multiple authors exist
     const parts = trimmed
       .split(/\s*,\s*|\s*;\s*/)
       .map((p) => p.trim())
@@ -195,7 +181,8 @@ export function sanitizeSheetName(name: string, fallback = "Sheet"): string {
 }
 
 /**
- * Builds the official 8-column Publication Worksheet matching institutional PSU guidelines
+ * Builds the 8-column Publication Worksheet starting directly at Row 1 (no titles, no fills, top-aligned,
+ * medium outer border per publication row and thin interior borders).
  */
 export function buildPublicationWorksheet(options: {
   mainTitle?: string;
@@ -206,31 +193,7 @@ export function buildPublicationWorksheet(options: {
   exportYear?: string;
 }): any {
   const wsPub: any = {};
-  const mainTitle = options.mainTitle || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS";
-  const researcherName = options.researcherName || "Faculty Researcher";
-  const department = options.department || "General";
-  const exportYear = options.exportYear || "all";
-  const subtitle =
-    options.subtitle ||
-    `PUBLICATION SHEET • Researcher: ${researcherName} (${department})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
-
-  // Title Block
-  wsPub["A1"] = {
-    t: "s",
-    v: mainTitle,
-    s: {
-      font: { name: "Calibri", sz: 14, bold: true, color: { rgb: COLOR_NAVY } },
-      alignment: { horizontal: "left", vertical: "center" },
-    },
-  };
-  wsPub["A2"] = {
-    t: "s",
-    v: subtitle,
-    s: {
-      font: { name: "Calibri", sz: 11, bold: true, color: { rgb: COLOR_TEXT_SUBTLE } },
-      alignment: { horizontal: "left", vertical: "center" },
-    },
-  };
+  const researcherName = options.researcherName || "Researcher";
 
   const pubHeaders = [
     { label: "ARTICLE / TITLE", wch: 46 },
@@ -244,34 +207,47 @@ export function buildPublicationWorksheet(options: {
   ];
 
   const pubCols = ["A", "B", "C", "D", "E", "F", "G", "H"];
-  const pubHeaderRow = 4;
+  const totalCols = pubCols.length;
+  const pubHeaderRow = 1;
 
   pubHeaders.forEach((col, i) => {
-    wsPub[`${pubCols[i]}${pubHeaderRow}`] = {
-      t: "s",
-      v: col.label,
-      s: tableHeaderStyle,
-    };
+    wsPub[`${pubCols[i]}${pubHeaderRow}`] = createTextCell(col.label, {
+      bold: true,
+      align: "center",
+      vAlign: "top",
+      edges: {
+        isTop: true,
+        isBottom: true,
+        isLeft: i === 0,
+        isRight: i === totalCols - 1,
+      },
+    });
   });
 
-  let pubRow = 5;
-  const rowHeightsPub: any[] = [
-    { hpt: 22 },
-    { hpt: 18 },
-    { hpt: 10 },
-    { hpt: 30 },
-  ];
+  let pubRow = 2;
+  const rowHeightsPub: any[] = [{ hpt: 28 }];
 
   const pubs = options.publications || [];
   if (pubs.length === 0) {
-    wsPub[`A${pubRow}`] = createTextCell("No publications recorded for the selected filter.", {
-      italic: true,
-    });
+    for (let c = 0; c < totalCols; c++) {
+      wsPub[`${pubCols[c]}${pubRow}`] = createTextCell(
+        c === 0 ? "No publications recorded for the selected filter." : "",
+        {
+          italic: c === 0,
+          vAlign: "top",
+          edges: {
+            isTop: true,
+            isBottom: true,
+            isLeft: c === 0,
+            isRight: c === totalCols - 1,
+          },
+        }
+      );
+    }
     rowHeightsPub.push({ hpt: 24 });
     pubRow++;
   } else {
-    pubs.forEach((pub, idx) => {
-      const bg = idx % 2 === 1 ? COLOR_ROW_ALT : "FFFFFF";
+    pubs.forEach((pub) => {
       const allAuthorsStr = formatAllAuthors(pub.authors, pub.owner_name || pub.ownerName || researcherName);
       const authorLines = allAuthorsStr.split("\n").length;
 
@@ -279,7 +255,7 @@ export function buildPublicationWorksheet(options: {
         pub.publication_date ||
         pub.publicationDate ||
         (pub.year ? String(pub.year) : "");
-      const journalTitle = pub.journal || "Academic Publication";
+      const journalTitle = pub.journal || "";
       const volIssue = pub.volume_issue || pub.volumeIssue || "";
       const issnIsbn =
         pub.issn_isbn ||
@@ -291,41 +267,59 @@ export function buildPublicationWorksheet(options: {
         (journalTitle.toLowerCase().includes("scopus") ? "Scopus" : "Google Scholar");
       const evidenceLink = pub.url || pub.citedByLink || pub.cited_by_link || "";
 
-      wsPub[`A${pubRow}`] = createTextCell(pub.title || "Untitled Publication", {
-        bold: true,
-        align: "left",
-        bg,
-      });
-      wsPub[`B${pubRow}`] = createTextCell(allAuthorsStr, { align: "left", bg });
-      wsPub[`C${pubRow}`] = createTextCell(pubDate, { align: "center", bg });
-      wsPub[`D${pubRow}`] = createTextCell(journalTitle, { align: "left", bg });
-      wsPub[`E${pubRow}`] = createTextCell(volIssue, { align: "center", bg });
-      wsPub[`F${pubRow}`] = createTextCell(issnIsbn, { align: "center", bg });
-      wsPub[`G${pubRow}`] = createTextCell(indexing, { align: "center", bg });
-      wsPub[`H${pubRow}`] = createHyperlinkCell(evidenceLink, evidenceLink, {
-        align: "left",
-        bg,
+      const rowValues = [
+        pub.title || "Untitled Publication",
+        allAuthorsStr,
+        pubDate,
+        journalTitle,
+        volIssue,
+        issnIsbn,
+        indexing,
+      ];
+
+      rowValues.forEach((val, c) => {
+        wsPub[`${pubCols[c]}${pubRow}`] = createTextCell(val, {
+          align: "left",
+          vAlign: "top",
+          edges: {
+            isTop: true,
+            isBottom: true,
+            isLeft: c === 0,
+            isRight: false,
+          },
+        });
       });
 
-      const estimatedHeight = Math.max(28, Math.min(180, authorLines * 15 + 10));
+      wsPub[`H${pubRow}`] = createHyperlinkCell(evidenceLink, evidenceLink, {
+        align: "left",
+        vAlign: "top",
+        edges: {
+          isTop: true,
+          isBottom: true,
+          isLeft: false,
+          isRight: true,
+        },
+      });
+
+      const titleLines = Math.ceil(String(pub.title || "").length / 42);
+      const maxLines = Math.max(authorLines, titleLines, 2);
+      const estimatedHeight = Math.max(26, Math.min(180, maxLines * 15 + 8));
       rowHeightsPub.push({ hpt: estimatedHeight });
       pubRow++;
     });
   }
 
-  wsPub["!ref"] = `A1:H${Math.max(pubRow - 1, 5)}`;
+  wsPub["!ref"] = `A1:H${Math.max(pubRow - 1, 2)}`;
   wsPub["!cols"] = pubHeaders.map((c) => ({ wch: c.wch }));
   wsPub["!rows"] = rowHeightsPub;
-  wsPub["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
-  ];
 
   return wsPub;
 }
 
 /**
- * Builds the official 15-column Citation Worksheet matching institutional PSU guidelines
+ * Builds the 16-column Citation Worksheet matching the reference file (Columns A–P, starting at Row 1,
+ * no fill colors, plain black text, top-aligned cells, merged Columns A–H per publication,
+ * and a 'medium' outer border wrapping each publication + all its citations with 'thin' inside borders).
  */
 export function buildCitationWorksheet(options: {
   mainTitle?: string;
@@ -336,88 +330,76 @@ export function buildCitationWorksheet(options: {
   exportYear?: string;
 }): any {
   const wsCite: any = {};
-  const mainTitle = options.mainTitle || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS";
-  const researcherName = options.researcherName || "Faculty Researcher";
-  const department = options.department || "General";
-  const exportYear = options.exportYear || "all";
-  const subtitle =
-    options.subtitle ||
-    `CITATION SHEET • Researcher: ${researcherName} (${department})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
+  const researcherName = options.researcherName || "Researcher";
 
-  wsCite["A1"] = {
-    t: "s",
-    v: mainTitle,
-    s: {
-      font: { name: "Calibri", sz: 14, bold: true, color: { rgb: COLOR_NAVY } },
-      alignment: { horizontal: "left", vertical: "center" },
-    },
-  };
-  wsCite["A2"] = {
-    t: "s",
-    v: subtitle,
-    s: {
-      font: { name: "Calibri", sz: 11, bold: true, color: { rgb: COLOR_TEXT_SUBTLE } },
-      alignment: { horizontal: "left", vertical: "center" },
-    },
-  };
-
-  // 15 Columns:
-  // Columns A–H (1–8): Parent PSU Research Output
-  // Columns I–O (9–15): Citing Articles
+  // 16 Columns (A–P):
+  // Columns A–H (0–7): Parent PSU Research Output
+  // Columns I–P (8–15): Citing Articles (including 'Name of Publisher' at O and 'Link' at P)
   const citeHeaders = [
-    { label: "Title of Research Output", wch: 40, isCitingSide: false },
-    { label: "Keywords", wch: 26, isCitingSide: false },
-    { label: "Researcher(s)", wch: 28, isCitingSide: false },
-    { label: "Journal", wch: 28, isCitingSide: false },
-    { label: "ISSN/DOI", wch: 24, isCitingSide: false },
-    { label: "Year Published", wch: 15, isCitingSide: false },
-    { label: "Level", wch: 16, isCitingSide: false },
-    { label: "Link", wch: 34, isCitingSide: false },
-    { label: "Author(s) Who Cited the Research Output", wch: 32, isCitingSide: true },
-    { label: "Title of Article Where the Research Output Was Cited", wch: 44, isCitingSide: true },
-    { label: "Title of Journal", wch: 30, isCitingSide: true },
-    { label: "Vol. / Issue / Page No.", wch: 24, isCitingSide: true },
-    { label: "City/Year Published", wch: 18, isCitingSide: true },
-    { label: "Quarter", wch: 14, isCitingSide: true },
-    { label: "Link", wch: 38, isCitingSide: true },
+    { label: "Title of Research Output", wch: 40 },
+    { label: "Keywords", wch: 26 },
+    { label: "Researcher(s)", wch: 28 },
+    { label: "Journal", wch: 28 },
+    { label: "ISSN/DOI", wch: 24 },
+    { label: "Year Published", wch: 15 },
+    { label: "Level", wch: 16 },
+    { label: "Link", wch: 34 },
+    { label: "Author(s) Who Cited the Research Output", wch: 32 },
+    { label: "Title of Article Where the Research Output Was Cited", wch: 44 },
+    { label: "Title of Journal", wch: 30 },
+    { label: "Vol. / Issue / Page No.", wch: 24 },
+    { label: "City/Year Published", wch: 18 },
+    { label: "Quarter", wch: 14 },
+    { label: "Name of Publisher", wch: 28 },
+    { label: "Link", wch: 38 },
   ];
 
-  const citeCols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"];
-  const citeHeaderRow = 4;
+  const citeCols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P"];
+  const totalCols = citeCols.length;
+  const citeHeaderRow = 1;
 
   citeHeaders.forEach((col, i) => {
-    wsCite[`${citeCols[i]}${citeHeaderRow}`] = {
-      t: "s",
-      v: col.label,
-      s: col.isCitingSide ? citingHeaderStyle : tableHeaderStyle,
-    };
+    wsCite[`${citeCols[i]}${citeHeaderRow}`] = createTextCell(col.label, {
+      bold: true,
+      align: "center",
+      vAlign: "top",
+      edges: {
+        isTop: true,
+        isBottom: true,
+        isLeft: i === 0,
+        isRight: i === totalCols - 1,
+      },
+    });
   });
 
-  let citeRow = 5;
-  const rowHeightsCite: any[] = [
-    { hpt: 22 },
-    { hpt: 18 },
-    { hpt: 10 },
-    { hpt: 32 },
-  ];
-  const citeMerges: any[] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 14 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 14 } },
-  ];
+  let citeRow = 2;
+  const rowHeightsCite: any[] = [{ hpt: 30 }];
+  const citeMerges: any[] = [];
 
   const pubs = options.publications || [];
   if (pubs.length === 0) {
-    wsCite[`A${citeRow}`] = createTextCell("No citation records found for the selected filter.", {
-      italic: true,
-    });
+    for (let c = 0; c < totalCols; c++) {
+      wsCite[`${citeCols[c]}${citeRow}`] = createTextCell(
+        c === 0 ? "No citation records found for the selected filter." : "",
+        {
+          italic: c === 0,
+          vAlign: "top",
+          edges: {
+            isTop: true,
+            isBottom: true,
+            isLeft: c === 0,
+            isRight: c === totalCols - 1,
+          },
+        }
+      );
+    }
     rowHeightsCite.push({ hpt: 24 });
     citeRow++;
   } else {
-    pubs.forEach((pub, pubIdx) => {
-      const bg = pubIdx % 2 === 1 ? COLOR_ROW_ALT : "FFFFFF";
+    pubs.forEach((pub) => {
       const parentAuthors = formatAllAuthors(pub.authors, pub.owner_name || pub.ownerName || researcherName);
       const keywords = deriveKeywords(pub);
-      const journal = pub.journal || "Academic Publication";
+      const journal = pub.journal || "";
       const issnDoi =
         pub.issn_isbn ||
         pub.issnIsbn ||
@@ -429,38 +411,56 @@ export function buildCitationWorksheet(options: {
       const citingList = Array.isArray(pub.citingPapers) ? pub.citingPapers : [];
 
       if (citingList.length === 0) {
-        // Render the parent research output row even if it has 0 citing papers yet
-        wsCite[`A${citeRow}`] = createTextCell(pub.title || "Untitled Publication", {
-          bold: true,
-          align: "left",
-          vAlign: "center",
-          bg,
-        });
-        wsCite[`B${citeRow}`] = createTextCell(keywords, { align: "left", vAlign: "center", bg });
-        wsCite[`C${citeRow}`] = createTextCell(parentAuthors, { align: "left", vAlign: "center", bg });
-        wsCite[`D${citeRow}`] = createTextCell(journal, { align: "left", vAlign: "center", bg });
-        wsCite[`E${citeRow}`] = createTextCell(issnDoi, { align: "center", vAlign: "center", bg });
-        wsCite[`F${citeRow}`] = createTextCell(yearPub, { align: "center", vAlign: "center", bg });
-        wsCite[`G${citeRow}`] = createTextCell(level, { align: "center", vAlign: "center", bg });
-        wsCite[`H${citeRow}`] = createHyperlinkCell(parentLink, parentLink, {
-          align: "left",
-          vAlign: "center",
-          bg,
+        // Single-row block when publication has 0 citing papers
+        const parentValues = [
+          pub.title || "Untitled Publication",
+          keywords,
+          parentAuthors,
+          journal,
+          issnDoi,
+          yearPub,
+          level,
+        ];
+        parentValues.forEach((val, c) => {
+          wsCite[`${citeCols[c]}${citeRow}`] = createTextCell(val, {
+            align: "left",
+            vAlign: "top",
+            edges: {
+              isTop: true,
+              isBottom: true,
+              isLeft: c === 0,
+              isRight: false,
+            },
+          });
         });
 
-        // Empty citing columns I–O
-        for (let c = 8; c < 15; c++) {
-          wsCite[`${citeCols[c]}${citeRow}`] = createTextCell("", { bg });
+        wsCite[`H${citeRow}`] = createHyperlinkCell(parentLink, parentLink, {
+          align: "left",
+          vAlign: "top",
+          edges: { isTop: true, isBottom: true, isLeft: false, isRight: false },
+        });
+
+        for (let c = 8; c < totalCols; c++) {
+          wsCite[`${citeCols[c]}${citeRow}`] = createTextCell("", {
+            align: "left",
+            vAlign: "top",
+            edges: {
+              isTop: true,
+              isBottom: true,
+              isLeft: false,
+              isRight: c === totalCols - 1,
+            },
+          });
         }
 
         const lines = Math.max(parentAuthors.split("\n").length, 2);
-        rowHeightsCite.push({ hpt: Math.max(28, Math.min(140, lines * 15 + 8)) });
+        rowHeightsCite.push({ hpt: Math.max(26, Math.min(140, lines * 15 + 8)) });
         citeRow++;
       } else {
-        const startCiteRow = citeRow; // 1-based row index where this parent paper starts
+        const startCiteRow = citeRow;
         const endCiteRow = startCiteRow + citingList.length - 1;
 
-        // Vertically merge Columns 1–8 (A–H, indices 0–7) across all citing rows for this research output
+        // Vertically merge Columns A–H (indices 0–7) across all citing rows for this publication
         if (citingList.length > 1) {
           for (let colIdx = 0; colIdx < 8; colIdx++) {
             citeMerges.push({
@@ -471,67 +471,117 @@ export function buildCitationWorksheet(options: {
         }
 
         citingList.forEach((cp: any, citeIdx: number) => {
-          if (citeIdx === 0) {
-            wsCite[`A${citeRow}`] = createTextCell(pub.title || "Untitled Publication", {
-              bold: true,
-              align: "left",
-              vAlign: "center",
-              bg,
+          const isFirstRow = citeIdx === 0;
+          const isLastRow = citeIdx === citingList.length - 1;
+
+          // Columns A–H (0–7)
+          if (isFirstRow) {
+            const parentValues = [
+              pub.title || "Untitled Publication",
+              keywords,
+              parentAuthors,
+              journal,
+              issnDoi,
+              yearPub,
+              level,
+            ];
+            parentValues.forEach((val, c) => {
+              wsCite[`${citeCols[c]}${citeRow}`] = createTextCell(val, {
+                align: "left",
+                vAlign: "top",
+                edges: {
+                  isTop: true,
+                  isBottom: isLastRow,
+                  isLeft: c === 0,
+                  isRight: false,
+                },
+              });
             });
-            wsCite[`B${citeRow}`] = createTextCell(keywords, { align: "left", vAlign: "center", bg });
-            wsCite[`C${citeRow}`] = createTextCell(parentAuthors, {
-              align: "left",
-              vAlign: "center",
-              bg,
-            });
-            wsCite[`D${citeRow}`] = createTextCell(journal, { align: "left", vAlign: "center", bg });
-            wsCite[`E${citeRow}`] = createTextCell(issnDoi, { align: "center", vAlign: "center", bg });
-            wsCite[`F${citeRow}`] = createTextCell(yearPub, { align: "center", vAlign: "center", bg });
-            wsCite[`G${citeRow}`] = createTextCell(level, { align: "center", vAlign: "center", bg });
             wsCite[`H${citeRow}`] = createHyperlinkCell(parentLink, parentLink, {
               align: "left",
-              vAlign: "center",
-              bg,
+              vAlign: "top",
+              edges: {
+                isTop: true,
+                isBottom: isLastRow,
+                isLeft: false,
+                isRight: false,
+              },
             });
           } else {
             for (let c = 0; c < 8; c++) {
-              wsCite[`${citeCols[c]}${citeRow}`] = createTextCell("", { vAlign: "center", bg });
+              wsCite[`${citeCols[c]}${citeRow}`] = createTextCell("", {
+                align: "left",
+                vAlign: "top",
+                edges: {
+                  isTop: false,
+                  isBottom: isLastRow,
+                  isLeft: c === 0,
+                  isRight: false,
+                },
+              });
             }
           }
 
-          const citingAuthorsStr = formatAllAuthors(cp.authors, "Academic Authors");
-          const citingTitle = cp.title || "Citing Article";
-          const citingJournal = cp.journal || cp.publisher || "Academic Journal";
+          // Columns I–P (8–15)
+          const citingAuthorsStr = formatAllAuthors(cp.authors, "");
+          const citingTitle = cp.title || "";
+          const citingJournal = cp.journal || cp.publisher || "";
           const citingVolIssue = cp.volume_issue || cp.volumeIssue || cp.doi_issn || "";
           const citingYear = cp.year || "";
           const citingQuarter = cp.quarter || "First";
+          const citingPublisher = cp.publisher || cp.journal || "";
           const citingLink = cp.link || cp.url || "";
 
-          wsCite[`I${citeRow}`] = createTextCell(citingAuthorsStr, { align: "left", vAlign: "center", bg });
-          wsCite[`J${citeRow}`] = createTextCell(citingTitle, { align: "left", vAlign: "center", bg });
-          wsCite[`K${citeRow}`] = createTextCell(citingJournal, { align: "left", vAlign: "center", bg });
-          wsCite[`L${citeRow}`] = createTextCell(citingVolIssue, { align: "center", vAlign: "center", bg });
-          wsCite[`M${citeRow}`] = createTextCell(citingYear, { align: "center", vAlign: "center", bg });
-          wsCite[`N${citeRow}`] = createTextCell(citingQuarter, { align: "center", vAlign: "center", bg });
-          wsCite[`O${citeRow}`] = createHyperlinkCell(citingLink, citingLink, {
+          const citingValues = [
+            citingAuthorsStr, // I (8)
+            citingTitle,      // J (9)
+            citingJournal,    // K (10)
+            citingVolIssue,   // L (11)
+            citingYear,       // M (12)
+            citingQuarter,    // N (13)
+            citingPublisher,  // O (14)
+          ];
+
+          citingValues.forEach((val, idx) => {
+            const colIndex = 8 + idx;
+            wsCite[`${citeCols[colIndex]}${citeRow}`] = createTextCell(val, {
+              align: "left",
+              vAlign: "top",
+              edges: {
+                isTop: isFirstRow,
+                isBottom: isLastRow,
+                isLeft: false,
+                isRight: false,
+              },
+            });
+          });
+
+          // Column P (15): Citing Link (rightmost boundary of the publication block)
+          wsCite[`P${citeRow}`] = createHyperlinkCell(citingLink, citingLink, {
             align: "left",
-            vAlign: "center",
-            bg,
+            vAlign: "top",
+            edges: {
+              isTop: isFirstRow,
+              isBottom: isLastRow,
+              isLeft: false,
+              isRight: true,
+            },
           });
 
           const maxLines = Math.max(
             citingList.length === 1 ? parentAuthors.split("\n").length : 1,
             citingAuthorsStr.split("\n").length,
-            Math.ceil(citingTitle.length / 42)
+            Math.ceil(citingTitle.length / 42),
+            2
           );
-          rowHeightsCite.push({ hpt: Math.max(28, Math.min(160, maxLines * 15 + 8)) });
+          rowHeightsCite.push({ hpt: Math.max(26, Math.min(160, maxLines * 15 + 8)) });
           citeRow++;
         });
       }
     });
   }
 
-  wsCite["!ref"] = `A1:O${Math.max(citeRow - 1, 5)}`;
+  wsCite["!ref"] = `A1:P${Math.max(citeRow - 1, 2)}`;
   wsCite["!cols"] = citeHeaders.map((c) => ({ wch: c.wch }));
   wsCite["!rows"] = rowHeightsCite;
   wsCite["!merges"] = citeMerges;
@@ -540,7 +590,7 @@ export function buildCitationWorksheet(options: {
 }
 
 /**
- * Builds the 2-sheet Excel Workbook (Publication Sheet + Citation Sheet) for a single researcher
+ * Builds the 2-sheet Excel Workbook ('Publication' + 'Citation') for a single researcher
  * matching the official PSU Asingan Campus Research Coordinator format.
  */
 export function buildResearcherWorkbook(
@@ -549,7 +599,7 @@ export function buildResearcherWorkbook(
   exportYear = "all"
 ): any {
   const workbook = XLSX.utils.book_new();
-  const researcherName = researcher?.name || "Faculty Researcher";
+  const researcherName = researcher?.name || "Researcher";
   const department = researcher?.department || "Unassigned";
 
   const wsPub = buildPublicationWorksheet({
@@ -558,7 +608,7 @@ export function buildResearcherWorkbook(
     exportYear,
     publications: researcherPublications,
   });
-  XLSX.utils.book_append_sheet(workbook, wsPub, "Publication Sheet");
+  XLSX.utils.book_append_sheet(workbook, wsPub, "Publication");
 
   const wsCite = buildCitationWorksheet({
     researcherName,
@@ -566,7 +616,7 @@ export function buildResearcherWorkbook(
     exportYear,
     publications: researcherPublications,
   });
-  XLSX.utils.book_append_sheet(workbook, wsCite, "Citation Sheet");
+  XLSX.utils.book_append_sheet(workbook, wsCite, "Citation");
 
   return workbook;
 }
@@ -595,7 +645,7 @@ function crc32(bytes: Uint8Array): number {
 }
 
 export interface ZipEntryFile {
-  path: string; // e.g. "BSIT/Rodelio_M_Garin.xlsx"
+  path: string;
   data: Uint8Array;
 }
 
@@ -614,44 +664,42 @@ export function buildZipArchive(files: ZipEntryFile[]): Uint8Array {
     const crc = crc32(dataBytes);
     const size = dataBytes.length;
 
-    // Local file header (30 bytes + file name)
     const localHeader = new Uint8Array(30 + nameBytes.length);
     const lv = new DataView(localHeader.buffer);
-    lv.setUint32(0, 0x04034b50, true); // Local file header signature
-    lv.setUint16(4, 20, true);         // Version needed to extract (2.0)
-    lv.setUint16(6, 0x0800, true);     // UTF-8 filename flag
-    lv.setUint16(8, 0, true);          // Compression method (0 = Store)
-    lv.setUint16(10, 0, true);         // File last modification time
-    lv.setUint16(12, 0x5421, true);    // File last modification date
-    lv.setUint32(14, crc, true);       // CRC-32
-    lv.setUint32(18, size, true);      // Compressed size
-    lv.setUint32(22, size, true);      // Uncompressed size
-    lv.setUint16(26, nameBytes.length, true); // File name length
-    lv.setUint16(28, 0, true);         // Extra field length
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true);
+    lv.setUint16(8, 0, true);
+    lv.setUint16(10, 0, true);
+    lv.setUint16(12, 0x5421, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
     localHeader.set(nameBytes, 30);
 
     localParts.push(localHeader, dataBytes);
 
-    // Central directory file header (46 bytes + file name)
     const centralHeader = new Uint8Array(46 + nameBytes.length);
     const cv = new DataView(centralHeader.buffer);
-    cv.setUint32(0, 0x02014b50, true); // Central directory signature
-    cv.setUint16(4, 20, true);         // Version made by
-    cv.setUint16(6, 20, true);         // Version needed to extract
-    cv.setUint16(8, 0x0800, true);     // UTF-8 flag
-    cv.setUint16(10, 0, true);         // Compression method (0 = Store)
-    cv.setUint16(12, 0, true);         // Last mod file time
-    cv.setUint16(14, 0x5421, true);    // Last mod file date
-    cv.setUint32(16, crc, true);       // CRC-32
-    cv.setUint32(20, size, true);      // Compressed size
-    cv.setUint32(24, size, true);      // Uncompressed size
-    cv.setUint16(28, nameBytes.length, true); // File name length
-    cv.setUint16(30, 0, true);         // Extra field length
-    cv.setUint16(32, 0, true);         // File comment length
-    cv.setUint16(34, 0, true);         // Disk number start
-    cv.setUint16(36, 0, true);         // Internal file attributes
-    cv.setUint32(38, 0, true);         // External file attributes
-    cv.setUint32(42, offset, true);    // Relative offset of local header
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0x5421, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0, true);
+    cv.setUint32(42, offset, true);
     centralHeader.set(nameBytes, 46);
 
     centralParts.push(centralHeader);
@@ -661,14 +709,14 @@ export function buildZipArchive(files: ZipEntryFile[]): Uint8Array {
   const centralSize = centralParts.reduce((acc, arr) => acc + arr.length, 0);
   const eocd = new Uint8Array(22);
   const ev = new DataView(eocd.buffer);
-  ev.setUint32(0, 0x06054b50, true); // End of central directory signature
-  ev.setUint16(4, 0, true);          // Number of this disk
-  ev.setUint16(6, 0, true);          // Disk where central directory starts
-  ev.setUint16(8, files.length, true);  // Number of central directory records on this disk
-  ev.setUint16(10, files.length, true); // Total number of central directory records
-  ev.setUint32(12, centralSize, true);  // Size of central directory
-  ev.setUint32(16, offset, true);       // Offset of start of central directory
-  ev.setUint16(20, 0, true);            // Comment length
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  ev.setUint16(20, 0, true);
 
   const totalLength = offset + centralSize + eocd.length;
   const result = new Uint8Array(totalLength);
@@ -717,7 +765,6 @@ export interface ExportReportResult {
  * Generates individual Excel reports per selected researcher:
  * - If 1 researcher: downloads the single .xlsx file directly (NO zip).
  * - If multiple researchers: packages them into a clean .zip archive organized by department and researcher folder.
- *   Hierarchy inside ZIP: Department / Researcher_Name / Researcher_Name_Year.xlsx
  */
 export async function exportPerResearcherReportsByDepartment(
   options: MultiResearcherExportOptions
@@ -739,7 +786,6 @@ export async function exportPerResearcherReportsByDepartment(
     const dept = sanitizeFileSegment(researcher.department || "General");
     deptSet.add(dept);
 
-    // Filter publications belonging to this researcher and matching the year filter
     const researcherPubs = publications
       .filter((pub) => matchesResearcher(pub, researcher))
       .filter((pub) => exportYear === "all" || String(pub.year) === String(exportYear));
@@ -765,7 +811,6 @@ export async function exportPerResearcherReportsByDepartment(
     });
   }
 
-  // Case 1: Single researcher — download the single .xlsx file directly (no ZIP)
   if (generatedFiles.length === 1) {
     const singleFile = generatedFiles[0];
     triggerBlobDownload(
@@ -784,13 +829,12 @@ export async function exportPerResearcherReportsByDepartment(
     };
   }
 
-  // Case 2: Multiple researchers — package into an organized ZIP archive: Department / Researcher / Researcher.xlsx
   const zipEntries: ZipEntryFile[] = generatedFiles.map((item) => ({
     path: `${item.department}/${item.cleanName}/${item.fileName}`,
     data: item.bytes,
   }));
   const zipBytes = buildZipArchive(zipEntries);
-  const zipName = `PSU_Faculty_Research_Reports_${exportYear === "all" ? "All_Years" : exportYear}.zip`;
+  const zipName = `PSU_Research_Reports_${exportYear === "all" ? "All_Years" : exportYear}.zip`;
   triggerBlobDownload(zipBytes, zipName, "application/zip");
 
   return {
@@ -806,8 +850,8 @@ export async function exportPerResearcherReportsByDepartment(
 
 /**
  * Exports multiple researchers into ONE single Excel file:
- * - Sheet 1: Master "Publication Sheet" (combined papers for all selected researchers)
- * - Sheet 2: Master "Citation Sheet" (combined citations for all selected researchers)
+ * - Sheet 1: Master "Publication" (combined publications for all selected researchers)
+ * - Sheet 2: Master "Citation" (combined citations for all selected researchers)
  * - Subsequent Sheets: Dedicated individual tabs for each researcher
  */
 export function exportCombinedResearchersToSingleWorkbook(options: {
@@ -824,7 +868,6 @@ export function exportCombinedResearchersToSingleWorkbook(options: {
 
   const workbook = XLSX.utils.book_new();
 
-  // Find all publications belonging to the selected researchers
   const targetPubs = publications.filter((pub: any) => {
     const matchesYear = exportYear === "all" || String(pub.year) === String(exportYear);
     const belongsToSelected = selectedResearchers.some((r: any) => matchesResearcher(pub, r));
@@ -832,34 +875,27 @@ export function exportCombinedResearchersToSingleWorkbook(options: {
   });
 
   const yearSuffix = exportYear === "all" ? "All_Years" : exportYear;
-  const masterTitle = options.title || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS";
-  const masterPubSub = `PUBLICATION SHEET • Master Campus / Multi-Researcher Matrix (${selectedResearchers.length} Researchers)${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
-  const masterCiteSub = `CITATION SHEET • Master Campus / Multi-Researcher Matrix (${selectedResearchers.length} Researchers)${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
 
-  // Sheet 1: Combined Master Publication Sheet (8 official columns)
+  // Sheet 1: Combined Master Publication Sheet (8 columns)
   const masterWsPub = buildPublicationWorksheet({
-    mainTitle: masterTitle,
-    subtitle: masterPubSub,
     publications: targetPubs,
     researcherName: "All Selected Researchers",
     department: "Campus",
     exportYear,
   });
-  XLSX.utils.book_append_sheet(workbook, masterWsPub, "Publication Sheet");
+  XLSX.utils.book_append_sheet(workbook, masterWsPub, "Publication");
 
-  // Sheet 2: Combined Master Citation Sheet (15 official columns)
+  // Sheet 2: Combined Master Citation Sheet (16 columns)
   const masterWsCite = buildCitationWorksheet({
-    mainTitle: masterTitle,
-    subtitle: masterCiteSub,
     publications: targetPubs,
     researcherName: "All Selected Researchers",
     department: "Campus",
     exportYear,
   });
-  XLSX.utils.book_append_sheet(workbook, masterWsCite, "Citation Sheet");
+  XLSX.utils.book_append_sheet(workbook, masterWsCite, "Citation");
 
   // Subsequent Sheets: Dedicated tab per selected researcher
-  const usedSheetNames = new Set<string>(["publication sheet", "citation sheet"]);
+  const usedSheetNames = new Set<string>(["publication", "citation"]);
   for (const researcher of selectedResearchers) {
     const researcherPubs = publications.filter(
       (pub: any) =>
@@ -878,8 +914,6 @@ export function exportCombinedResearchersToSingleWorkbook(options: {
     usedSheetNames.add(finalSheetName.toLowerCase());
 
     const wsResearcherPub = buildPublicationWorksheet({
-      mainTitle: masterTitle,
-      subtitle: `PUBLICATION SHEET • ${researcher.name} (${researcher.department || "General"})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`,
       publications: researcherPubs,
       researcherName: researcher.name,
       department: researcher.department,
@@ -915,7 +949,7 @@ export function exportCombinedResearchersToSingleWorkbook(options: {
 
 /**
  * Exports 1 or more specific publications selected by the user into an official Excel file
- * (Sheet 1: Publication Sheet with the exact 8 columns; Sheet 2: Citation Sheet with the exact 15 columns).
+ * (Sheet 1: 'Publication' with the exact 8 columns; Sheet 2: 'Citation' with the exact 16 columns).
  */
 export function exportSelectedPublicationsToExcel(
   selectedPublications: any[],
@@ -930,26 +964,25 @@ export function exportSelectedPublicationsToExcel(
   const yearSuffix = exportYear === "all" ? "All_Years" : exportYear;
   const count = selectedPublications.length;
 
-  const subtitlePub = `PUBLICATION SHEET • Selected Works (${count} ${count === 1 ? "Publication" : "Publications"})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
-  const subtitleCite = `CITATION SHEET • Selected Works (${count} ${count === 1 ? "Publication" : "Publications"})${exportYear !== "all" ? ` • Year: ${exportYear}` : ""}`;
-
   const wsPub = buildPublicationWorksheet({
-    mainTitle: options?.title || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS",
-    subtitle: subtitlePub,
     publications: selectedPublications,
-    researcherName: count === 1 ? (selectedPublications[0].owner_name || selectedPublications[0].ownerName || "Researcher") : "Selected Researchers",
+    researcherName:
+      count === 1
+        ? selectedPublications[0].owner_name || selectedPublications[0].ownerName || "Researcher"
+        : "Selected Researchers",
     exportYear,
   });
-  XLSX.utils.book_append_sheet(workbook, wsPub, "Publication Sheet");
+  XLSX.utils.book_append_sheet(workbook, wsPub, "Publication");
 
   const wsCite = buildCitationWorksheet({
-    mainTitle: options?.title || "PANGASINAN STATE UNIVERSITY — ASINGAN CAMPUS",
-    subtitle: subtitleCite,
     publications: selectedPublications,
-    researcherName: count === 1 ? (selectedPublications[0].owner_name || selectedPublications[0].ownerName || "Researcher") : "Selected Researchers",
+    researcherName:
+      count === 1
+        ? selectedPublications[0].owner_name || selectedPublications[0].ownerName || "Researcher"
+        : "Selected Researchers",
     exportYear,
   });
-  XLSX.utils.book_append_sheet(workbook, wsCite, "Citation Sheet");
+  XLSX.utils.book_append_sheet(workbook, wsCite, "Citation");
 
   const wbArrayBuffer: ArrayBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
   const bytes = new Uint8Array(wbArrayBuffer);
@@ -977,7 +1010,7 @@ export function exportSelectedPublicationsToExcel(
 }
 
 /**
- * Exports a single publication (with its Publication Sheet and merged Citation Sheet)
+ * Exports a single publication (with its 'Publication' and merged 'Citation' sheets)
  * directly as an .xlsx file.
  */
 export function exportSinglePublicationToExcel(publication: any): void {

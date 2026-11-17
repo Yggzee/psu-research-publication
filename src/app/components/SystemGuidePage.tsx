@@ -50,6 +50,8 @@ import {
   FileSpreadsheet,
   FolderArchive,
   Layers,
+  Database,
+  Clock,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -412,6 +414,17 @@ const guestGuideCategories: GuideCategory[] = [
         explanation:
           "Takes PSU Asingan researchers and the Research Coordinator to the Sign In screen so they can access their personal workspace.",
       },
+      {
+        label: "Ask Campus AI Assistant (Public Floating Bubble)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900 border border-emerald-500/40 text-white text-xs font-semibold shadow-md">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Ask Campus AI</span>
+          </span>
+        ),
+        explanation:
+          "Available directly on the public repository portal, visitors can ask questions about the system's purpose, how to join, registered researcher counts, and campus research tracks while sensitive personnel information like Instructor IDs is strictly protected.",
+      },
     ],
   },
   {
@@ -468,7 +481,7 @@ const guestGuideCategories: GuideCategory[] = [
           </div>
         ),
         explanation:
-          "Both Faculty and Non-Faculty researchers use the exact same Instructor ID format (ASIN-00000). The 'ASIN-' prefix is permanently locked so you only need to type your 5 numeric digits.",
+          "Both Faculty and Non-Faculty researchers use the exact same Instructor ID format (ASIN- followed by 1 to 12 numeric digits). The 'ASIN-' prefix is permanently locked so you only need to type your 1 to 12 numeric digits.",
       },
       {
         label: "Submit Request Button",
@@ -509,7 +522,40 @@ const researcherGuideCategories: GuideCategory[] = [
           </span>
         ),
         explanation:
-          "Opens the 'Add Publication' form where you can enter the Title, Authors, Journal Name, Publication Year, and Link of a published work. Submitting it sends the record to Research Coordinator Sir Rodelio M. Garin for verification.",
+          "Opens the Add Publication form with two options: Manual Entry (requiring Title, Authors, Journal or Venue, and Publication Year) or DOI Link Retrieval (to auto-enrich metadata and citations). Submitting sends the record for Research Coordinator approval.",
+      },
+      {
+        label: "Reload Citations Button (Publications)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-semibold">
+            <RefreshCw className="w-3.5 h-3.5 text-brand" />
+            <span>Reload Citations</span>
+          </span>
+        ),
+        explanation:
+          "Refreshes live Google Scholar citations for all verified publications across the institutional repository.",
+      },
+      {
+        label: "Remove Publication Button",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-destructive border border-destructive/20 bg-destructive/10">
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Remove Publication</span>
+          </span>
+        ),
+        explanation:
+          "Allows a researcher to remove a publication that was mistakenly assigned to their profile, unlinking it safely.",
+      },
+      {
+        label: "Reload Citation Button (Publication Detail)",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-teal-500/30 text-teal-700 bg-teal-500/10 text-xs font-semibold">
+            <RefreshCw className="w-3 h-3 text-teal-600" />
+            <span>Reload Citation</span>
+          </span>
+        ),
+        explanation:
+          "Positioned at the top of the Citations table on the Publication Detail page, clicking this singular 'Reload Citation' button updates live Google Scholar citation numbers and citing paper lists.",
       },
       {
         label: "My Published Research Tab",
@@ -520,7 +566,18 @@ const researcherGuideCategories: GuideCategory[] = [
           </span>
         ),
         explanation:
-          "Displays only the publications assigned to your researcher profile, including both approved works and those awaiting coordinator approval.",
+          "Displays only the approved publications assigned to your researcher profile.",
+      },
+      {
+        label: "Waiting for Approval Tab",
+        visualReplica: (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-bold shadow-2xs">
+            <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span>Waiting for Approval</span>
+          </span>
+        ),
+        explanation:
+          "Displays publications you have added that are currently awaiting review and approval from Research Coordinator Sir Rodelio M. Garin.",
       },
       {
         label: "Institutional Repository Tab",
@@ -1067,7 +1124,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
     icon: FileBarChart,
     narrativeParagraphs: [
       "The 'Reports' page houses the institutional 'Export Studio & Spreadsheets', 'Accreditation & SUC Matrix', and 'Executive Summary' tabs designed to eliminate manual spreadsheet formatting before CHED, AACCUP, or university evaluations.",
-      "The Export Studio provides three flexible modes: (1) 'By Researcher(s)', allowing you to select researchers and download either individual .xlsx workbooks, an organized ZIP archive with department subfolders ('Department/Researcher_Name/'), or a single consolidated workbook containing a Master Publication Sheet, Master Citation Sheet, and dedicated individual tabs; (2) 'By Whole Department', to export an entire academic department's portfolio (BSIT, BSBA, BSE, BTLED, BIT, BEE, or Non-Faculty) in one click; and (3) 'By Selected Publications', featuring an interactive custom paper picker where you can check any combination of publications to export an official 2-sheet dossier. Additionally, one-click Excel exports are available directly from the Publications repository floating dock, publication inspector drawer, and researcher profile headers.",
+      "The Export Studio provides three flexible modes: (1) 'By Researcher(s)', allowing you to select researchers and download either individual .xlsx workbooks, an organized ZIP archive with department subfolders ('Department/Researcher_Name/'), or a single consolidated workbook containing a Master Publication Sheet, Master Citation Sheet, and dedicated individual tabs; (2) 'By Whole Department', to export an entire academic department's portfolio (BSIT, BSBA, BSE, BTLED, BIT, BEE, or Non-Faculty) in one click; and (3) 'By Selected Publications', featuring an interactive custom paper picker where you can check any combination of publications to export an official 2-sheet dossier. All institutional spreadsheet and dossier exports are centralized exclusively within this Reports tab to maintain accreditation data integrity.",
     ],
     clickableItems: [
       {
@@ -1117,7 +1174,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
           </span>
         ),
         explanation:
-          "Generates formatted Excel spreadsheets preserving the official 8-column Publication Sheet and 15-column Citation Sheet templates.",
+          "Generates formatted Excel spreadsheets preserving the official 8-column Publication and 16-column Citation templates.",
       },
       {
         label: "Print Dossier / Summary Button",
@@ -1164,7 +1221,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
     icon: Shield,
     narrativeParagraphs: [
       "The 'Admin Console' is your exclusive management center as Research Coordinator. At the top of the page sits the master administration toolbar with 'Invite Researcher' and 'Email Outbox', followed by four live summary counters: Total Researchers, Invitation Requests, Pending Activations, and Pending Claims. Beneath those counters are four management tabs: 'Invitations & Requests', 'Researchers', 'Publication Claims', and 'Integrations & Tokens'.",
-      "Every administrative workflow is organized cleanly across those four tabs. In 'Invitations & Requests', you review incoming portal requests and click 'Review & Invite' to open the pre-filled pop-up modal, or admit invited researchers who have verified their emails. In 'Researchers', you can search and filter active researchers, sync any researcher's Google Scholar publications, or click the edit icon to open their credentials in a pop-up dialog. Clicking 'Invite Researcher' opens the dedicated modal with a locked 'ASIN-' prefix + 5-digit Instructor ID (ASIN-00000) and classification selector.",
+      "Every administrative workflow is organized cleanly across those four tabs. In 'Invitations & Requests', you review incoming portal requests and click 'Review & Invite' to open the pre-filled pop-up modal, or admit invited researchers who have verified their emails. In 'Researchers', you can search and filter active researchers, sync any researcher's Google Scholar publications, or click the edit icon to open their credentials in a pop-up dialog. Clicking 'Invite Researcher' opens the dedicated modal with a locked 'ASIN-' prefix + 1 to 12 numeric digits Instructor ID (e.g. ASIN-00002) and classification selector.",
     ],
     clickableItems: [
       {
@@ -1176,7 +1233,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
           </span>
         ),
         explanation:
-          "Opens the dedicated pop-up modal to invite a new campus researcher with a locked 'ASIN-' prefix and 5-digit Instructor ID.",
+          "Opens the dedicated pop-up modal to invite a new campus researcher with a locked 'ASIN-' prefix and 1 to 12 numeric digits Instructor ID.",
       },
       {
         label: "Approve & Reject Buttons (Tab 1: Pending Claims)",
@@ -1230,7 +1287,7 @@ const coordinatorGuideCategories: GuideCategory[] = [
           </div>
         ),
         explanation:
-          "Type the 5 digits of the researcher's Instructor ID (ASIN-00000), fill in their name, email, and classification, and click 'Create & Send Invitation' to email their activation link.",
+          "Type the 1 to 12 numeric digits of the researcher's Instructor ID (e.g. ASIN-00002), fill in their name, email, and classification, and click 'Create & Send Invitation' to email their activation link.",
       },
     ],
   },
@@ -1241,20 +1298,20 @@ const coordinatorGuideCategories: GuideCategory[] = [
     subtitle: "Managing your coordinator profile, appearance theme, password, and cloud database backup",
     icon: Settings,
     narrativeParagraphs: [
-      "At the bottom left of the sidebar, 'My Profile' and 'Settings' allow you to manage your personal coordinator portfolio, view all your publications, manage system preferences, and perform database cloud synchronization. In 'My Profile', you can view your complete publication catalog, citation density, contact email, and connected Google Scholar link. In 'Settings', you can switch themes, inspect environment credential security settings, and click 'Sync Database' to guarantee that all local SQLite tables are permanently replicated to Turso Cloud.",
+      "At the bottom left of the sidebar, 'My Profile' and 'Settings' allow you to manage your personal coordinator portfolio, view all your publications, manage system preferences, and perform database cloud synchronization. In 'My Profile', you can view your complete publication catalog, citation density, contact email, and connected Google Scholar link. In 'Settings', you can switch themes, view the automated daily backup schedule (scheduled every night at 12:00 AM Asia/Manila, UTC+8), click 'Manual Backup' to generate and download an encrypted snapshot of all tables, or synchronize with Turso Cloud.",
       "The 'System & Cloud Storage' tab shows the live connection status of the portal's Turso Cloud storage, ensuring that all researcher accounts, invitations, publications, and citations are permanently backed up and never lost even when the cloud server restarts.",
     ],
     clickableItems: [
       {
-        label: "Sync Database Button (Settings Header)",
+        label: "Manual Backup Button (Settings)",
         visualReplica: (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-card text-foreground text-xs font-semibold shadow-2xs">
-            <RefreshCw className="w-3.5 h-3.5 text-brand" />
-            <span>Sync Database</span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold shadow-2xs">
+            <Database className="w-3.5 h-3.5" />
+            <span>Manual Backup</span>
           </span>
         ),
         explanation:
-          "Located at the top right of the Settings header, this triggers a verification and immediate push of all local database records to Turso Cloud.",
+          "Visible only to the Research Coordinator, clicking 'Manual Backup' triggers an immediate point-in-time snapshot of the database (complementing the daily 12:00 AM Asia/Manila automated schedule) and lets you download the backup file.",
       },
       {
         label: "Appearance Mode Cards (Light / Dark / System)",

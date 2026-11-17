@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import { db, runInTransaction, dbReadyPromise } from './db.mjs';
-import { isTursoConfigured, rehydrateFromTurso, pushTableToTurso } from './turso.mjs';
+import { db, runInTransaction, dbReadyPromise, deletePublicationCascade } from './db.mjs';
+import { isTursoConfigured, rehydrateFromTurso, pushTableToTurso, executeBatchOnTurso } from './turso.mjs';
 import {
   scrapeGoogleScholarDirect,
   scrapeGoogleScholarCitations,
@@ -13,6 +13,9 @@ import {
   isInitialsToken,
   matchAuthorName,
   searchPhilippineJournals,
+  normalizeDoiInput,
+  resolvePublicationByDoi,
+  fetchLiveGoogleScholarCitationCount,
 } from './scholarScraper.mjs';
 import {
   classifyPublicationSDG,
@@ -48,9 +51,56 @@ import {
   sanitizePublicationInput,
   sanitizeResearcherInput,
   normalizeDepartment,
+  normalizeAndValidateInstructorId,
+  splitFullName,
 } from './authHelper.mjs';
+import {
+  createDatabaseBackup,
+  listDatabaseBackups,
+  getDatabaseBackupById,
+  BACKUP_SCHEDULE_INFO,
+} from './backupService.mjs';
 
 export { matchesResearcher };
+
+function setNoStoreHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+}
+
+function isPubResearchersBackfilled(dbInstance) {
+  try {
+    return dbInstance.prepare("SELECT value FROM system_settings WHERE key = 'pub_researchers_backfilled'").get()?.value === '1';
+  } catch {
+    return false;
+  }
+}
+
+function getLinkedIdsByPubMap(dbInstance, approvedOnly = false) {
+  const map = new Map();
+  try {
+    const sql = approvedOnly
+      ? "SELECT publication_id, instructor_id FROM publication_researchers WHERE approval_status = 'approved'"
+      : 'SELECT publication_id, instructor_id FROM publication_researchers';
+    const rows = dbInstance.prepare(sql).all();
+    for (const row of rows) {
+      if (!map.has(row.publication_id)) map.set(row.publication_id, []);
+      map.get(row.publication_id).push(row.instructor_id);
+    }
+  } catch {}
+  return map;
+}
+
+function getLinkedInstructorIdsForPub(dbInstance, pubId, approvedOnly = false) {
+  try {
+    const sql = approvedOnly
+      ? "SELECT instructor_id FROM publication_researchers WHERE publication_id = ? AND approval_status = 'approved'"
+      : 'SELECT instructor_id FROM publication_researchers WHERE publication_id = ?';
+    return dbInstance.prepare(sql).all(pubId).map((r) => r.instructor_id);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Automatically recalculate publication counts and citation sums for all researchers
@@ -60,6 +110,30 @@ export function recalculateAllResearcherStats(dbInstance) {
   if (!dbInstance) return;
   try {
     const researchers = dbInstance.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
+    if (isPubResearchersBackfilled(dbInstance)) {
+      const countStmt = dbInstance.prepare(`
+        SELECT COUNT(DISTINCT p.id) AS pubCount, COALESCE(SUM(p.citations), 0) AS citCount
+        FROM publication_researchers pr
+        JOIN publications p ON p.id = pr.publication_id
+        WHERE LOWER(pr.instructor_id) = LOWER(?)
+          AND pr.approval_status = 'approved'
+          AND p.approval_status = 'approved'
+      `);
+      for (const r of researchers) {
+        const row = countStmt.get(r.instructor_id) || { pubCount: 0, citCount: 0 };
+        const pubCount = Number(row.pubCount) || 0;
+        const citCount = Number(row.citCount) || 0;
+        if (r.total_publications !== pubCount || r.total_citations !== citCount) {
+          dbInstance.prepare(`
+            UPDATE researchers
+            SET total_publications = ?, total_citations = ?
+            WHERE id = ?
+          `).run(pubCount, citCount, r.id);
+        }
+      }
+      return;
+    }
+
     const allApproved = dbInstance.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
 
     for (const r of researchers) {
@@ -87,10 +161,26 @@ export function updateResearcherStats(dbInstance, researcherId) {
   const researcher = dbInstance.prepare('SELECT * FROM researchers WHERE id = ? OR instructor_id = ?').get(researcherId, researcherId);
   if (!researcher) return;
 
-  const allApproved = dbInstance.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
-  const matching = allApproved.filter((p) => matchesResearcher(p, researcher));
-  const pubCount = matching.length;
-  const citCount = matching.reduce((sum, p) => sum + (p.citations || 0), 0);
+  let pubCount = 0;
+  let citCount = 0;
+
+  if (isPubResearchersBackfilled(dbInstance)) {
+    const row = dbInstance.prepare(`
+      SELECT COUNT(DISTINCT p.id) AS pubCount, COALESCE(SUM(p.citations), 0) AS citCount
+      FROM publication_researchers pr
+      JOIN publications p ON p.id = pr.publication_id
+      WHERE LOWER(pr.instructor_id) = LOWER(?)
+        AND pr.approval_status = 'approved'
+        AND p.approval_status = 'approved'
+    `).get(researcher.instructor_id) || { pubCount: 0, citCount: 0 };
+    pubCount = Number(row.pubCount) || 0;
+    citCount = Number(row.citCount) || 0;
+  } else {
+    const allApproved = dbInstance.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
+    const matching = allApproved.filter((p) => matchesResearcher(p, researcher));
+    pubCount = matching.length;
+    citCount = matching.reduce((sum, p) => sum + (p.citations || 0), 0);
+  }
 
   dbInstance.prepare(`
     UPDATE researchers 
@@ -100,10 +190,47 @@ export function updateResearcherStats(dbInstance, researcherId) {
 }
 
 /**
- * Cascade delete all publications, citing papers, and citation trends belonging to a researcher
+ * Unlink a researcher from publications and cascade delete only those with 0 remaining assigned researchers
  */
 export function deleteResearcherPublications(dbInstance, researcher) {
   if (!researcher) return 0;
+
+  if (isPubResearchersBackfilled(dbInstance)) {
+    const affectedPubIds = dbInstance
+      .prepare('SELECT DISTINCT publication_id FROM publication_researchers WHERE LOWER(instructor_id) = LOWER(?)')
+      .all(researcher.instructor_id)
+      .map((r) => r.publication_id);
+
+    dbInstance.prepare('DELETE FROM publication_researchers WHERE LOWER(instructor_id) = LOWER(?)').run(researcher.instructor_id);
+
+    let deletedCount = 0;
+    for (const pubId of affectedPubIds) {
+      const remaining = dbInstance.prepare(`
+        SELECT pr.instructor_id, pr.approval_status, r.name
+        FROM publication_researchers pr
+        LEFT JOIN researchers r ON LOWER(r.instructor_id) = LOWER(pr.instructor_id)
+        WHERE pr.publication_id = ?
+        ORDER BY CASE WHEN pr.approval_status = 'approved' THEN 0 ELSE 1 END, pr.created_at ASC
+      `).all(pubId);
+
+      if (remaining.length === 0) {
+        deletePublicationCascade(pubId, dbInstance);
+        deletedCount++;
+      } else {
+        const nextOwner = remaining[0];
+        const hasApproved = remaining.some((l) => l.approval_status === 'approved');
+        dbInstance.prepare(`
+          UPDATE publications
+          SET owner_id = ?, owner_name = ?,
+              approval_status = CASE WHEN ? = 1 THEN approval_status ELSE 'pending' END,
+              is_public = CASE WHEN ? = 1 THEN is_public ELSE 0 END
+          WHERE id = ?
+        `).run(nextOwner.instructor_id, nextOwner.name || nextOwner.instructor_id, hasApproved ? 1 : 0, hasApproved ? 1 : 0, pubId);
+      }
+    }
+    return deletedCount;
+  }
+
   const rInstId = (researcher.instructor_id || '').trim().toLowerCase();
   const rId = (researcher.id || '').trim().toLowerCase();
   const rUserId = (researcher.user_id || '').trim().toLowerCase();
@@ -122,14 +249,8 @@ export function deleteResearcherPublications(dbInstance, researcher) {
     return matchesResearcher(p, researcher);
   });
 
-  const delCiting = dbInstance.prepare('DELETE FROM citing_papers WHERE publication_id = ?');
-  const delTrends = dbInstance.prepare('DELETE FROM citation_trends WHERE publication_id = ?');
-  const delPub = dbInstance.prepare('DELETE FROM publications WHERE id = ?');
-
   for (const pub of toDelete) {
-    delCiting.run(pub.id);
-    delTrends.run(pub.id);
-    delPub.run(pub.id);
+    deletePublicationCascade(pub.id, dbInstance);
   }
 
   return toDelete.length;
@@ -144,21 +265,57 @@ export function cleanupOrphanedPublications(dbInstance) {
     const validResearchers = dbInstance
       .prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'")
       .all();
+
+    if (isPubResearchersBackfilled(dbInstance)) {
+      const validInstIds = new Set(validResearchers.map((r) => String(r.instructor_id || '').trim().toLowerCase()).filter(Boolean));
+      const researcherByInst = new Map(validResearchers.map((r) => [String(r.instructor_id || '').trim().toLowerCase(), r]));
+
+      const allLinks = dbInstance.prepare('SELECT publication_id, instructor_id FROM publication_researchers').all();
+      const delInvalidLink = dbInstance.prepare('DELETE FROM publication_researchers WHERE publication_id = ? AND instructor_id = ?');
+      for (const l of allLinks) {
+        if (!validInstIds.has(String(l.instructor_id || '').trim().toLowerCase())) {
+          delInvalidLink.run(l.publication_id, l.instructor_id);
+        }
+      }
+
+      const allPubs = dbInstance.prepare('SELECT id, owner_id, owner_name FROM publications').all();
+      const tiePub = dbInstance.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE id = ?');
+      const getPubLinks = dbInstance.prepare(`
+        SELECT instructor_id, approval_status
+        FROM publication_researchers
+        WHERE publication_id = ?
+        ORDER BY CASE WHEN approval_status = 'approved' THEN 0 ELSE 1 END, created_at ASC
+      `);
+
+      let removedCount = 0;
+      for (const p of allPubs) {
+        const links = getPubLinks.all(p.id);
+        if (links.length === 0) {
+          deletePublicationCascade(p.id, dbInstance);
+          removedCount++;
+        } else {
+          const currentOwnerLower = String(p.owner_id || '').trim().toLowerCase();
+          const hasValidOwner = links.some((l) => String(l.instructor_id || '').trim().toLowerCase() === currentOwnerLower);
+          if (!hasValidOwner) {
+            const firstInst = links[0].instructor_id;
+            const resObj = researcherByInst.get(String(firstInst).trim().toLowerCase());
+            tiePub.run(firstInst, resObj?.name || p.owner_name || firstInst, p.id);
+          }
+        }
+      }
+      return removedCount;
+    }
+
     const allPubs = dbInstance.prepare('SELECT * FROM publications').all();
     if (allPubs.length === 0) return 0;
 
-    const delCiting = dbInstance.prepare('DELETE FROM citing_papers WHERE publication_id = ?');
-    const delTrends = dbInstance.prepare('DELETE FROM citation_trends WHERE publication_id = ?');
-    const delPub = dbInstance.prepare('DELETE FROM publications WHERE id = ?');
     const tiePub = dbInstance.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE id = ?');
 
     let removedCount = 0;
     for (const p of allPubs) {
       const matched = validResearchers.find((r) => matchesResearcher(p, r));
       if (!matched) {
-        delCiting.run(p.id);
-        delTrends.run(p.id);
-        delPub.run(p.id);
+        deletePublicationCascade(p.id, dbInstance);
         removedCount++;
       } else if (p.owner_id !== matched.instructor_id || p.owner_name !== matched.name) {
         tiePub.run(matched.instructor_id, matched.name, p.id);
@@ -320,43 +477,174 @@ function computePublicationCitationYears(dbInstance, p, persistTrends = false) {
 const syncedPublicationsCache = new Map();
 const activeCitationSyncJobs = new Set();
 
-async function syncSinglePublicationCitations(pubId, maxLimit = 10000, force = false) {
+async function buildApifyScraperHelpers() {
+  const activeToken = getActiveApifyTokenRow();
+  if (!activeToken || !activeToken.token) return {};
+
+  const thresholdSetting = Number(db.prepare("SELECT value FROM system_settings WHERE key = 'scraper_quota_threshold_usd'").get()?.value) || 1.0;
+  let remainingUsd = Number(activeToken.max_monthly_usage_usd ?? 5) - Number(activeToken.monthly_usage_usd ?? 0);
+  try {
+    const usage = await fetchApifyTokenUsage(activeToken, false);
+    if (usage && usage.remainingUsd !== undefined) {
+      remainingUsd = Number(usage.remainingUsd);
+    }
+  } catch {}
+
+  if (remainingUsd <= thresholdSetting) return {};
+
+  const actorUrlSegment = String(activeToken.actor_id || 'johnvc~google-scholar-api').replace('/', '~');
+  const isLite = actorUrlSegment.includes('lite');
+
+  const runApify = async (queryOrUrl, maxResults = 10) => {
+    const bodyPayload = String(queryOrUrl).startsWith('http')
+      ? { startUrls: [{ url: queryOrUrl }], queries: [queryOrUrl], maxResults }
+      : isLite
+      ? { searchTerms: [queryOrUrl], maxResults }
+      : { q: queryOrUrl, maxResults, max_pages: Math.max(1, Math.ceil(maxResults / 10)), start_page: 1 };
+
+    const r = await fetch(
+      `https://api.apify.com/v2/acts/${actorUrlSegment}/run-sync-get-dataset-items?token=${activeToken.token}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload),
+      }
+    );
+    if (!r.ok) return [];
+    const items = await r.json();
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((raw) => ({
+        title: (raw.paper_title || raw.title || raw.name || '').trim(),
+        authors: Array.isArray(raw.publication_info?.authors)
+          ? raw.publication_info.authors.map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim())).filter(Boolean)
+          : Array.isArray(raw.authors)
+          ? raw.authors.map((a) => (typeof a === 'string' ? a.trim() : (a?.name || '').trim())).filter(Boolean)
+          : typeof raw.authors === 'string'
+          ? raw.authors.split(',').map((a) => a.trim()).filter(Boolean)
+          : [],
+        journal: (raw.source || raw.journal || raw.publication || raw.venue || 'Academic Publication').trim(),
+        year: parseInt(raw.year || raw.publicationYear, 10) || null,
+        citations: parseInt(raw.inline_links?.cited_by_total ?? raw.citations ?? raw.citationCount ?? raw.numCitations ?? 0, 10) || 0,
+        abstract: raw.snippet || raw.abstract || raw.description || '',
+        url: raw.link || raw.url || '',
+        pdfUrl: Array.isArray(raw.resources)
+          ? raw.resources.find((resItem) => resItem.link && (resItem.file_format === 'PDF' || String(resItem.link).toLowerCase().endsWith('.pdf')))?.link || null
+          : null,
+        citedByLink: raw.inline_links?.cited_by?.link || raw.inline_links?.cited_by_link || '',
+      }))
+      .filter((it) => it.title);
+  };
+
+  return {
+    apifyRunner: runApify,
+    apifySearchRunner: runApify,
+    apifyCitesRunner: runApify,
+  };
+}
+
+function findPrimaryResearcherForPublication(dbInstance, pub) {
+  if (!pub) return null;
+  if (isPubResearchersBackfilled(dbInstance)) {
+    const linked = dbInstance.prepare(`
+      SELECT r.*
+      FROM publication_researchers pr
+      JOIN researchers r ON LOWER(r.instructor_id) = LOWER(pr.instructor_id)
+      WHERE pr.publication_id = ?
+        AND (r.status IS NULL OR r.status != 'rejected')
+      ORDER BY CASE WHEN pr.approval_status = 'approved' THEN 0 ELSE 1 END, pr.created_at ASC
+      LIMIT 1
+    `).get(pub.id);
+    if (linked) return linked;
+  }
+  if (pub.owner_id) {
+    const byOwner = dbInstance.prepare('SELECT * FROM researchers WHERE LOWER(instructor_id) = LOWER(?) OR id = ? LIMIT 1').get(pub.owner_id, pub.owner_id);
+    if (byOwner) return byOwner;
+  }
+  const allRes = dbInstance.prepare("SELECT * FROM researchers WHERE status IS NULL OR status != 'rejected'").all();
+  return allRes.find((r) => matchesResearcher(pub, r)) || null;
+}
+
+async function syncSinglePublicationCitations(pubId, maxLimit = 10000, force = false, options = {}) {
   if (!pubId || activeCitationSyncJobs.has(pubId)) return;
   activeCitationSyncJobs.add(pubId);
   try {
-    const p = db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId);
+    let p = db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId);
     if (!p) return;
+
+    let liveResult = null;
+    let citationsUpdated = false;
+    if (force || options.refreshLiveCount) {
+      const matchedResearcher = findPrimaryResearcherForPublication(db, p);
+      liveResult = await fetchLiveGoogleScholarCitationCount(
+        p,
+        matchedResearcher,
+        options.profileCache || null,
+        options
+      );
+      if (liveResult.matched && (liveResult.citations > 0 || Number(p.citations) === 0)) {
+        const prevCits = Number(p.citations) || 0;
+        const nextCits = Number(liveResult.citations) || 0;
+        const nextLink = liveResult.citedByLink || p.cited_by_link || '';
+        if (nextCits !== prevCits || (nextLink && nextLink !== (p.cited_by_link || ''))) {
+          db.prepare(`
+            UPDATE publications
+            SET citations = ?, cited_by_link = COALESCE(NULLIF(?, ''), cited_by_link)
+            WHERE id = ?
+          `).run(nextCits, nextLink, pubId);
+          p = db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId) || p;
+          citationsUpdated = true;
+        }
+      }
+    }
+
     const totalTarget = Math.min(maxLimit, Number(p.citations) || 0);
-    if (totalTarget <= 0) return;
+    if (totalTarget <= 0) {
+      if (citationsUpdated) recalculateAllResearcherStats(db);
+      return;
+    }
 
     const existingRows = db.prepare('SELECT * FROM citing_papers WHERE publication_id = ?').all(pubId);
     const existingCount = existingRows.length;
     if (!force && existingCount >= totalTarget) {
       syncedPublicationsCache.set(pubId, totalTarget);
+      if (citationsUpdated) recalculateAllResearcherStats(db);
       return;
     }
 
-    // Prioritize OpenAlex (Cursor Paginated) + Semantic Scholar (Offset Paginated) + CrossRef (Paginated)
-    let fetchedCiting = await fetchCitingPapersFromOpenAlex(p, totalTarget);
+    // Prioritize OpenAlex (Cursor Paginated) + Semantic Scholar (Offset Paginated)
+    let fetchedCiting = await fetchCitingPapersFromOpenAlex(p, totalTarget, { skipGoogleScholar: true });
+    let gsCiting = null;
 
-    // Supplement with Google Scholar direct if OpenAlex/S2/CrossRef have not yet reached totalTarget
+    // Supplement with Google Scholar direct if OpenAlex/S2 have not yet reached totalTarget
     if (fetchedCiting.length < totalTarget && p.cited_by_link) {
       try {
         const neededPages = Math.min(Math.ceil((totalTarget - fetchedCiting.length) / 10) + 1, 30);
-        const gsCiting = await scrapeGoogleScholarCitations(p.cited_by_link, neededPages);
+        gsCiting = await scrapeGoogleScholarCitations(p.cited_by_link, neededPages, {
+          apifyCitesRunner: options.apifyCitesRunner,
+        });
         if (gsCiting.length > 0) {
           fetchedCiting = [...fetchedCiting, ...gsCiting];
+        }
+        if (!liveResult?.matched && !gsCiting.captchaBlocked && gsCiting.reportedTotal > 0 && gsCiting.reportedTotal !== Number(p.citations)) {
+          db.prepare('UPDATE publications SET citations = ? WHERE id = ?').run(gsCiting.reportedTotal, pubId);
+          p = db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId) || p;
+          citationsUpdated = true;
         }
       } catch {}
     }
 
-    // Clean title for deduplication
+    const effectiveTarget = Math.min(maxLimit, Number(p.citations) || 0);
     const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-    // Merge existing citing papers with newly fetched citing papers to ensure no citing papers are lost
-    const mergedMap = new Map();
     const parentNorm = norm(p.title);
 
+    const existingByNorm = new Map();
+    for (const er of existingRows) {
+      const k = norm(er.title);
+      if (k) existingByNorm.set(k, er);
+    }
+
+    const mergedMap = new Map();
     const mergeEntry = (entry) => {
       const k = norm(entry.title);
       if (!k || k.length < 8) return;
@@ -375,7 +663,6 @@ async function syncSinglePublicationCitations(pubId, maxLimit = 10000, force = f
           doi_issn: entry.doi_issn || '',
         });
       } else {
-        // Upgrade metadata if candidate has better information
         const existingAuthors = Array.isArray(existing.authors) ? existing.authors.join(', ') : String(existing.authors || '');
         const entryAuthors = Array.isArray(entry.authors) ? entry.authors.join(', ') : String(entry.authors || '');
         if ((!existingAuthors || existingAuthors === 'Academic Authors' || existingAuthors.includes('…')) && entryAuthors && entryAuthors !== 'Academic Authors') {
@@ -393,13 +680,24 @@ async function syncSinglePublicationCitations(pubId, maxLimit = 10000, force = f
       }
     };
 
-    for (const er of existingRows) mergeEntry(er);
-    for (const fc of fetchedCiting) mergeEntry(fc);
+    const shouldReplacePolluted = Boolean(force && fetchedCiting.length > 0);
+    if (shouldReplacePolluted) {
+      // Build strictly from fresh genuine citing results, upgrading metadata from matching existing rows only
+      for (const fc of fetchedCiting) {
+        mergeEntry(fc);
+        const k = norm(fc.title);
+        const prevMatch = k ? existingByNorm.get(k) : null;
+        if (prevMatch) mergeEntry(prevMatch);
+      }
+    } else {
+      for (const er of existingRows) mergeEntry(er);
+      for (const fc of fetchedCiting) mergeEntry(fc);
+    }
 
     const mergedList = Array.from(mergedMap.values());
 
-    if (mergedList.length > existingCount || (force && mergedList.length > 0)) {
-      const toInsert = mergedList.slice(0, totalTarget);
+    if (shouldReplacePolluted || mergedList.length > existingCount || (force && mergedList.length > 0)) {
+      const toInsert = mergedList.slice(0, effectiveTarget);
       const insertStmt = db.prepare(`
         INSERT OR IGNORE INTO citing_papers (id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -426,8 +724,12 @@ async function syncSinglePublicationCitations(pubId, maxLimit = 10000, force = f
       computePublicationCitationYears(db, p, true);
     }
 
-    if (mergedList.length >= totalTarget) {
-      syncedPublicationsCache.set(pubId, totalTarget);
+    if (citationsUpdated || shouldReplacePolluted || mergedList.length > existingCount) {
+      recalculateAllResearcherStats(db);
+    }
+
+    if (mergedList.length >= effectiveTarget) {
+      syncedPublicationsCache.set(pubId, effectiveTarget);
     } else {
       syncedPublicationsCache.delete(pubId);
     }
@@ -476,33 +778,47 @@ const getActiveApifyTokenRow = () => {
 // Helper to fetch live Apify token limits & usage
 const fetchApifyTokenUsage = async (tokenRow, forceLive = false) => {
   if (!tokenRow || !tokenRow.token) return null;
-  const headers = { Authorization: `Bearer ${tokenRow.token}` };
+  const hasCachedUsage =
+    tokenRow.max_monthly_usage_usd !== null &&
+    tokenRow.max_monthly_usage_usd !== undefined &&
+    tokenRow.monthly_usage_usd !== null &&
+    tokenRow.monthly_usage_usd !== undefined;
 
   let limitsData = null;
   let runsData = null;
 
-  try {
-    const [limitsRes, runsRes] = await Promise.all([
-      fetch('https://api.apify.com/v2/users/me/limits', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch('https://api.apify.com/v2/actor-runs?limit=1', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ]);
-    limitsData = limitsRes?.data;
-    runsData = runsRes?.data;
-  } catch (err) {
-    console.warn('[ApifyUsage] Live fetch error:', err.message);
+  if (forceLive || !hasCachedUsage) {
+    const headers = { Authorization: `Bearer ${tokenRow.token}` };
+    try {
+      const [limitsRes, runsRes] = await Promise.all([
+        fetch('https://api.apify.com/v2/users/me/limits', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch('https://api.apify.com/v2/actor-runs?limit=1', { headers }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      limitsData = limitsRes?.data;
+      runsData = runsRes?.data;
+    } catch (err) {
+      console.warn('[ApifyUsage] Live fetch error:', err.message);
+    }
   }
 
-  const maxMonthlyUsageUsd = Number(limitsData?.limits?.maxMonthlyUsageUsd) || Number(tokenRow.max_monthly_usage_usd) || 5;
+  const maxMonthlyUsageUsd =
+    limitsData?.limits?.maxMonthlyUsageUsd !== undefined
+      ? Number(limitsData.limits.maxMonthlyUsageUsd)
+      : (tokenRow.max_monthly_usage_usd !== null && tokenRow.max_monthly_usage_usd !== undefined
+        ? Number(tokenRow.max_monthly_usage_usd)
+        : 5);
   const monthlyUsageUsd =
     limitsData?.current?.monthlyUsageUsd !== undefined
       ? Number(limitsData.current.monthlyUsageUsd)
-      : Number(tokenRow.monthly_usage_usd) || 0;
+      : (tokenRow.monthly_usage_usd !== null && tokenRow.monthly_usage_usd !== undefined
+        ? Number(tokenRow.monthly_usage_usd)
+        : 0);
   const remainingUsd = Math.max(0, maxMonthlyUsageUsd - monthlyUsageUsd);
   const usedPercentage = maxMonthlyUsageUsd > 0 ? (monthlyUsageUsd / maxMonthlyUsageUsd) * 100 : 0;
   const totalRuns = runsData?.total !== undefined ? runsData.total : (Number(tokenRow.total_runs) || 0);
   const cycleEndAt = limitsData?.monthlyUsageCycle?.endAt || tokenRow.cycle_end_at || null;
 
-  if (tokenRow.id && tokenRow.id !== 'env') {
+  if ((limitsData || runsData) && tokenRow.id && tokenRow.id !== 'env') {
     try {
       db.prepare(`
         UPDATE apify_tokens 
@@ -538,6 +854,31 @@ const attachTokenUsage = async (payload, didLiveScrape = false) => {
     ...payload,
     tokenUsage,
   };
+};
+
+// Resolve caller with authoritative DB instructor_id/username so active JWTs stay valid after profile ID updates
+const resolveCallerWithDb = (req) => {
+  const caller = authenticateCaller(req);
+  if (!caller || !caller.id || caller.role === 'admin') return caller;
+  try {
+    const resRow = db
+      .prepare('SELECT id, instructor_id, name FROM researchers WHERE user_id = ? OR id = ? LIMIT 1')
+      .get(caller.id, caller.id);
+    const userRow = db
+      .prepare('SELECT username, name FROM users WHERE id = ? LIMIT 1')
+      .get(caller.id);
+    const authoritativeInstId = resRow?.instructor_id || userRow?.username || caller.instructorId;
+    return {
+      ...caller,
+      jwtInstructorId: caller.instructorId,
+      instructorId: authoritativeInstId || caller.instructorId,
+      username: userRow?.username || caller.username,
+      name: resRow?.name || userRow?.name || caller.name,
+      researcherId: resRow?.id || undefined,
+    };
+  } catch {
+    return caller;
+  }
 };
 
 /**
@@ -673,7 +1014,8 @@ export async function handleApiRequest(req, res) {
         loginAttemptTracker.recordSuccess(clientIp);
 
         const adminDb = db.prepare(`
-          SELECT u.*, r.instructor_id, r.department as r_department, r.name as r_name
+          SELECT u.*, r.instructor_id, r.department as r_department, r.name as r_name,
+                 r.first_name as r_first_name, r.middle_initial as r_middle_initial, r.last_name as r_last_name
           FROM users u
           LEFT JOIN researchers r ON u.id = r.user_id
           WHERE u.role = 'admin'
@@ -692,6 +1034,13 @@ export async function handleApiRequest(req, res) {
 
         const resolvedName = (adminDb.r_name || adminDb.name || 'Rodelio M. Garin').replace(/^Sir\s+/i, '');
         const resolvedDept = adminDb.r_department || adminDb.department || 'BSE';
+        let resolvedMi = (adminDb.r_middle_initial || adminDb.middle_initial || '').trim();
+        let resolvedFirst = (adminDb.r_first_name || '').trim();
+        let resolvedLast = (adminDb.r_last_name || '').trim();
+        if (!resolvedFirst && !resolvedLast && resolvedName) {
+          ({ firstName: resolvedFirst, middleInitial: resolvedMi, lastName: resolvedLast } =
+            splitFullName(resolvedName, resolvedMi));
+        }
 
         const token = signSessionToken({
           id: adminDb.id,
@@ -707,6 +1056,9 @@ export async function handleApiRequest(req, res) {
             id: adminDb.id,
             role: 'admin',
             name: resolvedName,
+            firstName: resolvedFirst,
+            middleInitial: resolvedMi,
+            lastName: resolvedLast,
             username: adminDb.username || adminUserEnv,
             email: adminDb.email || 'rodeliogarin@gmail.com',
             instructorId: adminDb.instructor_id || 'ASIN-00002',
@@ -722,7 +1074,7 @@ export async function handleApiRequest(req, res) {
 
       // 1c. Check Researcher credentials in SQLite using salted scrypt verification
       const user = db.prepare(`
-        SELECT u.*, r.instructor_id 
+        SELECT u.*, r.instructor_id, r.first_name as r_first_name, r.middle_initial as r_middle_initial, r.last_name as r_last_name
         FROM users u
         LEFT JOIN researchers r ON u.id = r.user_id
         WHERE (
@@ -816,11 +1168,22 @@ export async function handleApiRequest(req, res) {
         department: user.department,
       });
 
+      let resMi = (user.r_middle_initial || user.middle_initial || '').trim();
+      let resFirst = (user.r_first_name || '').trim();
+      let resLast = (user.r_last_name || '').trim();
+      if (!resFirst && !resLast && user.name) {
+        ({ firstName: resFirst, middleInitial: resMi, lastName: resLast } =
+          splitFullName(user.name, resMi));
+      }
+
       return sendJson(200, {
         user: {
           id: user.id,
           role: user.role,
           name: user.name,
+          firstName: resFirst,
+          middleInitial: resMi,
+          lastName: resLast,
           username: user.username,
           email: user.email,
           instructorId: user.instructor_id || user.username,
@@ -841,6 +1204,7 @@ export async function handleApiRequest(req, res) {
       const data = await readJsonBody();
       const {
         firstName,
+        middleInitial = '',
         lastName,
         instructorId,
         email,
@@ -855,25 +1219,32 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'First name, last name, Instructor ID, email address, and password are required.' });
       }
 
-      const trimmedInstId = instructorId.trim();
-      const trimmedEmail = email.trim().toLowerCase();
+      const idCheck = normalizeAndValidateInstructorId(instructorId);
+      if (!idCheck.valid) {
+        return sendJson(400, { error: idCheck.error });
+      }
 
-      // Check if username / instructorId already exists
+      const trimmedInstId = idCheck.normalized;
+      const trimmedEmail = email.trim().toLowerCase();
+      const mi = String(middleInitial || '').trim();
+
+      // Check if username / instructorId already exists across users or researchers
       const existingUser = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(trimmedInstId);
-      if (existingUser) {
-        return sendJson(400, { error: 'That Instructor ID / Username is already registered.' });
+      const existingRes = db.prepare('SELECT id FROM researchers WHERE LOWER(instructor_id) = LOWER(?)').get(trimmedInstId);
+      if (existingUser || existingRes) {
+        return sendJson(409, { error: 'That Instructor ID / Username is already registered.' });
       }
 
       const existingEmail = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(trimmedEmail);
       if (existingEmail) {
-        return sendJson(400, { error: 'That email address is already in use.' });
+        return sendJson(409, { error: 'That email address is already in use.' });
       }
 
       const token = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
       const userId = `user-${Date.now()}`;
       const researcherId = `res-${Date.now()}`;
-      const fullName = `${firstName.trim()} ${lastName.trim()}`;
+      const fullName = mi ? `${firstName.trim()} ${mi} ${lastName.trim()}` : `${firstName.trim()} ${lastName.trim()}`;
       const now = new Date().toISOString();
 
       let parsedScholarId = null;
@@ -884,14 +1255,15 @@ export async function handleApiRequest(req, res) {
 
       // 1. Insert into users table as pending_email_verification
       db.prepare(`
-        INSERT INTO users (id, username, email, password, name, role, department, is_faculty, scholar_url, google_scholar_id, status, verification_token, verification_token_expires_at, registration_type, has_scholar, created_at)
-        VALUES (?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?, 'pending_email_verification', ?, ?, 'self_registration', ?, ?)
+        INSERT INTO users (id, username, email, password, name, middle_initial, role, department, is_faculty, scholar_url, google_scholar_id, status, verification_token, verification_token_expires_at, registration_type, has_scholar, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?, 'pending_email_verification', ?, ?, 'self_registration', ?, ?)
       `).run(
         userId,
         trimmedInstId,
         trimmedEmail,
         hashPassword(password),
         fullName,
+        mi || null,
         department,
         isFaculty ? 1 : 0,
         hasScholar ? (scholarUrl || null) : null,
@@ -904,14 +1276,15 @@ export async function handleApiRequest(req, res) {
 
       // 2. Insert into researchers table as pending_email_verification
       db.prepare(`
-        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, scholar_url, google_scholar_id, status, has_scholar, total_publications, total_citations, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_email_verification', ?, 0, 0, ?)
+        INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, middle_initial, name, email, department, is_faculty, scholar_url, google_scholar_id, status, has_scholar, total_publications, total_citations, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_email_verification', ?, 0, 0, ?)
       `).run(
         researcherId,
         userId,
         trimmedInstId,
         firstName.trim(),
         lastName.trim(),
+        mi || null,
         fullName,
         trimmedEmail,
         department,
@@ -1007,7 +1380,7 @@ export async function handleApiRequest(req, res) {
       }
 
       const user = db.prepare(`
-        SELECT u.*, r.first_name, r.last_name, r.instructor_id 
+        SELECT u.*, r.first_name, r.middle_initial as r_middle_initial, r.last_name, r.instructor_id 
         FROM users u
         LEFT JOIN researchers r ON u.id = r.user_id
         WHERE u.verification_token = ?
@@ -1066,6 +1439,7 @@ export async function handleApiRequest(req, res) {
           id: user.id,
           name: user.name,
           firstName: user.first_name,
+          middleInitial: user.r_middle_initial || user.middle_initial || '',
           lastName: user.last_name,
           instructorId: user.instructor_id || user.username,
           email: user.email,
@@ -1198,9 +1572,71 @@ export async function handleApiRequest(req, res) {
     }
 
     // ----------------------------------------------------
+    // 1c. GET PROFILE: GET /api/auth/profile
+    // ----------------------------------------------------
+    if (pathname === '/api/auth/profile' && method === 'GET') {
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required.' });
+      }
+
+      const row = db.prepare(`
+        SELECT u.*, r.instructor_id as r_instructor_id, r.first_name as r_first_name,
+               r.middle_initial as r_middle_initial, r.last_name as r_last_name,
+               r.department as r_department, r.name as r_name, r.is_faculty as r_is_faculty,
+               r.photo_url as r_photo_url, r.scholar_url as r_scholar_url, r.google_scholar_id as r_google_scholar_id
+        FROM users u
+        LEFT JOIN researchers r ON u.id = r.user_id
+        WHERE u.id = ? OR LOWER(u.username) = LOWER(?)
+        LIMIT 1
+      `).get(caller.id || '', caller.username || '');
+
+      if (!row) {
+        return sendJson(404, { error: 'User profile not found.' });
+      }
+
+      const resolvedName = (row.r_name || row.name || '').replace(/^Sir\s+/i, '');
+      let resolvedMi = (row.r_middle_initial || row.middle_initial || '').trim();
+      let resolvedFirst = (row.r_first_name || '').trim();
+      let resolvedLast = (row.r_last_name || '').trim();
+      if (!resolvedFirst && !resolvedLast && resolvedName) {
+        ({ firstName: resolvedFirst, middleInitial: resolvedMi, lastName: resolvedLast } =
+          splitFullName(resolvedName, resolvedMi));
+      }
+
+      const profile = {
+        id: row.id,
+        username: row.username,
+        name: resolvedName,
+        firstName: resolvedFirst,
+        middleInitial: resolvedMi,
+        lastName: resolvedLast,
+        role: row.role,
+        department: row.r_department || row.department,
+        instructorId: row.r_instructor_id || row.username,
+        email: row.email,
+        photoUrl: row.r_photo_url || row.photo_url || null,
+        scholarUrl: row.r_scholar_url || row.scholar_url || null,
+        googleScholarId: row.r_google_scholar_id || row.google_scholar_id || null,
+        isFaculty: Boolean(row.r_is_faculty !== null && row.r_is_faculty !== undefined ? row.r_is_faculty : row.is_faculty),
+      };
+
+      return sendJson(200, {
+        success: true,
+        ...profile,
+        user: profile,
+      });
+    }
+
+    // ----------------------------------------------------
     // 1c. UPDATE PROFILE: PUT /api/auth/profile
     // ----------------------------------------------------
     if (pathname === '/api/auth/profile' && method === 'PUT') {
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required to update profile.' });
+      }
+
       const {
         userId,
         username,
@@ -1215,20 +1651,22 @@ export async function handleApiRequest(req, res) {
         googleScholarId,
         instructorId,
       } = await readJsonBody();
-      const caller = authenticateCaller(req);
-      
+
+      const targetLookupId = userId || caller.id || '';
+      const targetLookupUser = username || caller.username || '';
+
       const user = db.prepare(`
         SELECT u.* FROM users u
         WHERE u.id = ? OR LOWER(u.username) = LOWER(?)
         LIMIT 1
-      `).get(userId || '', username || '');
+      `).get(targetLookupId, targetLookupUser);
 
       if (!user) {
         return sendJson(404, { error: 'User not found.' });
       }
 
       // Server-Side Ownership Check: Prevent cross-faculty tampering
-      if (caller && caller.role !== 'admin' && caller.id !== user.id && caller.username?.toLowerCase() !== user.username?.toLowerCase()) {
+      if (caller.role !== 'admin' && caller.id !== user.id && caller.username?.toLowerCase() !== user.username?.toLowerCase()) {
         return sendJson(403, { error: 'Forbidden: You cannot modify another user’s profile.' });
       }
 
@@ -1239,19 +1677,19 @@ export async function handleApiRequest(req, res) {
         LIMIT 1
       `).get(user.id, user.id, user.username);
 
-      const updatedFirst = firstName !== undefined ? firstName.trim() : (existingResearcher?.first_name || '');
-      const updatedLast = lastName !== undefined ? lastName.trim() : (existingResearcher?.last_name || '');
-      const updatedMi = middleInitial !== undefined ? middleInitial.trim() : (existingResearcher?.middle_initial || '');
+      const updatedFirst = (firstName !== undefined && firstName !== null) ? String(firstName).trim() : (existingResearcher?.first_name || '');
+      const updatedLast = (lastName !== undefined && lastName !== null) ? String(lastName).trim() : (existingResearcher?.last_name || '');
+      const updatedMi = (middleInitial !== undefined && middleInitial !== null) ? String(middleInitial).trim() : (existingResearcher?.middle_initial || user.middle_initial || '');
 
-      let updatedName = name;
+      let updatedName = (name !== undefined && name !== null) ? String(name).trim() : '';
       if (updatedFirst && updatedLast) {
         updatedName = updatedMi ? `${updatedFirst} ${updatedMi} ${updatedLast}` : `${updatedFirst} ${updatedLast}`;
       } else if (!updatedName) {
         updatedName = user.name;
       }
 
-      const updatedEmail = email !== undefined ? email : user.email;
-      const updatedDept = department !== undefined ? department : user.department;
+      const updatedEmail = (email !== undefined && email !== null) ? String(email).trim() : user.email;
+      const updatedDept = (department !== undefined && department !== null) ? String(department).trim() : user.department;
       const updatedPhoto = photoUrl !== undefined ? photoUrl : user.photo_url;
       const updatedScholar = scholarUrl !== undefined ? scholarUrl : user.scholar_url;
       const updatedScholarId = googleScholarId !== undefined ? googleScholarId : user.google_scholar_id;
@@ -1262,11 +1700,34 @@ export async function handleApiRequest(req, res) {
         existingResearcher?.id,
       ].filter(Boolean));
 
-      const updatedInstructorId = instructorId !== undefined && instructorId.trim() !== ''
-        ? instructorId.trim()
-        : (existingResearcher?.instructor_id || user.username);
+      const currentInstId = existingResearcher?.instructor_id || user.username;
+      let updatedInstructorId = currentInstId;
+      if (instructorId !== undefined && String(instructorId).trim() !== '') {
+        const rawSubmittedId = String(instructorId).trim();
+        if (rawSubmittedId.toLowerCase() === String(currentInstId || '').trim().toLowerCase()) {
+          // Unchanged: preserve legacy format (e.g. INS-2002-001) or normalize ASIN prefix
+          updatedInstructorId = currentInstId;
+        } else {
+          const idCheck = normalizeAndValidateInstructorId(rawSubmittedId);
+          if (!idCheck.valid) {
+            return sendJson(400, { error: idCheck.error });
+          }
+          updatedInstructorId = idCheck.normalized;
 
-      // Cascade update Instructor ID across researchers, users, publications, and ai sessions
+          const conflictUser = db.prepare(`
+            SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ? LIMIT 1
+          `).get(updatedInstructorId, user.id);
+          const conflictRes = existingResearcher
+            ? db.prepare('SELECT id FROM researchers WHERE LOWER(instructor_id) = LOWER(?) AND id != ? LIMIT 1').get(updatedInstructorId, existingResearcher.id)
+            : db.prepare('SELECT id FROM researchers WHERE LOWER(instructor_id) = LOWER(?) LIMIT 1').get(updatedInstructorId);
+
+          if (conflictUser || conflictRes) {
+            return sendJson(409, { error: `Instructor ID "${updatedInstructorId}" is already assigned to another researcher.` });
+          }
+        }
+      }
+
+      // Cascade update Instructor ID across researchers, users, publications, publication_researchers, and ai sessions
       if (updatedInstructorId) {
         if (existingResearcher) {
           db.prepare('UPDATE researchers SET instructor_id = ? WHERE id = ?').run(updatedInstructorId, existingResearcher.id);
@@ -1279,20 +1740,15 @@ export async function handleApiRequest(req, res) {
           db.prepare('UPDATE users SET username = ? WHERE id = ?').run(updatedInstructorId, user.id);
         }
 
-        // Cascade to publications
         for (const oldId of oldIds) {
           db.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE LOWER(owner_id) = LOWER(?)')
             .run(updatedInstructorId, updatedName, oldId);
-        }
-
-        // Cascade to AI chat sessions
-        for (const oldId of oldIds) {
+          if (String(oldId).toLowerCase() !== updatedInstructorId.toLowerCase()) {
+            db.prepare('UPDATE publication_researchers SET instructor_id = ? WHERE LOWER(instructor_id) = LOWER(?)')
+              .run(updatedInstructorId, oldId);
+          }
           db.prepare('UPDATE ai_chat_sessions SET user_id = ? WHERE LOWER(user_id) = LOWER(?)')
             .run(updatedInstructorId, oldId);
-        }
-
-        // Cascade to invitation requests
-        for (const oldId of oldIds) {
           db.prepare('UPDATE invitation_requests SET instructor_id = ? WHERE LOWER(instructor_id) = LOWER(?)')
             .run(updatedInstructorId, oldId);
         }
@@ -1310,8 +1766,20 @@ export async function handleApiRequest(req, res) {
         WHERE user_id = ? OR id = ? OR LOWER(instructor_id) = LOWER(?) OR LOWER(instructor_id) = LOWER(?)
       `).run(updatedName, updatedFirst || null, updatedLast || null, updatedMi || null, updatedEmail, updatedDept, updatedPhoto, updatedScholar, updatedScholarId, user.id, user.id, user.username, updatedInstructorId);
 
+      const refreshedToken = (caller.id === user.id || caller.username?.toLowerCase() === user.username?.toLowerCase())
+        ? signSessionToken({
+            id: user.id,
+            role: user.role,
+            name: updatedName,
+            username: user.role === 'admin' ? user.username : updatedInstructorId,
+            instructorId: updatedInstructorId,
+            department: updatedDept,
+          })
+        : undefined;
+
       return sendJson(200, {
         success: true,
+        ...(refreshedToken ? { token: refreshedToken } : {}),
         user: {
           id: user.id,
           role: user.role,
@@ -1323,6 +1791,7 @@ export async function handleApiRequest(req, res) {
           instructorId: updatedInstructorId,
           email: updatedEmail,
           department: updatedDept,
+          isFaculty: Boolean(existingResearcher ? existingResearcher.is_faculty : user.is_faculty),
           photoUrl: updatedPhoto,
           scholarUrl: updatedScholar,
           googleScholarId: updatedScholarId,
@@ -1349,19 +1818,21 @@ export async function handleApiRequest(req, res) {
       }
       try {
         const tables = [
+          'system_settings',
+          'apify_tokens',
           'users',
           'researchers',
+          'invitation_requests',
           'publications',
+          'publication_researchers',
           'scraped_publications',
           'citation_trends',
           'citing_papers',
-          'apify_tokens',
-          'invitation_requests',
           'email_logs',
           'ai_chat_sessions',
-          'system_settings',
           'archived_researchers',
-          'declined_registrations'
+          'declined_registrations',
+          'db_backups'
         ];
         for (const t of tables) {
           await pushTableToTurso(db, t);
@@ -1376,6 +1847,7 @@ export async function handleApiRequest(req, res) {
     // SYSTEM SETTINGS & PUBLIC REPOSITORY SEARCH
     // ----------------------------------------------------
     if (pathname === '/api/settings/public-scraper-status' && method === 'GET') {
+      setNoStoreHeaders(res);
       const publicScraperSetting = db.prepare("SELECT value FROM system_settings WHERE key = 'public_scraper_enabled'").get()?.value || 'true';
       const thresholdSetting = Number(db.prepare("SELECT value FROM system_settings WHERE key = 'scraper_quota_threshold_usd'").get()?.value) || 1.0;
       
@@ -1386,26 +1858,40 @@ export async function handleApiRequest(req, res) {
       if (activeToken) {
         try {
           const usage = await fetchApifyTokenUsage(activeToken, false);
-          const maxUsd = Number(usage?.maxMonthlyUsageUsd) || 5.0;
-          const usedUsd = Number(usage?.monthlyUsageUsd) || 0.0;
-          remainingBalanceUsd = Math.max(0, maxUsd - usedUsd);
+          const maxUsd = Number(usage?.limitUsd ?? activeToken.max_monthly_usage_usd) || 5.0;
+          const usedUsd = Number(usage?.usedUsd ?? activeToken.monthly_usage_usd) || 0.0;
+          remainingBalanceUsd = usage?.remainingUsd !== undefined
+            ? Math.max(0, Number(usage.remainingUsd))
+            : Math.max(0, maxUsd - usedUsd);
           if (remainingBalanceUsd <= thresholdSetting) {
             quotaCircuitBreakerTripped = true;
           }
         } catch {}
       }
 
+      const publicScraperEnabled = publicScraperSetting === 'true';
+      const reason = !publicScraperEnabled
+        ? 'admin_disabled'
+        : quotaCircuitBreakerTripped
+        ? 'quota_exceeded'
+        : 'ok';
+
       return sendJson(200, {
-        publicScraperEnabled: publicScraperSetting === 'true',
+        publicScraperEnabled,
         quotaCircuitBreakerTripped,
         remainingBalanceUsd,
         thresholdUsd: thresholdSetting,
-        isAvailableForPublic: publicScraperSetting === 'true' && !quotaCircuitBreakerTripped,
+        isAvailableForPublic: publicScraperEnabled && !quotaCircuitBreakerTripped,
+        reason,
       });
     }
 
     if (pathname === '/api/admin/settings' && method === 'GET') {
+      setNoStoreHeaders(res);
       const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required.' });
+      }
       if (!isCallerAdmin(caller)) {
         return sendJson(403, { error: 'Forbidden: Admin access required.' });
       }
@@ -1416,23 +1902,98 @@ export async function handleApiRequest(req, res) {
     }
 
     if (pathname === '/api/admin/settings' && method === 'PUT') {
+      setNoStoreHeaders(res);
       const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required.' });
+      }
       if (!isCallerAdmin(caller)) {
         return sendJson(403, { error: 'Forbidden: Admin access required.' });
       }
       const body = await readJsonBody();
       const now = new Date().toISOString();
-      const upsert = db.prepare(`
+      const upsertSql = `
         INSERT INTO system_settings (key, value, updated_at)
         VALUES (?, ?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-      `);
+      `;
+      const upsert = db.prepare(upsertSql);
+      const entries = Object.entries(body || {});
       runInTransaction(() => {
-        for (const [k, v] of Object.entries(body)) {
+        for (const [k, v] of entries) {
           upsert.run(k, String(v), now);
         }
       });
+      if (isTursoConfigured && entries.length > 0) {
+        const statements = entries.map(([k, v]) => ({
+          sql: upsertSql,
+          args: [k, String(v), now],
+        }));
+        await executeBatchOnTurso(statements);
+      }
       return sendJson(200, { success: true, message: 'Settings saved successfully' });
+    }
+
+    // ----------------------------------------------------
+    // ADMIN BACKUPS (R6: 12:00 AM Asia/Manila & Manual Snapshots)
+    // ----------------------------------------------------
+    if (pathname === '/api/admin/backups' && method === 'GET') {
+      setNoStoreHeaders(res);
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required.' });
+      }
+      if (!isCallerAdmin(caller)) {
+        return sendJson(403, { error: 'Forbidden: Research Coordinator privileges required.' });
+      }
+      const backups = listDatabaseBackups(50);
+      return sendJson(200, {
+        schedule: BACKUP_SCHEDULE_INFO,
+        backups,
+      });
+    }
+
+    if (pathname === '/api/admin/backups/manual' && method === 'POST') {
+      setNoStoreHeaders(res);
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required.' });
+      }
+      if (!isCallerAdmin(caller)) {
+        return sendJson(403, { error: 'Forbidden: Research Coordinator privileges required.' });
+      }
+      const result = await createDatabaseBackup({
+        backupType: 'manual',
+        createdBy: caller.username || 'admin',
+      });
+      return sendJson(200, {
+        success: true,
+        backup: result.backup,
+      });
+    }
+
+    if (pathname.startsWith('/api/admin/backups/') && pathname.endsWith('/download') && method === 'GET') {
+      setNoStoreHeaders(res);
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required.' });
+      }
+      if (!isCallerAdmin(caller)) {
+        return sendJson(403, { error: 'Forbidden: Research Coordinator privileges required.' });
+      }
+      const backupId = decodeURIComponent(
+        pathname.slice('/api/admin/backups/'.length, -'/download'.length)
+      ).trim();
+      const backup = getDatabaseBackupById(backupId);
+      if (!backup) {
+        return sendJson(404, { error: 'Database backup snapshot not found.' });
+      }
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json; charset=UTF-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${backup.filename}"`);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.end(backup.snapshotJson || '{}');
+      return;
     }
 
     /**
@@ -1532,12 +2093,20 @@ export async function handleApiRequest(req, res) {
       const page = Math.max(0, parseInt(url.searchParams.get('page') || '0', 10));
       const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get('limit') || '12', 10)));
 
+      const useLinks = isPubResearchersBackfilled(db);
+      const linkedApprovedMap = useLinks ? getLinkedIdsByPubMap(db, true) : new Map();
+
       let sql = "SELECT * FROM publications WHERE approval_status = 'approved' AND (is_public = 1 OR is_public IS NULL)";
       const params = [];
 
       if (department && department !== 'all') {
-        sql += ` AND (owner_id IN (SELECT instructor_id FROM researchers WHERE department = ?) OR owner_id IN (SELECT id FROM researchers WHERE department = ?))`;
-        params.push(department, department);
+        if (useLinks) {
+          sql += ` AND id IN (SELECT pr.publication_id FROM publication_researchers pr JOIN researchers r ON LOWER(r.instructor_id) = LOWER(pr.instructor_id) WHERE pr.approval_status = 'approved' AND r.department = ?)`;
+          params.push(department);
+        } else {
+          sql += ` AND (owner_id IN (SELECT instructor_id FROM researchers WHERE department = ?) OR owner_id IN (SELECT id FROM researchers WHERE department = ?))`;
+          params.push(department, department);
+        }
       }
 
       if (year && year !== 'all') {
@@ -1572,9 +2141,14 @@ export async function handleApiRequest(req, res) {
 
         const isContentRelevant = (p) => {
           // If query matches a registered researcher and this publication belongs to them
+          const pLinks = useLinks ? (linkedApprovedMap.get(p.id) || []).map((x) => x.toLowerCase()) : [];
           for (const mr of matchingResearchers) {
-            if (p.owner_id && (p.owner_id === mr.instructor_id || p.owner_id === mr.id)) return true;
-            if (matchesResearcher(p, mr)) return true;
+            if (useLinks) {
+              if (pLinks.includes(String(mr.instructor_id || '').toLowerCase())) return true;
+            } else {
+              if (p.owner_id && (p.owner_id === mr.instructor_id || p.owner_id === mr.id)) return true;
+              if (matchesResearcher(p, mr)) return true;
+            }
           }
 
           const tLower = String(p.title || '').toLowerCase();
@@ -1613,14 +2187,22 @@ export async function handleApiRequest(req, res) {
             const chedLower = String(p.ched_priority || '').toLowerCase();
 
             // Registered researcher match gets primary author boost
+            const pLinks = useLinks ? (linkedApprovedMap.get(p.id) || []).map((x) => x.toLowerCase()) : [];
             for (const mr of matchingResearchers) {
-              if (p.owner_id && (p.owner_id === mr.instructor_id || p.owner_id === mr.id)) {
-                score += 500;
-                break;
-              }
-              if (matchesResearcher(p, mr)) {
-                score += 500;
-                break;
+              if (useLinks) {
+                if (pLinks.includes(String(mr.instructor_id || '').toLowerCase())) {
+                  score += 500;
+                  break;
+                }
+              } else {
+                if (p.owner_id && (p.owner_id === mr.instructor_id || p.owner_id === mr.id)) {
+                  score += 500;
+                  break;
+                }
+                if (matchesResearcher(p, mr)) {
+                  score += 500;
+                  break;
+                }
               }
             }
 
@@ -1720,6 +2302,7 @@ export async function handleApiRequest(req, res) {
           journal_indexing: p.journal_indexing || '',
           owner_id: p.owner_id,
           owner_name: p.owner_name,
+          assignedResearcherIds: useLinks ? (linkedApprovedMap.get(p.id) || []) : (p.owner_id ? [p.owner_id] : []),
           sdg_tags: sdgArr,
           sdg_rationale: p.sdg_rationale || '',
           ched_priority: p.ched_priority || '',
@@ -1783,9 +2366,14 @@ export async function handleApiRequest(req, res) {
       // Ensure all researchers have up-to-date counts
       const allResearchers = db.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL)").all();
       const allApprovedPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved'").all();
+      const useLinks = isPubResearchersBackfilled(db);
+      const linkedApprovedMap = useLinks ? getLinkedIdsByPubMap(db, true) : new Map();
 
       const calculatedResearchers = allResearchers.map((r) => {
-        const pubs = allApprovedPubs.filter((p) => matchesResearcher(p, r));
+        const rInstLower = String(r.instructor_id || '').toLowerCase();
+        const pubs = useLinks
+          ? allApprovedPubs.filter((p) => (linkedApprovedMap.get(p.id) || []).some((id) => String(id).toLowerCase() === rInstLower))
+          : allApprovedPubs.filter((p) => matchesResearcher(p, r));
         const pubCount = pubs.length;
         const citCount = pubs.reduce((sum, p) => sum + (p.citations || 0), 0);
         if (r.total_publications !== pubCount || r.total_citations !== citCount) {
@@ -1820,7 +2408,12 @@ export async function handleApiRequest(req, res) {
 
       for (const p of allApprovedPubs) {
         // Find matching researcher to get department
-        const matchedR = allResearchers.find((r) => matchesResearcher(p, r));
+        const pLinksLower = useLinks
+          ? new Set((linkedApprovedMap.get(p.id) || []).map((id) => String(id).toLowerCase()))
+          : null;
+        const matchedR = useLinks
+          ? allResearchers.find((r) => pLinksLower.has(String(r.instructor_id || '').toLowerCase()))
+          : allResearchers.find((r) => matchesResearcher(p, r));
         const dept = normalizeDepartment(matchedR ? matchedR.department : 'BSIT');
         const pubYear = Number(p.year);
 
@@ -1860,11 +2453,22 @@ export async function handleApiRequest(req, res) {
     // 3. RESEARCHERS CRUD
     // ----------------------------------------------------
     if (pathname === '/api/researchers' && method === 'GET') {
-      const rows = db.prepare("SELECT * FROM researchers WHERE (status = 'active' OR status IS NULL) ORDER BY name ASC").all();
+      const rows = db.prepare(`
+        SELECT r.*, u.role as user_role
+        FROM researchers r
+        LEFT JOIN users u ON u.id = r.user_id
+        WHERE (r.status = 'active' OR r.status IS NULL)
+        ORDER BY r.name ASC
+      `).all();
       const allApprovedPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved' ORDER BY year DESC").all();
+      const useLinks = isPubResearchersBackfilled(db);
+      const linkedApprovedMap = useLinks ? getLinkedIdsByPubMap(db, true) : new Map();
 
       const researchers = rows.map((r) => {
-        const pubs = allApprovedPubs.filter((p) => matchesResearcher(p, r));
+        const rInstLower = String(r.instructor_id || '').toLowerCase();
+        const pubs = useLinks
+          ? allApprovedPubs.filter((p) => (linkedApprovedMap.get(p.id) || []).some((id) => String(id).toLowerCase() === rInstLower))
+          : allApprovedPubs.filter((p) => matchesResearcher(p, r));
         const pubCount = pubs.length;
         const citCount = pubs.reduce((sum, p) => sum + (p.citations || 0), 0);
 
@@ -1873,10 +2477,17 @@ export async function handleApiRequest(req, res) {
             .run(pubCount, citCount, r.id);
         }
 
+        const role =
+          r.user_role === 'admin' || r.user_id === 'admin-1' || r.id === 'PSU-002' || String(r.instructor_id || '').toUpperCase() === 'ASIN-00002'
+            ? 'admin'
+            : 'instructor';
+
         return {
           id: r.id,
+          role,
           name: r.name,
           firstName: r.first_name,
+          middleInitial: r.middle_initial || '',
           lastName: r.last_name,
           instructorId: r.instructor_id,
           department: r.department,
@@ -1899,14 +2510,24 @@ export async function handleApiRequest(req, res) {
     }
 
     if (pathname.startsWith('/api/researchers/') && method === 'GET') {
-      const id = pathname.replace('/api/researchers/', '');
-      const r = db.prepare('SELECT * FROM researchers WHERE id = ? OR instructor_id = ?').get(id, id);
+      const id = decodeURIComponent(pathname.replace('/api/researchers/', '')).trim();
+      const r = db.prepare(`
+        SELECT r.*, u.role as user_role
+        FROM researchers r
+        LEFT JOIN users u ON u.id = r.user_id
+        WHERE r.id = ? OR LOWER(r.instructor_id) = LOWER(?)
+      `).get(id, id);
       if (!r) {
         return sendJson(404, { error: 'Researcher not found' });
       }
 
       const allApprovedPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved' ORDER BY year DESC").all();
-      const pubs = allApprovedPubs.filter((p) => matchesResearcher(p, r));
+      const useLinks = isPubResearchersBackfilled(db);
+      const linkedApprovedMap = useLinks ? getLinkedIdsByPubMap(db, true) : new Map();
+      const rInstLower = String(r.instructor_id || '').toLowerCase();
+      const pubs = useLinks
+        ? allApprovedPubs.filter((p) => (linkedApprovedMap.get(p.id) || []).some((instId) => String(instId).toLowerCase() === rInstLower))
+        : allApprovedPubs.filter((p) => matchesResearcher(p, r));
       const pubCount = pubs.length;
       const citCount = pubs.reduce((sum, p) => sum + (p.citations || 0), 0);
 
@@ -1915,10 +2536,17 @@ export async function handleApiRequest(req, res) {
           .run(pubCount, citCount, r.id);
       }
 
+      const role =
+        r.user_role === 'admin' || r.user_id === 'admin-1' || r.id === 'PSU-002' || String(r.instructor_id || '').toUpperCase() === 'ASIN-00002'
+          ? 'admin'
+          : 'instructor';
+
       return sendJson(200, {
         id: r.id,
+        role,
         name: r.name,
         firstName: r.first_name,
+        middleInitial: r.middle_initial || '',
         lastName: r.last_name,
         instructorId: r.instructor_id,
         department: r.department,
@@ -1964,7 +2592,12 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'First name, last name, and instructor ID are required' });
       }
 
-      const trimmedInstId = instructorId.trim();
+      const idCheck = normalizeAndValidateInstructorId(instructorId);
+      if (!idCheck.valid) {
+        return sendJson(400, { error: idCheck.error });
+      }
+
+      const trimmedInstId = idCheck.normalized;
       const trimmedEmail = (email || '').trim().toLowerCase();
       const mi = (middleInitial || '').trim();
 
@@ -1975,17 +2608,17 @@ export async function handleApiRequest(req, res) {
       // Check if instructor ID or username exists
       const existing = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(trimmedInstId);
       if (existing) {
-        return sendJson(400, { error: 'That Instructor ID is already registered.' });
+        return sendJson(409, { error: 'That Instructor ID is already registered.' });
       }
 
       const existingRes = db.prepare('SELECT id FROM researchers WHERE LOWER(instructor_id) = LOWER(?)').get(trimmedInstId);
       if (existingRes) {
-        return sendJson(400, { error: 'That Instructor ID is already registered to a researcher.' });
+        return sendJson(409, { error: 'That Instructor ID is already registered to a researcher.' });
       }
 
       const existingEmail = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(trimmedEmail);
       if (existingEmail) {
-        return sendJson(400, { error: 'That email address is already in use.' });
+        return sendJson(409, { error: 'That email address is already in use.' });
       }
 
       // Extract scholar ID if URL passed
@@ -2091,6 +2724,7 @@ export async function handleApiRequest(req, res) {
           instructorId: trimmedInstId,
           name: fullName,
           firstName: firstName.trim(),
+          middleInitial: mi,
           lastName: lastName.trim(),
           email: trimmedEmail,
           department,
@@ -2123,7 +2757,12 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'First name, last name, email, and Instructor ID are required.' });
       }
 
-      const trimmedInstId = instructorId.trim();
+      const idCheck = normalizeAndValidateInstructorId(instructorId);
+      if (!idCheck.valid) {
+        return sendJson(400, { error: idCheck.error });
+      }
+
+      const trimmedInstId = idCheck.normalized;
       const trimmedEmail = email.trim().toLowerCase();
       const mi = (middleInitial || '').trim();
       const fullName = mi ? `${firstName.trim()} ${mi} ${lastName.trim()}` : `${firstName.trim()} ${lastName.trim()}`;
@@ -2132,10 +2771,11 @@ export async function handleApiRequest(req, res) {
         return sendJson(400, { error: 'Please enter a valid email address.' });
       }
 
-      // Check if account already exists
+      // Check if account already exists across users or researchers
       const existingUser = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)').get(trimmedInstId, trimmedEmail);
-      if (existingUser) {
-        return sendJson(400, { error: 'An account with this Instructor ID or email already exists. You can sign in directly or ask the administrator to reset your password.' });
+      const existingRes = db.prepare('SELECT id FROM researchers WHERE LOWER(instructor_id) = LOWER(?)').get(trimmedInstId);
+      if (existingUser || existingRes) {
+        return sendJson(409, { error: 'An account with this Instructor ID or email already exists. You can sign in directly or ask the administrator to reset your password.' });
       }
 
       // Check if pending request already submitted
@@ -2413,15 +3053,15 @@ export async function handleApiRequest(req, res) {
 
     // PUT /api/researchers/:id
     if (pathname.startsWith('/api/researchers/') && method === 'PUT') {
-      const id = pathname.replace('/api/researchers/', '');
+      const id = decodeURIComponent(pathname.replace('/api/researchers/', '')).trim();
       const data = await readJsonBody();
-      const current = db.prepare('SELECT * FROM researchers WHERE id = ? OR instructor_id = ?').get(id, id);
+      const current = db.prepare('SELECT * FROM researchers WHERE id = ? OR LOWER(instructor_id) = LOWER(?)').get(id, id);
       if (!current) {
         return sendJson(404, { error: 'Researcher not found' });
       }
 
       // Server-Side Ownership Check: Caller must be admin or the target researcher
-      const caller = authenticateCaller(req);
+      const caller = resolveCallerWithDb(req);
       if (!canCallerModifyResearcher(current, caller)) {
         return sendJson(403, { error: 'Forbidden: You cannot modify another faculty member’s profile.' });
       }
@@ -2429,8 +3069,9 @@ export async function handleApiRequest(req, res) {
       // Input Whitelisting: Strips unauthorized role/status elevation
       const sanitized = sanitizeResearcherInput(data, caller);
       const firstName = sanitized.firstName || current.first_name;
+      const mi = sanitized.middleInitial !== undefined ? sanitized.middleInitial : (current.middle_initial || '');
       const lastName = sanitized.lastName || current.last_name;
-      const fullName = `${firstName} ${lastName}`;
+      const fullName = mi ? `${firstName} ${mi} ${lastName}` : `${firstName} ${lastName}`;
       const department = sanitized.department || current.department;
       const isFaculty = sanitized.isFaculty !== undefined ? (sanitized.isFaculty ? 1 : 0) : current.is_faculty;
       const photoUrl = sanitized.photoUrl !== undefined ? sanitized.photoUrl : current.photo_url;
@@ -2442,13 +3083,33 @@ export async function handleApiRequest(req, res) {
         if (uMatch) googleScholarId = uMatch[1];
       }
 
+      let newInstId = current.instructor_id;
+      if (sanitized.instructorId !== undefined && sanitized.instructorId !== '') {
+        if (sanitized.instructorId.toLowerCase() === String(current.instructor_id || '').toLowerCase()) {
+          newInstId = current.instructor_id;
+        } else {
+          const idCheck = normalizeAndValidateInstructorId(sanitized.instructorId);
+          if (!idCheck.valid) {
+            return sendJson(400, { error: idCheck.error });
+          }
+          newInstId = idCheck.normalized;
+
+          const conflictRes = db.prepare('SELECT id FROM researchers WHERE LOWER(instructor_id) = LOWER(?) AND id != ? LIMIT 1').get(newInstId, current.id);
+          const conflictUser = current.user_id
+            ? db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ? LIMIT 1').get(newInstId, current.user_id)
+            : db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1').get(newInstId);
+          if (conflictRes || conflictUser) {
+            return sendJson(409, { error: `Instructor ID "${newInstId}" is already assigned to another researcher.` });
+          }
+        }
+      }
+
       db.prepare(`
         UPDATE researchers 
-        SET first_name = ?, last_name = ?, name = ?, department = ?, is_faculty = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
+        SET first_name = ?, middle_initial = ?, last_name = ?, name = ?, department = ?, is_faculty = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?
         WHERE id = ?
-      `).run(firstName, lastName, fullName, department, isFaculty, photoUrl, scholarUrl || null, googleScholarId || null, current.id);
+      `).run(firstName, mi || null, lastName, fullName, department, isFaculty, photoUrl, scholarUrl || null, googleScholarId || null, current.id);
 
-      const newInstId = sanitized.instructorId ? sanitized.instructorId.trim() : current.instructor_id;
       if (newInstId && newInstId !== current.instructor_id) {
         db.prepare('UPDATE researchers SET instructor_id = ? WHERE id = ?').run(newInstId, current.id);
         if (current.user_id) {
@@ -2461,6 +3122,10 @@ export async function handleApiRequest(req, res) {
         for (const oldId of oldIds) {
           db.prepare('UPDATE publications SET owner_id = ?, owner_name = ? WHERE LOWER(owner_id) = LOWER(?)')
             .run(newInstId, fullName, oldId);
+          if (String(oldId).toLowerCase() !== newInstId.toLowerCase()) {
+            db.prepare('UPDATE publication_researchers SET instructor_id = ? WHERE LOWER(instructor_id) = LOWER(?)')
+              .run(newInstId, oldId);
+          }
           db.prepare('UPDATE ai_chat_sessions SET user_id = ? WHERE LOWER(user_id) = LOWER(?)')
             .run(newInstId, oldId);
           db.prepare('UPDATE invitation_requests SET instructor_id = ? WHERE LOWER(instructor_id) = LOWER(?)')
@@ -2471,11 +3136,11 @@ export async function handleApiRequest(req, res) {
       // Update associated user record if password or details changed
       if (current.user_id) {
         if (sanitized.password) {
-          db.prepare('UPDATE users SET name = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?, password = ? WHERE id = ?')
-            .run(fullName, department, photoUrl, scholarUrl || null, googleScholarId || null, hashPassword(sanitized.password), current.user_id);
+          db.prepare('UPDATE users SET name = ?, middle_initial = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ?, password = ? WHERE id = ?')
+            .run(fullName, mi || null, department, photoUrl, scholarUrl || null, googleScholarId || null, hashPassword(sanitized.password), current.user_id);
         } else {
-          db.prepare('UPDATE users SET name = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ? WHERE id = ?')
-            .run(fullName, department, photoUrl, scholarUrl || null, googleScholarId || null, current.user_id);
+          db.prepare('UPDATE users SET name = ?, middle_initial = ?, department = ?, photo_url = ?, scholar_url = ?, google_scholar_id = ? WHERE id = ?')
+            .run(fullName, mi || null, department, photoUrl, scholarUrl || null, googleScholarId || null, current.user_id);
         }
       }
 
@@ -2600,16 +3265,29 @@ export async function handleApiRequest(req, res) {
     }
 
     // ----------------------------------------------------
-    // 4. PUBLICATIONS CRUD
+    // 4. PUBLICATIONS CRUD & R2/R4 ENDPOINTS
     // ----------------------------------------------------
     if (pathname === '/api/publications' && method === 'GET') {
       cleanupOrphanedPublications(db);
-      const caller = authenticateCaller(req);
-      const allRows = db.prepare('SELECT * FROM publications ORDER BY year DESC, citations DESC').all();
+      const caller = resolveCallerWithDb(req);
+      const includePending = Boolean(caller) && url.searchParams.get('includePending') === 'true';
+      const useLinks = isPubResearchersBackfilled(db);
+      const approvedLinksMap = useLinks ? getLinkedIdsByPubMap(db, true) : new Map();
+      const allLinksMap = useLinks ? getLinkedIdsByPubMap(db, false) : new Map();
 
-      // Application-Level Tenant Isolation (The SQLite equivalent of RLS):
-      // Admins see all; Instructors see public approved + their own drafts; Guests see public approved only
-      const rows = filterPublicationsForCaller(allRows, caller);
+      const allRows = db.prepare('SELECT * FROM publications ORDER BY year DESC, citations DESC').all();
+      const rows = allRows.filter((p) => {
+        if (includePending) {
+          const attached = {
+            ...p,
+            allLinkedResearcherIds: useLinks ? (allLinksMap.get(p.id) || []) : undefined,
+          };
+          return canCallerAccessPublication(attached, caller);
+        }
+        if (p.approval_status !== 'approved') return false;
+        if (!caller && p.is_public === 0) return false;
+        return true;
+      });
 
       // Batch-fetch all citing papers
       const allCiting = db.prepare('SELECT id, publication_id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers').all();
@@ -2647,6 +3325,14 @@ export async function handleApiRequest(req, res) {
           ? Number(p.jc3_points)
           : (p.nbc461_points ? (p.nbc461_points >= 25 ? 50.0 : p.nbc461_points >= 15 ? 30.0 : p.nbc461_points >= 10 ? 20.0 : 10.0) : 10.0);
 
+        const assignedResearcherIds = useLinks
+          ? (approvedLinksMap.get(p.id) || [])
+          : (p.owner_id ? [p.owner_id] : []);
+
+        const allLinkedResearcherIds = useLinks
+          ? (allLinksMap.get(p.id) || [])
+          : (p.owner_id ? [p.owner_id] : []);
+
         return {
           ...p,
           authors: JSON.parse(p.authors || '[]'),
@@ -2655,14 +3341,305 @@ export async function handleApiRequest(req, res) {
           jc3_points: jc3,
           nbc461Points: p.nbc461_points,
           citedByLink: citedByLink || null,
+          assignedResearcherIds,
+          allLinkedResearcherIds,
           citingPapers: citing,
         };
       });
       return sendJson(200, pubs);
     }
 
+    // R2: Resolve DOI metadata via CrossRef + OpenAlex + Google Scholar
+    if (pathname === '/api/publications/resolve-doi' && method === 'POST') {
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required to resolve DOI metadata.' });
+      }
+      const { doi } = await readJsonBody();
+      const cleanDoi = normalizeDoiInput(doi);
+      if (!cleanDoi) {
+        return sendJson(400, {
+          error: 'Invalid DOI format. Please provide a valid DOI (e.g., 10.1109/ACCESS.2023.123456) or doi.org link.',
+        });
+      }
+
+      const apifyHelpers = await buildApifyScraperHelpers();
+      const resolved = await resolvePublicationByDoi(cleanDoi, apifyHelpers);
+      if (!resolved) {
+        return sendJson(404, { error: `No publication metadata found for DOI: ${cleanDoi}` });
+      }
+
+      let sdgTags = [];
+      let sdgReason = '';
+      try {
+        const sdgResult = await classifyPublicationSDG(
+          resolved.title,
+          resolved.abstract || '',
+          resolved.journal || '',
+          resolved.doi
+        );
+        sdgTags = [sdgResult.primarySDG, sdgResult.secondarySDG].filter(Boolean);
+        sdgReason =
+          (sdgResult.rationales && sdgResult.primarySDG && sdgResult.rationales[sdgResult.primarySDG]) ||
+          (typeof sdgResult.rationale === 'string' && !sdgResult.rationale.startsWith('{') ? sdgResult.rationale : '') ||
+          '';
+      } catch {}
+
+      const audit = auditJournalReputation(resolved.journal || '');
+
+      return sendJson(200, {
+        metadata: {
+          title: resolved.title,
+          authors: resolved.authors,
+          journal: resolved.journal,
+          year: resolved.year,
+          abstract: resolved.abstract || '',
+          doi: resolved.doi,
+          url: resolved.url,
+          pdfUrl: resolved.pdfUrl || null,
+          volumeIssue: resolved.volumeIssue || '',
+          issnIsbn: resolved.issnIsbn || `DOI: ${resolved.doi}`,
+          publicationDate: resolved.publicationDate || String(resolved.year),
+          keywords: resolved.keywords || '',
+          citations: Number(resolved.citations) || 0,
+          citedByLink: resolved.citedByLink || '',
+          sdgTags,
+          sdgReason,
+          journalTier: audit.indexing || 'Institutional Archive',
+          sources: resolved.sources || [],
+        },
+      });
+    }
+
+    // R4: Batch reload live Google Scholar citation counts for all approved repository publications
+    if (pathname === '/api/publications/reload-citations' && method === 'POST') {
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required to reload citations.' });
+      }
+
+      const approvedPubs = db.prepare("SELECT * FROM publications WHERE approval_status = 'approved' ORDER BY year DESC, citations DESC").all();
+      const profileCache = new Map();
+      const apifyHelpers = await buildApifyScraperHelpers();
+      let updatedCount = 0;
+      const results = [];
+
+      for (const pub of approvedPubs) {
+        const previousCitations = Number(pub.citations) || 0;
+        const matchedResearcher = findPrimaryResearcherForPublication(db, pub);
+        const live = await fetchLiveGoogleScholarCitationCount(pub, matchedResearcher, profileCache, apifyHelpers);
+
+        let finalCitations = previousCitations;
+        let finalCitedByLink = pub.cited_by_link || '';
+        let updated = false;
+
+        if (live.matched && (live.citations > 0 || previousCitations === 0)) {
+          finalCitations = Number(live.citations) || 0;
+          finalCitedByLink = live.citedByLink || finalCitedByLink;
+          if (finalCitations !== previousCitations || (finalCitedByLink && finalCitedByLink !== (pub.cited_by_link || ''))) {
+            db.prepare(`
+              UPDATE publications
+              SET citations = ?, cited_by_link = COALESCE(NULLIF(?, ''), cited_by_link)
+              WHERE id = ?
+            `).run(finalCitations, finalCitedByLink, pub.id);
+            syncedPublicationsCache.delete(pub.id);
+            updated = finalCitations !== previousCitations;
+            if (updated) updatedCount++;
+          }
+        }
+
+        results.push({
+          id: pub.id,
+          title: pub.title,
+          previousCitations,
+          citations: finalCitations,
+          citedByLink: finalCitedByLink,
+          source: live.source,
+          updated,
+          captchaBlocked: Boolean(live.captchaBlocked),
+        });
+      }
+
+      recalculateAllResearcherStats(db);
+
+      return sendJson(200, {
+        success: true,
+        updatedCount,
+        totalPublications: approvedPubs.length,
+        results,
+      });
+    }
+
+    // R4: Reload live Google Scholar citation count & citing papers for a single publication
+    if (pathname.startsWith('/api/publications/') && pathname.endsWith('/reload-citation') && method === 'POST') {
+      const caller = resolveCallerWithDb(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required to reload citation.' });
+      }
+
+      const id = decodeURIComponent(
+        pathname.slice('/api/publications/'.length, -'/reload-citation'.length)
+      ).trim();
+      const pub = db.prepare('SELECT * FROM publications WHERE id = ?').get(id);
+      if (!pub) {
+        return sendJson(404, { error: 'Publication not found' });
+      }
+
+      const useLinks = isPubResearchersBackfilled(db);
+      const attachedPub = {
+        ...pub,
+        allLinkedResearcherIds: useLinks ? getLinkedInstructorIdsForPub(db, id, false) : undefined,
+      };
+      if (!canCallerAccessPublication(attachedPub, caller)) {
+        return sendJson(404, { error: 'Publication not found' });
+      }
+
+      syncedPublicationsCache.delete(id);
+      const apifyHelpers = await buildApifyScraperHelpers();
+      await syncSinglePublicationCitations(id, 10000, true, {
+        refreshLiveCount: true,
+        profileCache: new Map(),
+        ...apifyHelpers,
+      });
+
+      const p = db.prepare('SELECT * FROM publications WHERE id = ?').get(id);
+      const computedYearCounts = computePublicationCitationYears(db, p, true);
+      const trends = Object.entries(computedYearCounts)
+        .map(([yrStr, cnt]) => ({
+          id: `trend-${id}-${yrStr}`,
+          year: Number(yrStr),
+          citations: Number(cnt),
+        }))
+        .sort((a, b) => a.year - b.year);
+      const citingPapers = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ?').all(id);
+      recalculateAllResearcherStats(db);
+
+      const jc3 = p.jc3_points !== null && p.jc3_points !== undefined
+        ? Number(p.jc3_points)
+        : (p.nbc461_points ? (p.nbc461_points >= 25 ? 50.0 : p.nbc461_points >= 15 ? 30.0 : p.nbc461_points >= 10 ? 20.0 : 10.0) : 10.0);
+
+      const publicationPayload = {
+        ...p,
+        authors: JSON.parse(p.authors || '[]'),
+        isPublic: Boolean(p.is_public),
+        jc3Points: jc3,
+        jc3_points: jc3,
+        nbc461Points: p.nbc461_points,
+        citedByLink: p.cited_by_link || null,
+        assignedResearcherIds: useLinks ? getLinkedInstructorIdsForPub(db, id, true) : (p.owner_id ? [p.owner_id] : []),
+        citationTrend: trends,
+        citingPapers,
+      };
+
+      return sendJson(200, {
+        success: true,
+        publication: publicationPayload,
+        citingPapers,
+        trends,
+      });
+    }
+
+    // R2: Unassign / Remove researcher from publication (delete publication only if 0 linked researchers remain)
+    const isPostUnassign = pathname.startsWith('/api/publications/') && pathname.endsWith('/unassign') && method === 'POST';
+    const assignMatch = method === 'DELETE' ? pathname.match(/^\/api\/publications\/([^/]+)\/assign\/([^/]+)$/) : null;
+    if (isPostUnassign || assignMatch) {
+      const caller = resolveCallerWithDb(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required.' });
+      }
+
+      let pubId = '';
+      let requestedInstId = '';
+      if (isPostUnassign) {
+        pubId = decodeURIComponent(pathname.slice('/api/publications/'.length, -'/unassign'.length)).trim();
+        const body = await readJsonBody();
+        requestedInstId = String(body.instructorId || caller.instructorId || caller.username || '').trim();
+      } else {
+        pubId = decodeURIComponent(assignMatch[1]).trim();
+        requestedInstId = decodeURIComponent(assignMatch[2]).trim();
+      }
+
+      if (!pubId || !requestedInstId) {
+        return sendJson(400, { error: 'Publication ID and Instructor ID are required.' });
+      }
+
+      if (!isCallerAdmin(caller)) {
+        const callerIds = new Set(
+          [caller.instructorId, caller.username, caller.id, caller.researcherId, caller.jwtInstructorId]
+            .map((x) => String(x || '').trim().toLowerCase())
+            .filter(Boolean)
+        );
+        if (!callerIds.has(requestedInstId.toLowerCase())) {
+          return sendJson(403, { error: 'Forbidden: Researchers can only remove themselves from a publication.' });
+        }
+      }
+
+      const pub = db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId);
+      if (!pub) {
+        return sendJson(404, { error: 'Publication not found' });
+      }
+
+      const targetRes = db.prepare('SELECT instructor_id, name FROM researchers WHERE LOWER(instructor_id) = LOWER(?) OR id = ? LIMIT 1').get(requestedInstId, requestedInstId);
+      const resolvedInstId = targetRes?.instructor_id || requestedInstId;
+
+      let remainingCount = 0;
+      let deletedPublication = false;
+
+      runInTransaction(() => {
+        db.prepare('DELETE FROM publication_researchers WHERE publication_id = ? AND (LOWER(instructor_id) = LOWER(?) OR LOWER(instructor_id) = LOWER(?))')
+          .run(pubId, resolvedInstId, requestedInstId);
+
+        const remaining = db.prepare(`
+          SELECT pr.instructor_id, pr.approval_status, r.name
+          FROM publication_researchers pr
+          LEFT JOIN researchers r ON LOWER(r.instructor_id) = LOWER(pr.instructor_id)
+          WHERE pr.publication_id = ?
+          ORDER BY CASE WHEN pr.approval_status = 'approved' THEN 0 ELSE 1 END, pr.created_at ASC
+        `).all(pubId);
+
+        remainingCount = remaining.length;
+
+        if (remainingCount === 0) {
+          deletePublicationCascade(pubId, db);
+          deletedPublication = true;
+        } else {
+          const nextOwner = remaining[0];
+          const hasApproved = remaining.some((l) => l.approval_status === 'approved');
+          const ownerWasRemoved =
+            String(pub.owner_id || '').toLowerCase() === resolvedInstId.toLowerCase() ||
+            String(pub.owner_id || '').toLowerCase() === requestedInstId.toLowerCase();
+
+          if (ownerWasRemoved || !hasApproved) {
+            db.prepare(`
+              UPDATE publications
+              SET owner_id = ?,
+                  owner_name = ?,
+                  approval_status = CASE WHEN ? = 1 THEN approval_status ELSE 'pending' END,
+                  is_public = CASE WHEN ? = 1 THEN is_public ELSE 0 END
+              WHERE id = ?
+            `).run(
+              ownerWasRemoved ? nextOwner.instructor_id : pub.owner_id,
+              ownerWasRemoved ? (nextOwner.name || nextOwner.instructor_id) : pub.owner_name,
+              hasApproved ? 1 : 0,
+              hasApproved ? 1 : 0,
+              pubId
+            );
+          }
+        }
+      });
+
+      recalculateAllResearcherStats(db);
+
+      return sendJson(200, {
+        success: true,
+        unassignedInstructorId: resolvedInstId,
+        remainingCount,
+        deletedPublication,
+      });
+    }
+
     if (pathname.startsWith('/api/publications/') && method === 'GET') {
-      const id = pathname.replace('/api/publications/', '');
+      const id = decodeURIComponent(pathname.replace('/api/publications/', '')).trim();
       const rawId = id.replace(/^(admin-|claim-)/, '');
       let p = db.prepare('SELECT * FROM publications WHERE id = ?').get(id);
       let isScraped = false;
@@ -2694,9 +3671,37 @@ export async function handleApiRequest(req, res) {
       }
 
       // Application-Level Tenant Isolation: Check if caller is permitted to view this publication
-      const caller = authenticateCaller(req);
-      if (!canCallerAccessPublication(p, caller)) {
+      const caller = resolveCallerWithDb(req);
+      const useLinks = isPubResearchersBackfilled(db);
+      const allLinkedIds = !isScraped && useLinks ? getLinkedInstructorIdsForPub(db, id, false) : undefined;
+      const approvedLinkedIds = !isScraped && useLinks
+        ? getLinkedInstructorIdsForPub(db, id, true)
+        : (p.owner_id ? [p.owner_id] : []);
+      if (!canCallerAccessPublication({ ...p, allLinkedResearcherIds: allLinkedIds }, caller)) {
         return sendJson(404, { error: 'Publication not found' });
+      }
+
+      // Check R7 public scraper availability for unauthenticated callers
+      const isUserAdminOrFaculty = Boolean(caller && (caller.role === 'admin' || caller.role === 'instructor'));
+      let canExternalScrape = isUserAdminOrFaculty;
+      if (!canExternalScrape) {
+        const pubScraperSetting = db.prepare("SELECT value FROM system_settings WHERE key = 'public_scraper_enabled'").get()?.value || 'true';
+        if (pubScraperSetting !== 'true') {
+          canExternalScrape = false;
+        } else {
+          let quotaTripped = false;
+          const activeToken = getActiveApifyTokenRow();
+          if (activeToken) {
+            try {
+              const usage = await fetchApifyTokenUsage(activeToken, false);
+              const thresholdSetting = Number(db.prepare("SELECT value FROM system_settings WHERE key = 'scraper_quota_threshold_usd'").get()?.value) || 1.0;
+              if (usage?.remainingUsd !== undefined && Number(usage.remainingUsd) <= thresholdSetting) {
+                quotaTripped = true;
+              }
+            } catch {}
+          }
+          canExternalScrape = !quotaTripped;
+        }
       }
 
       // If cited_by_link is empty on the publication, attempt fallback lookup in scraped_publications
@@ -2708,7 +3713,7 @@ export async function handleApiRequest(req, res) {
         }
       }
 
-      if (!citedByLink && Number(p.citations) > 0 && p.title) {
+      if (canExternalScrape && !citedByLink && Number(p.citations) > 0 && p.title) {
         try {
           const directResults = await scrapeGoogleScholarDirect(p.title, 1);
           if (directResults.length > 0 && directResults[0].citedByLink) {
@@ -2724,7 +3729,7 @@ export async function handleApiRequest(req, res) {
       let citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
 
       // Enrich parent publication metadata if missing keywords, ISSN/DOI, volume/issue, or full co-authors
-      if (!isScraped && (!p.keywords || !p.issn_isbn || !p.volume_issue || String(p.authors || '').includes('…'))) {
+      if (canExternalScrape && !isScraped && (!p.keywords || !p.issn_isbn || !p.volume_issue || String(p.authors || '').includes('…'))) {
         try {
           const parsedAuthors = JSON.parse(p.authors || '[]');
           const enrichTarget = {
@@ -2761,15 +3766,20 @@ export async function handleApiRequest(req, res) {
         syncedPublicationsCache.delete(id);
       }
 
-      // Auto-fetch or backfill citing papers if missing or incomplete compared to total recorded citations
-      if (totalPaperCitations > 0 && (isForceRefresh || citing.length === 0 || citing.length < totalPaperCitations)) {
+      // Auto-fetch or backfill citing papers (and live GS count on force refresh)
+      if (canExternalScrape && !isScraped && (isForceRefresh || (totalPaperCitations > 0 && (citing.length === 0 || citing.length < totalPaperCitations)))) {
         try {
           if (isForceRefresh || citing.length === 0 || totalPaperCitations <= 600) {
-            // Synchronously ensure complete citations for fast and accurate UI rendering
-            await syncSinglePublicationCitations(id, totalPaperCitations, isForceRefresh);
+            const apifyHelpers = isForceRefresh ? await buildApifyScraperHelpers() : {};
+            await syncSinglePublicationCitations(id, isForceRefresh ? 10000 : totalPaperCitations, isForceRefresh, {
+              refreshLiveCount: isForceRefresh,
+              profileCache: new Map(),
+              ...apifyHelpers,
+            });
+            p = db.prepare('SELECT * FROM publications WHERE id = ?').get(id) || p;
+            citedByLink = p.cited_by_link || citedByLink;
             citing = db.prepare('SELECT id, title, authors, year, link, journal, volume_issue, quarter, doi_issn FROM citing_papers WHERE publication_id = ? OR publication_id = ?').all(id, rawId);
           } else {
-            // For papers with over 600 citations, enqueue background backfill
             enqueuePublicationCitationSync([id]);
           }
         } catch (err) {
@@ -2778,19 +3788,21 @@ export async function handleApiRequest(req, res) {
       }
 
       // If existing citing papers lack journal, year, volume/issue, or full authors, enrich a batch with CrossRef + OpenAlex and persist
-      const needsCitingEnrich = citing.filter((c) =>
-        !c.year ||
-        c.year < 1990 ||
-        !c.volume_issue ||
-        !c.journal ||
-        c.journal === 'Academic Journal' ||
-        c.journal === 'Academic Publication' ||
-        c.journal.includes('(ACS)') ||
-        !c.authors ||
-        c.authors === 'Academic Authors' ||
-        String(c.authors || '').includes('…') ||
-        /\.s\d+$/i.test(c.doi_issn || '')
-      ).slice(0, 20);
+      const needsCitingEnrich = canExternalScrape
+        ? citing.filter((c) =>
+            !c.year ||
+            c.year < 1990 ||
+            !c.volume_issue ||
+            !c.journal ||
+            c.journal === 'Academic Journal' ||
+            c.journal === 'Academic Publication' ||
+            c.journal.includes('(ACS)') ||
+            !c.authors ||
+            c.authors === 'Academic Authors' ||
+            String(c.authors || '').includes('…') ||
+            /\.s\d+$/i.test(c.doi_issn || '')
+          ).slice(0, 20)
+        : [];
       if (needsCitingEnrich.length > 0) {
         try {
           await enrichBatchWithCrossRef(needsCitingEnrich, 5);
@@ -2843,6 +3855,7 @@ export async function handleApiRequest(req, res) {
         jc3Points: jc3,
         jc3_points: jc3,
         nbc461Points: p.nbc461_points,
+        assignedResearcherIds: approvedLinkedIds,
         citationTrend: computedTrends.length > 0 ? computedTrends : trends,
         citingPapers: citing,
         citedByLink: citedByLink || null,
@@ -2850,18 +3863,42 @@ export async function handleApiRequest(req, res) {
     }
 
     if (pathname === '/api/publications' && method === 'POST') {
-      const data = await readJsonBody();
-      if (!data.title || !data.title.trim()) {
-        return sendJson(400, { error: 'Publication title is required' });
+      const caller = resolveCallerWithDb(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required to submit or add publications.' });
       }
 
-      const caller = authenticateCaller(req);
-      // Input Whitelisting: Sanitize input and enforce status/ownership constraints
+      const data = await readJsonBody();
       const sanitized = sanitizePublicationInput(data, caller, true);
+
+      const parsedAuthors = Array.isArray(sanitized.authors)
+        ? sanitized.authors.map((a) => String(a || '').trim()).filter(Boolean)
+        : typeof sanitized.authors === 'string'
+        ? sanitized.authors.split(/[,;]/).map((a) => a.trim()).filter(Boolean)
+        : [];
+
+      if (!sanitized.title) {
+        return sendJson(400, { error: 'Publication title is required.' });
+      }
+      if (parsedAuthors.length === 0) {
+        return sendJson(400, { error: 'At least one author is required.' });
+      }
+      if (!sanitized.journal) {
+        return sendJson(400, { error: 'Journal or venue name is required.' });
+      }
+      if (!Number.isInteger(sanitized.year) || sanitized.year < 1900 || sanitized.year > 2100) {
+        return sendJson(400, { error: 'A valid publication year (1900–2100) is required.' });
+      }
+      sanitized.authors = parsedAuthors;
+
+      const isAdmin = isCallerAdmin(caller);
+      const claimSource = isAdmin
+        ? (data.source || 'admin')
+        : (data.doi || data.source === 'doi' ? 'doi' : (data.source === 'claim' ? 'authorship_claim' : 'manual'));
 
       // STRICT RESEARCHER ASSIGNMENT CHECK:
       // Every publication must be tied to a registered researcher in the system.
-      if (isCallerAdmin(caller)) {
+      if (isAdmin) {
         const requestedOwnerId = (data.ownerId || '').trim();
         if (!requestedOwnerId || requestedOwnerId.toLowerCase() === 'admin') {
           return sendJson(400, {
@@ -2886,8 +3923,6 @@ export async function handleApiRequest(req, res) {
         sanitized.ownerName = assignedResearcher.name;
         sanitized.approvalStatus = 'approved';
       } else {
-        // Researcher / Instructor claiming or submitting their own publication:
-        // Must be a registered researcher, assigned to themselves, and requires Admin (Sir Garin) approval.
         const candidateId = (caller?.instructorId || caller?.username || data.ownerId || '').trim();
         const callerResearcher = db.prepare(`
           SELECT * FROM researchers
@@ -2917,23 +3952,24 @@ export async function handleApiRequest(req, res) {
 
         sanitized.ownerId = callerResearcher.instructor_id;
         sanitized.ownerName = callerResearcher.name;
-        sanitized.approvalStatus = 'pending'; // Must be approved by System Administrator (Sir Garin)
+        sanitized.approvalStatus = 'pending';
+        sanitized.isPublic = false;
       }
 
       // 1. Strict Deduplication Check: Check existing publications using normalized title
       const normInput = normalizeTitle(sanitized.title);
       const allExisting = db.prepare('SELECT id, title, citations, abstract, url, cited_by_link, sdg_tags, owner_id, owner_name, approval_status FROM publications').all();
       const existing = allExisting.find((p) => normalizeTitle(p.title) === normInput);
+      const now = new Date().toISOString();
 
       if (existing) {
         if (existing.approval_status === 'rejected') {
-          db.prepare('DELETE FROM publications WHERE id = ?').run(existing.id);
+          deletePublicationCascade(existing.id, db);
         } else {
-          // Prevent duplicate creation: update metrics on existing record instead
           const higherCitations = Math.max(existing.citations || 0, Number(sanitized.citations) || 0);
-          const bestUrl = sanitized.url || existing.url;
+          const bestUrl = isAdmin ? (sanitized.url || existing.url) : (existing.url || sanitized.url);
           const bestAbstract = (sanitized.abstract && sanitized.abstract.length > (existing.abstract || '').length) ? sanitized.abstract : existing.abstract;
-          const bestCitedByLink = sanitized.citedByLink || existing.cited_by_link;
+          const bestCitedByLink = isAdmin ? (sanitized.citedByLink || existing.cited_by_link) : (existing.cited_by_link || sanitized.citedByLink);
 
           db.prepare(`
             UPDATE publications
@@ -2941,21 +3977,52 @@ export async function handleApiRequest(req, res) {
             WHERE id = ?
           `).run(higherCitations, bestUrl, bestAbstract, bestCitedByLink, existing.id);
 
+          const existingLink = db.prepare(`
+            SELECT approval_status FROM publication_researchers
+            WHERE publication_id = ? AND LOWER(instructor_id) = LOWER(?)
+            LIMIT 1
+          `).get(existing.id, sanitized.ownerId);
+
+          let linkCreated = false;
+          let linkApprovalStatus = existingLink?.approval_status || existing.approval_status;
+
+          if (!existingLink) {
+            linkApprovalStatus = isAdmin ? 'approved' : 'pending';
+            db.prepare(`
+              INSERT OR IGNORE INTO publication_researchers (
+                publication_id, instructor_id, approval_status, assigned_by, claim_source, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?)
+            `).run(
+              existing.id,
+              sanitized.ownerId,
+              linkApprovalStatus,
+              caller.username || sanitized.ownerId,
+              isAdmin ? 'admin' : (data.doi ? 'doi' : 'authorship_claim'),
+              now
+            );
+            linkCreated = true;
+            if (isAdmin) {
+              recalculateAllResearcherStats(db);
+            }
+          }
+
           return sendJson(200, {
             success: true,
             id: existing.id,
             isDuplicate: true,
             alreadyExists: true,
+            linkCreated,
             ownerId: existing.owner_id,
             ownerName: existing.owner_name,
-            approvalStatus: existing.approval_status,
-            message: `Publication already exists in repository ("${existing.title}") assigned to ${existing.owner_name}.`,
+            approvalStatus: linkApprovalStatus,
+            message: linkCreated && !isAdmin
+              ? `Publication already exists in repository ("${existing.title}"). Your co-authorship claim has been submitted for Research Coordinator approval.`
+              : `Publication already exists in repository ("${existing.title}") assigned to ${existing.owner_name}.`,
           });
         }
       }
 
       const id = data.id || `pub-${Date.now()}`;
-      const now = new Date().toISOString();
 
       // Enforce SDG classification & journal audit on newly created publications
       let sdgTagsJson = sanitized.sdgTags ? JSON.stringify(sanitized.sdgTags) : null;
@@ -2982,9 +4049,9 @@ export async function handleApiRequest(req, res) {
       // Enrich publication metadata (all co-authors, ISSN/DOI, volume/issue, publication date, keywords)
       const enrichPayload = {
         title: sanitized.title,
-        authors: Array.isArray(sanitized.authors) ? sanitized.authors : [sanitized.authors],
-        journal: sanitized.journal || 'Research Journal',
-        year: Number(sanitized.year) || new Date().getFullYear(),
+        authors: sanitized.authors,
+        journal: sanitized.journal,
+        year: sanitized.year,
         abstract: sanitized.abstract || '',
         url: sanitized.url || '',
         keywords: data.keywords || '',
@@ -3006,49 +4073,64 @@ export async function handleApiRequest(req, res) {
         isPredatory = audit.isPredatory;
       }
 
-      db.prepare(`
-        INSERT INTO publications (
-          id, title, authors, journal, year, citations, abstract, url,
-          impact_score, owner_id, owner_name, source, approval_status,
-          research_status, is_public, file_name, cited_by_link,
-          sdg_tags, sdg_rationale, ched_priority, journal_indexing,
-          jc3_points, nbc461_points, is_predatory_flag,
-          keywords, issn_isbn, volume_issue, publication_date, publication_level, doi,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        sanitized.title,
-        JSON.stringify(Array.isArray(sanitized.authors) ? sanitized.authors : [sanitized.authors]),
-        sanitized.journal || 'Research Journal',
-        Number(sanitized.year) || new Date().getFullYear(),
-        Number(sanitized.citations) || 0,
-        sanitized.abstract || '',
-        sanitized.url || null,
-        Number(sanitized.impactScore) || 0.0,
-        sanitized.ownerId,
-        sanitized.ownerName,
-        sanitized.source,
-        sanitized.approvalStatus,
-        sanitized.researchStatus,
-        sanitized.isPublic ? 1 : 0,
-        sanitized.fileName || null,
-        sanitized.citedByLink || null,
-        sdgTagsJson,
-        sdgRationale,
-        chedPriority,
-        journalIndex,
-        jc3Points,
-        nbcPoints,
-        isPredatory,
-        enrichPayload.keywords || null,
-        enrichPayload.issn_isbn || null,
-        enrichPayload.volume_issue || null,
-        enrichPayload.publication_date || String(Number(sanitized.year) || new Date().getFullYear()),
-        data.publication_level || data.publicationLevel || 'International',
-        enrichPayload.doi || null,
-        now
-      );
+      runInTransaction(() => {
+        db.prepare(`
+          INSERT INTO publications (
+            id, title, authors, journal, year, citations, abstract, url,
+            impact_score, owner_id, owner_name, source, approval_status,
+            research_status, is_public, file_name, cited_by_link,
+            sdg_tags, sdg_rationale, ched_priority, journal_indexing,
+            jc3_points, nbc461_points, is_predatory_flag,
+            keywords, issn_isbn, volume_issue, publication_date, publication_level, doi,
+            created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          sanitized.title,
+          JSON.stringify(Array.isArray(sanitized.authors) ? sanitized.authors : [sanitized.authors]),
+          sanitized.journal,
+          sanitized.year,
+          Number(sanitized.citations) || 0,
+          sanitized.abstract || '',
+          sanitized.url || null,
+          Number(sanitized.impactScore) || 0.0,
+          sanitized.ownerId,
+          sanitized.ownerName,
+          claimSource,
+          sanitized.approvalStatus,
+          sanitized.researchStatus,
+          sanitized.isPublic ? 1 : 0,
+          sanitized.fileName || null,
+          sanitized.citedByLink || null,
+          sdgTagsJson,
+          sdgRationale,
+          chedPriority,
+          journalIndex,
+          jc3Points,
+          nbcPoints,
+          isPredatory,
+          enrichPayload.keywords || null,
+          enrichPayload.issn_isbn || null,
+          enrichPayload.volume_issue || null,
+          enrichPayload.publication_date || String(sanitized.year),
+          data.publication_level || data.publicationLevel || 'International',
+          enrichPayload.doi || null,
+          now
+        );
+
+        db.prepare(`
+          INSERT OR IGNORE INTO publication_researchers (
+            publication_id, instructor_id, approval_status, assigned_by, claim_source, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          sanitized.ownerId,
+          sanitized.approvalStatus,
+          caller.username || sanitized.ownerId,
+          claimSource,
+          now
+        );
+      });
 
       // If citing papers were provided, save them too
       if (Array.isArray(data.citingPapers)) {
@@ -3075,17 +4157,16 @@ export async function handleApiRequest(req, res) {
         }
       }
 
-      // Keep researcher totals synchronized
-      const allRes = db.prepare('SELECT id FROM researchers').all();
-      for (const resRow of allRes) {
-        updateResearcherStats(db, resRow.id);
-      }
+      recalculateAllResearcherStats(db);
 
       return sendJson(201, {
         success: true,
         id,
+        approvalStatus: sanitized.approvalStatus,
         isDuplicate: false,
-        message: 'Publication saved to database and classified with AI UN SDGs',
+        message: sanitized.approvalStatus === 'pending'
+          ? 'Publication submitted and pending Research Coordinator approval.'
+          : 'Publication saved to database and classified with AI UN SDGs',
       });
     }
 
@@ -3099,8 +4180,13 @@ export async function handleApiRequest(req, res) {
       }
 
       // Server-Side Ownership Check: Caller must own publication or be an admin
-      const caller = authenticateCaller(req);
-      if (!canCallerModifyPublication(current, caller)) {
+      const caller = resolveCallerWithDb(req);
+      const useLinks = isPubResearchersBackfilled(db);
+      const attachedPub = {
+        ...current,
+        allLinkedResearcherIds: useLinks ? getLinkedInstructorIdsForPub(db, id, false) : undefined,
+      };
+      if (!canCallerModifyPublication(attachedPub, caller)) {
         return sendJson(403, { error: 'Forbidden: You do not have permission to modify this publication.' });
       }
 
@@ -3195,20 +4281,20 @@ export async function handleApiRequest(req, res) {
       }
 
       // Server-Side Ownership Check: Caller must own publication or be an admin
-      const caller = authenticateCaller(req);
-      if (!canCallerModifyPublication(current, caller)) {
+      const caller = resolveCallerWithDb(req);
+      const useLinks = isPubResearchersBackfilled(db);
+      const attachedPub = {
+        ...current,
+        allLinkedResearcherIds: useLinks ? getLinkedInstructorIdsForPub(db, id, false) : undefined,
+      };
+      if (!canCallerModifyPublication(attachedPub, caller)) {
         return sendJson(403, { error: 'Forbidden: You do not have permission to delete this publication.' });
       }
 
-      db.prepare('DELETE FROM publications WHERE id = ?').run(id);
-      db.prepare('DELETE FROM citing_papers WHERE publication_id = ?').run(id);
-      db.prepare('DELETE FROM citation_trends WHERE publication_id = ?').run(id);
+      deletePublicationCascade(id, db);
 
       // Keep researcher totals synchronized
-      const allRes = db.prepare('SELECT id FROM researchers').all();
-      for (const resRow of allRes) {
-        updateResearcherStats(db, resRow.id);
-      }
+      recalculateAllResearcherStats(db);
 
       return sendJson(200, { success: true, message: 'Publication deleted successfully' });
     }
@@ -3217,6 +4303,10 @@ export async function handleApiRequest(req, res) {
     // 5A. GOOGLE SCHOLAR PROFILE FETCH & PSU/NON-PSU REVIEW
     // ----------------------------------------------------
     if (pathname === '/api/scholar/fetch-profile' && method === 'POST') {
+      const caller = authenticateCaller(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required to fetch Google Scholar profiles.' });
+      }
       const { scholarUrl } = await readJsonBody();
       if (!scholarUrl) {
         return sendJson(400, { error: 'Google Scholar profile URL or user ID is required.' });
@@ -3385,18 +4475,16 @@ export async function handleApiRequest(req, res) {
     // 5B. IMPORT SELECTED SCHOLAR PUBLICATIONS (Option B)
     // ----------------------------------------------------
     if (pathname === '/api/scholar/import' && method === 'POST') {
+      const caller = resolveCallerWithDb(req);
+      if (!caller) {
+        return sendJson(401, { error: 'Authentication required to import Google Scholar publications.' });
+      }
+
       const {
         instructorId,
-        researcherName,
         scholarUrl,
         scholarId,
         photoUrl,
-        firstName,
-        lastName,
-        department = 'BSIT',
-        password,
-        email,
-        isFaculty = true,
         publications = [],
       } = await readJsonBody();
 
@@ -3405,7 +4493,23 @@ export async function handleApiRequest(req, res) {
       }
 
       const trimmedInstId = instructorId.trim();
-      let researcher = db.prepare('SELECT * FROM researchers WHERE instructor_id = ? OR id = ?').get(trimmedInstId, trimmedInstId);
+      const researcher = db.prepare('SELECT * FROM researchers WHERE (LOWER(instructor_id) = LOWER(?) OR id = ?) AND (status IS NULL OR status != \'rejected\')').get(trimmedInstId, trimmedInstId);
+
+      // Strictly forbid auto-creating researcher accounts (Rule 11)
+      if (!researcher) {
+        return sendJson(404, { error: `Researcher profile not found for Instructor ID: ${trimmedInstId}. Researchers must be registered by the Research Coordinator first.` });
+      }
+
+      const isAdmin = isCallerAdmin(caller);
+      if (!isAdmin) {
+        const callerInst = String(caller.instructorId || caller.username || '').trim().toLowerCase();
+        const isSelf =
+          (callerInst && String(researcher.instructor_id || '').trim().toLowerCase() === callerInst) ||
+          (caller.id && researcher.user_id === caller.id);
+        if (!isSelf) {
+          return sendJson(403, { error: 'Forbidden: Researchers can only import publications into their own profile.' });
+        }
+      }
 
       // Extract scholar ID if URL passed
       let parsedScholarId = scholarId || null;
@@ -3416,91 +4520,39 @@ export async function handleApiRequest(req, res) {
 
       const now = new Date().toISOString();
 
-      // AUTO-CREATE RESEARCHER PROFILE IF NOT YET SAVED IN DATABASE
-      if (!researcher) {
-        const nameParts = (researcherName || trimmedInstId).trim().split(/\s+/).filter(Boolean);
-        const fName = firstName ? firstName.trim() : (nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : nameParts[0] || 'Researcher');
-        const lName = lastName ? lastName.trim() : (nameParts.length > 1 ? nameParts[nameParts.length - 1] : '');
-        const fullName = `${fName} ${lName}`.trim() || researcherName || trimmedInstId;
-        const resUserId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        const resId = `res-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        const userEmail = email ? email.trim() : `${trimmedInstId.toLowerCase()}@psu.edu.ph`;
-        const userPassword = password || 'psu12345';
-        const userDept = department || 'BSIT';
-        const userIsFaculty = isFaculty !== false ? 1 : 0;
-
-        const existingUser = db.prepare('SELECT id FROM users WHERE LOWER(username) = LOWER(?)').get(trimmedInstId);
-        if (!existingUser) {
-          db.prepare(`
-            INSERT INTO users (id, username, email, password, name, role, department, is_faculty, photo_url, scholar_url, google_scholar_id, created_at)
-            VALUES (?, ?, ?, ?, ?, 'instructor', ?, ?, ?, ?, ?, ?)
-          `).run(
-            resUserId,
-            trimmedInstId,
-            userEmail,
-            hashPassword(userPassword),
-            fullName,
-            userDept,
-            userIsFaculty,
-            photoUrl || null,
-            scholarUrl || null,
-            parsedScholarId || null,
-            now
-          );
-        }
-
+      if (scholarUrl || parsedScholarId) {
         db.prepare(`
-          INSERT INTO researchers (id, user_id, instructor_id, first_name, last_name, name, email, department, is_faculty, photo_url, scholar_url, google_scholar_id, total_publications, total_citations, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
-        `).run(
-          resId,
-          existingUser ? existingUser.id : resUserId,
-          trimmedInstId,
-          fName,
-          lName,
-          fullName,
-          userEmail,
-          userDept,
-          userIsFaculty,
-          photoUrl || null,
-          scholarUrl || null,
-          parsedScholarId || null,
-          now
-        );
+          UPDATE researchers 
+          SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
+          WHERE id = ?
+        `).run(scholarUrl || null, parsedScholarId || null, researcher.id);
 
-        researcher = db.prepare('SELECT * FROM researchers WHERE id = ?').get(resId);
-      } else {
-        if (scholarUrl || parsedScholarId) {
+        if (researcher.user_id) {
           db.prepare(`
-            UPDATE researchers 
+            UPDATE users 
             SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
             WHERE id = ?
-          `).run(scholarUrl || null, parsedScholarId || null, researcher.id);
-
-          if (researcher.user_id) {
-            db.prepare(`
-              UPDATE users 
-              SET scholar_url = COALESCE(?, scholar_url), google_scholar_id = COALESCE(?, google_scholar_id)
-              WHERE id = ?
-            `).run(scholarUrl || null, parsedScholarId || null, researcher.user_id);
-          }
+          `).run(scholarUrl || null, parsedScholarId || null, researcher.user_id);
         }
+      }
 
-        if (photoUrl) {
-          db.prepare('UPDATE researchers SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.id);
-          if (researcher.user_id) {
-            db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.user_id);
-          }
+      if (photoUrl) {
+        db.prepare('UPDATE researchers SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.id);
+        if (researcher.user_id) {
+          db.prepare('UPDATE users SET photo_url = ? WHERE id = ?').run(photoUrl, researcher.user_id);
         }
       }
 
       const targetInstId = researcher.instructor_id;
       const targetName = researcher.name;
+      const pubApprovalStatus = isAdmin ? 'approved' : 'pending';
+      const pubIsPublic = isAdmin ? 1 : 0;
+      const callerActor = caller.username || targetInstId;
 
       let importedCount = 0;
       let updatedCount = 0;
 
-      const allExistingPubs = db.prepare('SELECT id, title, citations, url, cited_by_link FROM publications').all();
+      const allExistingPubs = db.prepare('SELECT id, title, citations, url, cited_by_link, approval_status FROM publications').all();
 
       const insertPub = db.prepare(`
         INSERT INTO publications (
@@ -3508,13 +4560,12 @@ export async function handleApiRequest(req, res) {
           owner_id, owner_name, source, approval_status, research_status, is_public,
           keywords, issn_isbn, volume_issue, publication_date, publication_level, doi, journal_indexing,
           sdg_tags, sdg_rationale, ched_priority, sdg_source, sdg_evidence, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scraped', 'approved', 'Published', 1, ?, ?, ?, ?, 'International', ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scholar_import', ?, 'Published', ?, ?, ?, ?, ?, 'International', ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       const updatePub = db.prepare(`
         UPDATE publications
         SET citations = MAX(citations, ?), url = COALESCE(?, url), cited_by_link = COALESCE(?, cited_by_link),
-            owner_id = ?, owner_name = ?,
             keywords = COALESCE(?, keywords), issn_isbn = COALESCE(?, issn_isbn),
             volume_issue = COALESCE(?, volume_issue), publication_date = COALESCE(?, publication_date),
             doi = COALESCE(?, doi),
@@ -3524,6 +4575,12 @@ export async function handleApiRequest(req, res) {
             sdg_source = CASE WHEN sdg_source = 'manual_override' THEN sdg_source ELSE COALESCE(sdg_source, ?) END,
             sdg_evidence = CASE WHEN sdg_source = 'manual_override' THEN sdg_evidence ELSE COALESCE(sdg_evidence, ?) END
         WHERE id = ?
+      `);
+
+      const insertLink = db.prepare(`
+        INSERT OR IGNORE INTO publication_researchers (
+          publication_id, instructor_id, approval_status, assigned_by, claim_source, created_at
+        ) VALUES (?, ?, ?, ?, 'scholar_import', ?)
       `);
 
       const insertScrapedCache = db.prepare(`
@@ -3540,7 +4597,12 @@ export async function handleApiRequest(req, res) {
           const normItem = normalizeTitle(title);
           if (!normItem) continue;
 
-          const existing = allExistingPubs.find((p) => normalizeTitle(p.title) === normItem);
+          let existing = allExistingPubs.find((p) => normalizeTitle(p.title) === normItem);
+          if (existing && existing.approval_status === 'rejected') {
+            deletePublicationCascade(existing.id, db);
+            existing = null;
+          }
+
           const authorsArr = Array.isArray(item.authors) ? item.authors : [item.authors || targetName];
           const authorsJson = JSON.stringify(authorsArr);
           const citations = parseInt(item.citations, 10) || 0;
@@ -3563,8 +4625,6 @@ export async function handleApiRequest(req, res) {
               citations,
               item.url || null,
               item.citedByLink || null,
-              targetInstId,
-              targetName,
               item.keywords || null,
               item.issn_isbn || null,
               item.volume_issue || null,
@@ -3577,7 +4637,8 @@ export async function handleApiRequest(req, res) {
               sdgEvidenceJson,
               existing.id
             );
-            if (citations > 0) pubIdsToSyncCitations.push(existing.id);
+            insertLink.run(existing.id, targetInstId, pubApprovalStatus, callerActor, now);
+            if (citations > 0 && existing.approval_status === 'approved') pubIdsToSyncCitations.push(existing.id);
             updatedCount++;
           } else {
             const newId = `pub-scholar-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -3593,6 +4654,8 @@ export async function handleApiRequest(req, res) {
               item.citedByLink || null,
               targetInstId,
               targetName,
+              pubApprovalStatus,
+              pubIsPublic,
               item.keywords || null,
               item.issn_isbn || null,
               item.volume_issue || null,
@@ -3606,8 +4669,9 @@ export async function handleApiRequest(req, res) {
               sdgEvidenceJson,
               now
             );
-            allExistingPubs.push({ id: newId, title, citations, url: item.url, cited_by_link: item.citedByLink });
-            if (citations > 0) pubIdsToSyncCitations.push(newId);
+            insertLink.run(newId, targetInstId, pubApprovalStatus, callerActor, now);
+            allExistingPubs.push({ id: newId, title, citations, url: item.url, cited_by_link: item.citedByLink, approval_status: pubApprovalStatus });
+            if (citations > 0 && pubApprovalStatus === 'approved') pubIdsToSyncCitations.push(newId);
             importedCount++;
           }
 
@@ -3628,7 +4692,7 @@ export async function handleApiRequest(req, res) {
         }
       });
 
-      // Automatically enqueue non-blocking background citation ingestion for all cited publications (scales to 1,000–10,000+ citations)
+      // Automatically enqueue non-blocking background citation ingestion for approved cited publications
       if (pubIdsToSyncCitations.length > 0) {
         enqueuePublicationCitationSync(pubIdsToSyncCitations);
       }
@@ -3641,6 +4705,7 @@ export async function handleApiRequest(req, res) {
         success: true,
         importedCount,
         updatedCount,
+        approvalStatus: pubApprovalStatus,
         totalSelected: publications.length,
         researcher: {
           id: updatedRes.id,
@@ -3652,7 +4717,9 @@ export async function handleApiRequest(req, res) {
           totalPublications: updatedRes.total_publications,
           totalCitations: updatedRes.total_citations,
         },
-        message: `Successfully saved ${importedCount} new publication(s) and recorded ${targetName} as a researcher with ${updatedRes.total_publications} publications.`,
+        message: pubApprovalStatus === 'pending'
+          ? `Submitted ${importedCount + updatedCount} publication(s) for Research Coordinator approval.`
+          : `Successfully saved ${importedCount} new publication(s) and recorded ${targetName} as a researcher with ${updatedRes.total_publications} publications.`,
       });
     }
 
@@ -3660,6 +4727,7 @@ export async function handleApiRequest(req, res) {
     // 5. GOOGLE SCHOLAR SEARCH & LIVE SCRAPING (10 PAPERS PER PAGE)
     // ----------------------------------------------------
     if (pathname === '/api/search/google-scholar' && method === 'GET') {
+      setNoStoreHeaders(res);
       const query = (url.searchParams.get('q') || '').trim();
       const page = Math.max(0, parseInt(url.searchParams.get('page') || '0', 10));
       const limit = 10;
@@ -3678,15 +4746,31 @@ export async function handleApiRequest(req, res) {
       const isScraperEnabledByAdmin = publicScraperSetting === 'true';
 
       const activeToken = getActiveApifyTokenRow();
+
+      if (!isUserAdminOrFaculty && !isScraperEnabledByAdmin) {
+        const maxUsd = Number(activeToken?.max_monthly_usage_usd ?? 5.0);
+        const usedUsd = Number(activeToken?.monthly_usage_usd ?? 0.0);
+        return sendJson(200, {
+          results: [],
+          fromCache: true,
+          publicScraperDisabled: true,
+          reason: 'admin_disabled',
+          remainingBalanceUsd: Math.max(0, maxUsd - usedUsd),
+          message: 'Global academic live search has been restricted to faculty and administrators by the system administrator. Please search the PSU Institutional Repository.',
+        });
+      }
+
       let quotaCircuitBreakerTripped = false;
       let remainingBalanceUsd = 5.0;
 
       if (activeToken) {
         try {
           const usage = await fetchApifyTokenUsage(activeToken, false);
-          const maxUsd = Number(usage?.maxMonthlyUsageUsd) || 5.0;
-          const usedUsd = Number(usage?.monthlyUsageUsd) || 0.0;
-          remainingBalanceUsd = Math.max(0, maxUsd - usedUsd);
+          const maxUsd = Number(usage?.limitUsd ?? activeToken.max_monthly_usage_usd) || 5.0;
+          const usedUsd = Number(usage?.usedUsd ?? activeToken.monthly_usage_usd) || 0.0;
+          remainingBalanceUsd = usage?.remainingUsd !== undefined
+            ? Math.max(0, Number(usage.remainingUsd))
+            : Math.max(0, maxUsd - usedUsd);
           const thresholdSetting = Number(db.prepare("SELECT value FROM system_settings WHERE key = 'scraper_quota_threshold_usd'").get()?.value) || 1.0;
           if (remainingBalanceUsd <= thresholdSetting) {
             quotaCircuitBreakerTripped = true;
@@ -3694,17 +4778,14 @@ export async function handleApiRequest(req, res) {
         } catch {}
       }
 
-      if (!isUserAdminOrFaculty && (!isScraperEnabledByAdmin || quotaCircuitBreakerTripped)) {
-        const reason = !isScraperEnabledByAdmin ? 'admin_disabled' : 'quota_low';
+      if (!isUserAdminOrFaculty && quotaCircuitBreakerTripped) {
         return sendJson(200, {
           results: [],
           fromCache: true,
           publicScraperDisabled: true,
-          reason,
+          reason: 'quota_low',
           remainingBalanceUsd,
-          message: reason === 'quota_low'
-            ? 'Global academic live search is currently in power-save mode to conserve institutional API quota ($1.00 or less remaining). Please search the PSU Institutional Repository or sign in as faculty.'
-            : 'Global academic live search has been restricted to faculty and administrators by the system administrator. Please search the PSU Institutional Repository.',
+          message: 'Global academic live search is currently in power-save mode to conserve institutional API quota ($1.00 or less remaining). Please search the PSU Institutional Repository or sign in as faculty.',
         });
       }
 
@@ -3950,17 +5031,27 @@ export async function handleApiRequest(req, res) {
       // from the local repository, plus scrape their Google Scholar Profile ID (0 tokens)
       // -----------------------------------------------------------------------
       let matchedScholarProfile = false;
+      const useLinks = isPubResearchersBackfilled(db);
       try {
         for (const r of matchingResearchers) {
           try {
-            const authorPubs = db.prepare(`
-              SELECT * FROM publications 
-              WHERE approval_status = 'approved' 
-                AND (owner_id = ? OR owner_id = ? OR owner_name LIKE ? OR authors LIKE ?)
-            `).all(r.instructor_id, r.id, `%${r.last_name}%`, `%${r.last_name}%`);
+            const authorPubs = useLinks
+              ? db.prepare(`
+                  SELECT p.*
+                  FROM publication_researchers pr
+                  JOIN publications p ON p.id = pr.publication_id
+                  WHERE LOWER(pr.instructor_id) = LOWER(?)
+                    AND pr.approval_status = 'approved'
+                    AND p.approval_status = 'approved'
+                `).all(r.instructor_id)
+              : db.prepare(`
+                  SELECT * FROM publications 
+                  WHERE approval_status = 'approved' 
+                    AND (owner_id = ? OR owner_id = ? OR owner_name LIKE ? OR authors LIKE ?)
+                `).all(r.instructor_id, r.id, `%${r.last_name}%`, `%${r.last_name}%`);
 
             for (const p of authorPubs) {
-              if (matchesResearcher(p, r)) {
+              if (useLinks || matchesResearcher(p, r)) {
                 addCandidateToPool({
                   id: p.id,
                   title: p.title,
@@ -4607,28 +5698,77 @@ export async function handleApiRequest(req, res) {
     // ----------------------------------------------------
     if (pathname === '/api/claims' && method === 'GET') {
       cleanupOrphanedPublications(db);
-      const caller = authenticateCaller(req);
-      let claims = db.prepare(`
-        SELECT * FROM publications WHERE approval_status = 'pending' ORDER BY created_at DESC
+      const caller = resolveCallerWithDb(req);
+      if (!caller) {
+        return sendJson(200, []);
+      }
+
+      const pendingPubs = db.prepare(`
+        SELECT p.*, (
+          SELECT pr.claim_source FROM publication_researchers pr
+          WHERE pr.publication_id = p.id
+          ORDER BY pr.created_at ASC LIMIT 1
+        ) as pr_claim_source
+        FROM publications p
+        WHERE p.approval_status = 'pending'
+        ORDER BY p.created_at DESC
       `).all();
+
+      const pendingLinks = db.prepare(`
+        SELECT pr.publication_id, pr.instructor_id, pr.claim_source, pr.created_at as link_created_at,
+               r.name as researcher_name, p.*
+        FROM publication_researchers pr
+        JOIN publications p ON p.id = pr.publication_id
+        LEFT JOIN researchers r ON LOWER(r.instructor_id) = LOWER(pr.instructor_id)
+        WHERE pr.approval_status = 'pending'
+          AND (p.approval_status = 'approved' OR LOWER(pr.instructor_id) != LOWER(COALESCE(p.owner_id, '')))
+        ORDER BY pr.created_at DESC
+      `).all();
+
+      const allClaims = [
+        ...pendingPubs.map((c) => ({
+          ...c,
+          id: c.id,
+          publicationId: c.id,
+          ownerId: c.owner_id,
+          instructorId: c.owner_id,
+          ownerName: c.owner_name,
+          approvalStatus: c.approval_status,
+          researchStatus: c.research_status,
+          claimSource: c.pr_claim_source || c.source || 'manual',
+          authors: JSON.parse(c.authors || '[]'),
+        })),
+        ...pendingLinks.map((row) => ({
+          ...row,
+          id: `link::${row.publication_id}::${row.instructor_id}`,
+          publicationId: row.publication_id,
+          ownerId: row.instructor_id,
+          instructorId: row.instructor_id,
+          ownerName: row.researcher_name || row.instructor_id,
+          approvalStatus: 'pending',
+          researchStatus: row.research_status,
+          claimSource: row.claim_source || 'authorship_claim',
+          created_at: row.link_created_at || row.created_at,
+          authors: JSON.parse(row.authors || '[]'),
+        })),
+      ];
 
       // Application-Level Tenant Isolation:
       // Non-admins only see claims they submitted
-      if (!isCallerAdmin(caller)) {
-        if (!caller) {
-          return sendJson(200, []);
-        }
-        claims = claims.filter((c) => isCallerPublicationOwner(c, caller));
-      }
+      const visibleClaims = isCallerAdmin(caller)
+        ? allClaims
+        : allClaims.filter((c) => {
+            const cOwner = String(c.ownerId || '').trim().toLowerCase();
+            return (
+              cOwner === String(caller.instructorId || '').trim().toLowerCase() ||
+              cOwner === String(caller.username || '').trim().toLowerCase() ||
+              cOwner === String(caller.id || '').trim().toLowerCase() ||
+              (caller.researcherId && cOwner === String(caller.researcherId).trim().toLowerCase()) ||
+              (caller.jwtInstructorId && cOwner === String(caller.jwtInstructorId).trim().toLowerCase())
+            );
+          });
 
-      return sendJson(200, claims.map((c) => ({
-        ...c,
-        ownerId: c.owner_id,
-        ownerName: c.owner_name,
-        approvalStatus: c.approval_status,
-        researchStatus: c.research_status,
-        authors: JSON.parse(c.authors || '[]'),
-      })));
+      return sendJson(200, visibleClaims);
     }
 
     if (pathname.startsWith('/api/claims/') && pathname.endsWith('/review') && method === 'POST') {
@@ -4636,22 +5776,91 @@ export async function handleApiRequest(req, res) {
       if (!isCallerAdmin(caller)) {
         return sendJson(403, { error: 'Forbidden: Only administrators can review research claims.' });
       }
-      const claimId = pathname.replace('/api/claims/', '').replace('/review', '');
-      const { status } = await readJsonBody(); // 'approved' or 'rejected'
-
-      if (status === 'rejected') {
-        db.prepare('DELETE FROM citing_papers WHERE publication_id = ?').run(claimId);
-        db.prepare('DELETE FROM citation_trends WHERE publication_id = ?').run(claimId);
-        db.prepare('DELETE FROM publications WHERE id = ?').run(claimId);
-      } else {
-        db.prepare('UPDATE publications SET approval_status = ? WHERE id = ?').run(status, claimId);
+      const rawClaimId = decodeURIComponent(pathname.replace('/api/claims/', '').replace('/review', '')).trim();
+      const body = await readJsonBody();
+      const status = body?.status; // 'approved' or 'rejected'
+      if (!['approved', 'rejected'].includes(status)) {
+        return sendJson(400, { error: 'Review status must be "approved" or "rejected".' });
       }
+
+      let pubId = rawClaimId;
+      let targetInstId = body?.instructorId ? String(body.instructorId).trim() : '';
+      let isLinkClaim = false;
+
+      if (rawClaimId.startsWith('link::')) {
+        const parts = rawClaimId.split('::');
+        pubId = parts[1] || '';
+        targetInstId = parts.slice(2).join('::') || targetInstId;
+        isLinkClaim = true;
+      }
+
+      const pub = db.prepare('SELECT * FROM publications WHERE id = ?').get(pubId);
+      if (!pub) {
+        return sendJson(404, { error: 'Publication claim not found.' });
+      }
+
+      runInTransaction(() => {
+        if (isLinkClaim && targetInstId) {
+          if (status === 'rejected') {
+            db.prepare('DELETE FROM publication_researchers WHERE publication_id = ? AND LOWER(instructor_id) = LOWER(?)')
+              .run(pubId, targetInstId);
+            const remaining = db.prepare('SELECT instructor_id, approval_status FROM publication_researchers WHERE publication_id = ?').all(pubId);
+            if (remaining.length === 0) {
+              deletePublicationCascade(pubId, db);
+            }
+          } else {
+            db.prepare("UPDATE publication_researchers SET approval_status = 'approved' WHERE publication_id = ? AND LOWER(instructor_id) = LOWER(?)")
+              .run(pubId, targetInstId);
+            db.prepare("UPDATE publications SET approval_status = 'approved', is_public = 1 WHERE id = ?").run(pubId);
+          }
+        } else if (status === 'rejected') {
+          if (targetInstId) {
+            db.prepare('DELETE FROM publication_researchers WHERE publication_id = ? AND LOWER(instructor_id) = LOWER(?)')
+              .run(pubId, targetInstId);
+          } else if (pub.owner_id) {
+            db.prepare("DELETE FROM publication_researchers WHERE publication_id = ? AND LOWER(instructor_id) = LOWER(?) AND approval_status = 'pending'")
+              .run(pubId, pub.owner_id);
+          } else {
+            db.prepare("DELETE FROM publication_researchers WHERE publication_id = ? AND approval_status = 'pending'").run(pubId);
+          }
+          const remaining = db.prepare(`
+            SELECT pr.instructor_id, pr.approval_status, r.name
+            FROM publication_researchers pr
+            LEFT JOIN researchers r ON LOWER(r.instructor_id) = LOWER(pr.instructor_id)
+            WHERE pr.publication_id = ?
+            ORDER BY CASE WHEN pr.approval_status = 'approved' THEN 0 ELSE 1 END, pr.created_at ASC
+          `).all(pubId);
+
+          if (remaining.length === 0) {
+            deletePublicationCascade(pubId, db);
+          } else {
+            const nextOwner = remaining[0];
+            const hasApproved = remaining.some((l) => l.approval_status === 'approved');
+            db.prepare(`
+              UPDATE publications
+              SET owner_id = ?, owner_name = ?,
+                  approval_status = CASE WHEN ? = 1 THEN 'approved' ELSE 'pending' END,
+                  is_public = CASE WHEN ? = 1 THEN 1 ELSE 0 END
+              WHERE id = ?
+            `).run(nextOwner.instructor_id, nextOwner.name || nextOwner.instructor_id, hasApproved ? 1 : 0, hasApproved ? 1 : 0, pubId);
+          }
+        } else {
+          db.prepare("UPDATE publications SET approval_status = 'approved', is_public = 1 WHERE id = ?").run(pubId);
+          if (targetInstId) {
+            db.prepare("UPDATE publication_researchers SET approval_status = 'approved' WHERE publication_id = ? AND LOWER(instructor_id) = LOWER(?)")
+              .run(pubId, targetInstId);
+          } else if (pub.owner_id) {
+            db.prepare("UPDATE publication_researchers SET approval_status = 'approved' WHERE publication_id = ? AND LOWER(instructor_id) = LOWER(?)")
+              .run(pubId, pub.owner_id);
+          } else {
+            db.prepare("UPDATE publication_researchers SET approval_status = 'approved' WHERE publication_id = ? AND approval_status = 'pending'")
+              .run(pubId);
+          }
+        }
+      });
 
       // Synchronize researcher publication & citation counts
-      const allRes = db.prepare('SELECT id FROM researchers').all();
-      for (const resRow of allRes) {
-        updateResearcherStats(db, resRow.id);
-      }
+      recalculateAllResearcherStats(db);
 
       return sendJson(200, {
         success: true,
@@ -4997,6 +6206,7 @@ export async function handleApiRequest(req, res) {
       }
 
       const caller = authenticateCaller(req);
+      const isPublic = !caller;
 
       const approvedPubs = db.prepare(`
         SELECT id, title, authors, year, journal, citations, abstract, sdg_tags, sdg_rationale, ched_priority, jc3_points, nbc461_points, owner_name, owner_id
@@ -5006,9 +6216,14 @@ export async function handleApiRequest(req, res) {
         LIMIT 500
       `).all();
 
-      // Campus publications: STRICTLY approved institutional publications of PSU Asingan
-      // External scraped search results are deliberately excluded to prevent confusing external works with campus research
-      const combinedPubs = [...approvedPubs];
+      // In public mode, ensure owner_id is never exposed to LLM context
+      const combinedPubs = approvedPubs.map(p => {
+        if (isPublic) {
+          const { owner_id, ...safePub } = p;
+          return safePub;
+        }
+        return p;
+      });
 
       const pubTotals = db.prepare(`
         SELECT COUNT(*) AS total, COALESCE(SUM(citations), 0) AS citations
@@ -5043,9 +6258,15 @@ export async function handleApiRequest(req, res) {
       const totalCitations = Number(pubTotals?.citations) || 0;
 
       const systemMetadata = {
+        isPublic,
         totalPublications: Number(pubTotals?.total) || approvedPubs.length,
         totalResearchers: researchers.length,
-        researchersList: researchers.map(r => `${r.name} (${r.department || 'Faculty'}, ${r.total_publications} papers, ${r.total_citations} citations)`),
+        researchersList: researchers.map(r => {
+          if (isPublic) {
+            return `${r.name} (${r.department || 'Faculty'}, ${r.total_publications} papers, ${r.total_citations} citations)`;
+          }
+          return `${r.name} [ID: ${r.instructor_id}] (${r.department || 'Faculty'}, ${r.total_publications} papers, ${r.total_citations} citations)`;
+        }),
         totalCitations,
         currentUser,
         pages: [
@@ -5071,6 +6292,12 @@ export async function handleApiRequest(req, res) {
 
       try {
         const ragResult = await askCampusIntelligence(question, combinedPubs, systemMetadata, history || []);
+        if (isPublic && ragResult && typeof ragResult.answer === 'string') {
+          // Post-sanitize any private employee identifiers or emails in public mode
+          ragResult.answer = ragResult.answer
+            .replace(/\bASIN-\d+\b/gi, '[Restricted for Institutional Privacy]')
+            .replace(/[a-zA-Z0-9._%+-]+@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/g, '[Restricted for Institutional Privacy]');
+        }
         return sendJson(200, ragResult);
       } catch (err) {
         console.error('[AskCampusAPI] Error in askCampusIntelligence:', err);
@@ -5406,17 +6633,17 @@ export async function handleApiRequest(req, res) {
       // Edges for shared publications
       const links = [];
       const linkMap = new Map();
+      const useLinks = isPubResearchersBackfilled(db);
+      const linkedApprovedMap = useLinks ? getLinkedIdsByPubMap(db, true) : new Map();
 
       publications.forEach(pub => {
-        let pubAuthors = [];
-        try {
-          pubAuthors = JSON.parse(pub.authors || '[]');
-        } catch {
-          pubAuthors = [pub.authors || ''];
-        }
-
-        // Find all researchers matching this publication
-        const matchedResearchers = researchers.filter(r => matchesResearcher(pub, r));
+        // Find all researchers assigned/matching this publication
+        const matchedResearchers = useLinks
+          ? (() => {
+              const idsLower = new Set((linkedApprovedMap.get(pub.id) || []).map((id) => String(id).toLowerCase()));
+              return researchers.filter((r) => idsLower.has(String(r.instructor_id || '').toLowerCase()));
+            })()
+          : researchers.filter(r => matchesResearcher(pub, r));
 
         for (let i = 0; i < matchedResearchers.length; i++) {
           for (let j = i + 1; j < matchedResearchers.length; j++) {
@@ -5479,8 +6706,14 @@ export async function handleApiRequest(req, res) {
       }
 
       const allPubs = db.prepare('SELECT * FROM publications WHERE approval_status = \'approved\'').all();
-      const papersA = allPubs.filter(p => matchesResearcher(p, rA));
-      const papersB = allPubs.filter(p => matchesResearcher(p, rB));
+      const useLinks = isPubResearchersBackfilled(db);
+      const linkedApprovedMap = useLinks ? getLinkedIdsByPubMap(db, true) : new Map();
+      const papersA = useLinks
+        ? allPubs.filter((p) => (linkedApprovedMap.get(p.id) || []).some((id) => String(id).toLowerCase() === String(rA.instructor_id || '').toLowerCase()))
+        : allPubs.filter(p => matchesResearcher(p, rA));
+      const papersB = useLinks
+        ? allPubs.filter((p) => (linkedApprovedMap.get(p.id) || []).some((id) => String(id).toLowerCase() === String(rB.instructor_id || '').toLowerCase()))
+        : allPubs.filter(p => matchesResearcher(p, rB));
 
       const synergy = await calculateSynergy(rA, rB, papersA, papersB);
       return sendJson(200, synergy);

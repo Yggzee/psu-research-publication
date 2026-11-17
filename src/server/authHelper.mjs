@@ -203,12 +203,47 @@ export function isCallerPublicationOwner(pub, caller) {
   const callerInstId = (caller.instructorId || '').trim().toLowerCase();
   const callerId = (caller.id || '').trim().toLowerCase();
   const callerUsername = (caller.username || '').trim().toLowerCase();
+  const callerResId = (caller.researcherId || '').trim().toLowerCase();
+  const callerJwtInstId = (caller.jwtInstructorId || '').trim().toLowerCase();
 
-  if (pubOwnerId && (pubOwnerId === callerInstId || pubOwnerId === callerId || pubOwnerId === callerUsername)) {
+  const callerMatchesId = (targetId) =>
+    Boolean(targetId) &&
+    (targetId === callerInstId ||
+      targetId === callerId ||
+      targetId === callerUsername ||
+      targetId === callerResId ||
+      targetId === callerJwtInstId);
+
+  const explicitLinks = Array.isArray(pub.allLinkedResearcherIds)
+    ? pub.allLinkedResearcherIds
+    : Array.isArray(pub.assignedResearcherIds)
+    ? pub.assignedResearcherIds
+    : null;
+
+  if (explicitLinks !== null) {
+    const normalizedLinks = new Set(
+      explicitLinks.map((id) => String(id || '').trim().toLowerCase()).filter(Boolean)
+    );
+    if (
+      (callerInstId && normalizedLinks.has(callerInstId)) ||
+      (callerId && normalizedLinks.has(callerId)) ||
+      (callerUsername && normalizedLinks.has(callerUsername)) ||
+      (callerResId && normalizedLinks.has(callerResId)) ||
+      (callerJwtInstId && normalizedLinks.has(callerJwtInstId))
+    ) {
+      return true;
+    }
+    if (callerMatchesId(pubOwnerId)) {
+      return normalizedLinks.size === 0;
+    }
+    return false;
+  }
+
+  if (callerMatchesId(pubOwnerId)) {
     return true;
   }
 
-  // Also check if caller matches publication's author list or owner_name
+  // Fallback when explicit link list is not attached
   return matchesResearcher(pub, {
     id: caller.id,
     instructor_id: caller.instructorId,
@@ -284,14 +319,18 @@ export function canCallerModifyResearcher(researcher, caller) {
  */
 export function sanitizePublicationInput(data, caller, isCreate = false) {
   const isAdmin = isCallerAdmin(caller);
+  const cleanJournal = data.journal !== undefined && data.journal !== null ? String(data.journal).trim() : '';
+  const parsedYear = data.year !== undefined && data.year !== null && String(data.year).trim() !== ''
+    ? Number(data.year)
+    : NaN;
 
   if (isAdmin) {
     // Admin has full control
     return {
       title: data.title?.trim(),
       authors: data.authors,
-      journal: data.journal || 'Research Journal',
-      year: Number(data.year) || new Date().getFullYear(),
+      journal: cleanJournal,
+      year: parsedYear,
       citations: Number(data.citations) || 0,
       abstract: data.abstract || '',
       url: data.url || null,
@@ -316,26 +355,28 @@ export function sanitizePublicationInput(data, caller, isCreate = false) {
   }
 
   // For non-admin (Faculty/Instructor):
-  // 1. Force approvalStatus to 'pending' (cannot self-approve!)
+  // 1. Force approvalStatus to 'pending' and isPublic to false (cannot self-approve!)
   // 2. Lock owner to authenticated caller
   // 3. jc3Points/nbc461Points cannot be arbitrarily dictated (set to null so auditJournalReputation calculates it)
   return {
     title: data.title?.trim(),
     authors: data.authors,
-    journal: data.journal || 'Research Journal',
-    year: Number(data.year) || new Date().getFullYear(),
+    journal: cleanJournal,
+    year: parsedYear,
     citations: Number(data.citations) || 0,
     abstract: data.abstract || '',
     url: data.url || null,
     impactScore: 0.0,
     ownerId: caller?.instructorId || data.ownerId || caller?.id || '',
     ownerName: caller?.name || data.ownerName || 'Faculty Researcher',
-    source: data.source === 'claim' ? 'claim' : (isCreate ? 'manual' : (data.source || 'manual')),
+    source: ['claim', 'doi', 'manual', 'scholar_import'].includes(data.source)
+      ? data.source
+      : (data.doi ? 'doi' : (isCreate ? 'manual' : (data.source || 'manual'))),
     approvalStatus: 'pending', // Strictly enforced! Non-admins cannot self-approve
     researchStatus: ['In Progress', 'Unpublished', 'Published'].includes(data.researchStatus)
       ? data.researchStatus
       : 'Published',
-    isPublic: data.isPublic !== undefined ? Boolean(data.isPublic) : true,
+    isPublic: false,
     fileName: data.fileName || null,
     citedByLink: data.citedByLink || null,
     sdgTags: null, // Generated server-side via AI
@@ -355,10 +396,12 @@ export function sanitizePublicationInput(data, caller, isCreate = false) {
  */
 export function sanitizeResearcherInput(data, caller) {
   const isAdmin = isCallerAdmin(caller);
+  const middleInitial = data.middleInitial !== undefined ? String(data.middleInitial ?? '').trim() : undefined;
 
   if (isAdmin) {
     return {
       firstName: data.firstName?.trim(),
+      middleInitial,
       lastName: data.lastName?.trim(),
       instructorId: data.instructorId?.trim(),
       department: data.department,
@@ -374,6 +417,7 @@ export function sanitizeResearcherInput(data, caller) {
   // Instructor cannot modify: role, status, isFaculty, or other system flags
   return {
     firstName: data.firstName?.trim(),
+    middleInitial,
     lastName: data.lastName?.trim(),
     instructorId: data.instructorId?.trim(),
     department: data.department,
@@ -384,6 +428,29 @@ export function sanitizeResearcherInput(data, caller) {
     status: undefined,    // Cannot un-suspend or self-admit
     password: data.password,
   };
+}
+
+/**
+ * Normalize and validate Instructor ID against ASIN- followed by 1 to 12 digits.
+ * Uppercases ASIN- prefix and preserves exact digit count without zero-padding.
+ */
+export function normalizeAndValidateInstructorId(rawId) {
+  if (rawId === undefined || rawId === null || typeof rawId !== 'string') {
+    return { valid: false, normalized: null, error: 'Instructor ID is required.' };
+  }
+  const trimmed = rawId.trim();
+  if (!trimmed) {
+    return { valid: false, normalized: null, error: 'Instructor ID is required.' };
+  }
+  const normalized = trimmed.replace(/^asin-/i, 'ASIN-');
+  if (!/^ASIN-\d{1,12}$/.test(normalized)) {
+    return {
+      valid: false,
+      normalized: null,
+      error: 'Instructor ID must follow the format ASIN- followed by 1 to 12 numeric digits (e.g., ASIN-1 or ASIN-00002).',
+    };
+  }
+  return { valid: true, normalized };
 }
 
 /**
@@ -434,4 +501,22 @@ export function normalizeDepartment(rawDept) {
   if (u.includes('BEE') || u.includes('ELEMENTARY')) return 'BEE';
   if (u.includes('BIT') || u.includes('INDUSTRIAL')) return 'BIT';
   return 'BSIT';
+}
+
+/**
+ * Splits a full name fallback string into { firstName, middleInitial, lastName }
+ * when structured first_name / last_name columns are empty.
+ */
+export function splitFullName(fullName, existingMi = '') {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  let middleInitial = String(existingMi || '').trim();
+  let firstName = '';
+  if (!middleInitial && parts.length >= 3 && /^[A-Za-z]\.?$/.test(parts[parts.length - 2])) {
+    middleInitial = parts[parts.length - 2];
+    firstName = parts.slice(0, parts.length - 2).join(' ');
+  } else {
+    firstName = parts[0] || '';
+  }
+  const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
+  return { firstName, middleInitial, lastName };
 }

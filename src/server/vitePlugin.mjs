@@ -8,6 +8,14 @@ export function sqliteApiPlugin() {
   return {
     name: 'sqlite-api-plugin',
     configureServer(server) {
+      import('./backupService.mjs')
+        .then(({ startDailyBackupScheduler }) => {
+          startDailyBackupScheduler();
+        })
+        .catch((err) => {
+          console.warn('[Vite Backup Scheduler Warning]:', err.message);
+        });
+
       server.middlewares.use(async (req, res, next) => {
         if (req.url && (req.url.startsWith('/api/') || req.url === '/api')) {
           try {

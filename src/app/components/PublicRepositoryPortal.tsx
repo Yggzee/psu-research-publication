@@ -35,6 +35,7 @@ import psuBookLogo from "../assets/psu-book-logo.svg";
 import { getCurrentUser, isAuthenticated } from "../utils/researchStore";
 import { apiService, type ScholarSearchResult } from "../services/api.service";
 import { useTheme } from "../utils/themeContext";
+import { FloatingAskAIBubble } from "./FloatingAskAIBubble";
 import { toast } from "sonner";
 
 const SDG_LIST = [
@@ -220,7 +221,7 @@ export function PublicRepositoryPortal() {
   };
 
   const handleGlobalGoToPage = async (targetPage: number) => {
-    if (targetPage < 0 || isLoadingGlobalPage || isGlobalLoading) return;
+    if (targetPage < 0 || isLoadingGlobalPage || isGlobalLoading || isScraperLockedForPublic) return;
     setIsLoadingGlobalPage(true);
 
     try {
@@ -429,10 +430,14 @@ export function PublicRepositoryPortal() {
                   <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
                     <p className="font-semibold">
-                      Global Live Search is Restricted (Power-Save Mode)
+                      {scraperStatus?.publicScraperEnabled === false || (scraperStatus as any)?.admin_disabled
+                        ? "Global Academic Search Temporarily Restricted"
+                        : "Global Live Search is Restricted (Power-Save Mode)"}
                     </p>
                     <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                      External live scraping is temporarily restricted to conserve institutional API quota ($1.00 or less remaining). You can search the PSU Institutional Repository freely, or sign in as faculty/admin to unlock live global search.
+                      {scraperStatus?.publicScraperEnabled === false || (scraperStatus as any)?.admin_disabled
+                        ? "The Research Coordinator has temporarily restricted public academic live searches. You can continue exploring verified PSU publications in the repository, or log in to access external engines."
+                        : "External live scraping is temporarily restricted to conserve institutional API quota ($1.00 or less remaining). You can search the PSU Institutional Repository freely, or sign in as faculty/admin to unlock live global search."}
                     </p>
                   </div>
                 </Card>
@@ -950,7 +955,7 @@ export function PublicRepositoryPortal() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={globalPage === 0 || isLoadingGlobalPage || isGlobalLoading}
+                      disabled={globalPage === 0 || isLoadingGlobalPage || isGlobalLoading || Boolean(isScraperLockedForPublic)}
                       onClick={() => handleGlobalGoToPage(globalPage - 1)}
                       className="h-8 px-3 text-xs gap-1"
                     >
@@ -973,7 +978,7 @@ export function PublicRepositoryPortal() {
                           type="button"
                           variant={isCurrent ? "default" : "outline"}
                           size="sm"
-                          disabled={isLoadingGlobalPage || isGlobalLoading}
+                          disabled={isLoadingGlobalPage || isGlobalLoading || Boolean(isScraperLockedForPublic)}
                           onClick={() => handleGlobalGoToPage(pageIdx)}
                           className={`h-8 w-8 p-0 text-xs font-mono font-medium ${
                             isCurrent ? "bg-brand text-white border-brand hover:bg-brand/90" : "hover:bg-muted"
@@ -988,7 +993,7 @@ export function PublicRepositoryPortal() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={!hasGlobalMore || isLoadingGlobalPage || isGlobalLoading}
+                      disabled={!hasGlobalMore || isLoadingGlobalPage || isGlobalLoading || Boolean(isScraperLockedForPublic)}
                       onClick={() => handleGlobalGoToPage(globalPage + 1)}
                       className="h-8 px-3.5 text-xs gap-1 font-semibold text-brand hover:text-brand hover:bg-brand/10 border-brand/40"
                     >
@@ -1052,6 +1057,9 @@ export function PublicRepositoryPortal() {
           </div>
         </div>
       </footer>
+
+      {/* Public Campus AI Floating Bubble */}
+      <FloatingAskAIBubble isPublic />
     </div>
   );
 }

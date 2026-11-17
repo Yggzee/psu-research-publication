@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "erd",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\erd-core-schema-20261117-134100\\candidate.json",
+    "sha256": "bba58a710bcb63a9c608ff5f100b02f3831c83459b681d6db5819bb7857841e9",
+    "bytes": 11119
+  },
+  "artifact": {
+    "path": "D:\\Acts\\Research\\ResPub\\.archify\\erd-core-schema-20261117-134100\\core-schema.html",
+    "sha256": "5c7fe1cc711351d315febb2c7eaf8730e0155a04a0bd05ba0baef782a47e0bad",
+    "bytes": 893329
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\Acts\\Research\\ResPub\\.archify\\erd-core-schema-20261117-134100\\review-2\\core-schema.finalize.json",
+    "summaryReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\erd-core-schema-20261117-134100\\review-2\\core-schema.finalize-summary.json",
+    "browserCheckReceipt": "D:\\Acts\\Research\\ResPub\\.archify\\erd-core-schema-20261117-134100\\review-2\\core-schema.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.2.0",
+    "availableVersion": "3.2.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-11-17T05:41:45.282Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 6226,
+  "browserCheck": {
+    "requested": true,
+    "ran": true
+  }
+}

@@ -20,6 +20,7 @@ import {
   Trash2,
   Clock,
   ArrowLeft,
+  Activity,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -34,6 +35,7 @@ import {
   getLocalChatSessions,
 } from "../utils/aiChatHistoryStore";
 import { FormattedChatMessage } from "./common";
+import { isAuthenticated } from "../utils/researchStore";
 import mascotImg from "../assets/mascot-ai.png";
 import { toast } from "sonner";
 
@@ -90,8 +92,45 @@ const SPECIFIC_SUGGESTIONS: SpecificPrompt[] = [
   },
 ];
 
-export function FloatingAskAIBubble() {
+const PUBLIC_SUGGESTIONS: SpecificPrompt[] = [
+  {
+    id: "pub-overview",
+    category: "System Features",
+    badge: "Platform Overview",
+    badgeColor: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+    statement: "What is this system for?",
+  },
+  {
+    id: "pub-join",
+    category: "System Features",
+    badge: "Join & Contribute",
+    badgeColor: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800",
+    statement: "How can I be part of the system?",
+  },
+  {
+    id: "pub-researchers",
+    category: "System Activity",
+    badge: "Directory Statistics",
+    badgeColor: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+    statement: "How many researchers are in the system?",
+  },
+  {
+    id: "pub-tracks",
+    category: "Research Purposes",
+    badge: "Institutional Focus",
+    badgeColor: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800",
+    statement: "What are the top research tracks at PSU Asingan?",
+  },
+];
+
+export interface FloatingAskAIBubbleProps {
+  isPublic?: boolean;
+}
+
+export function FloatingAskAIBubble({ isPublic }: FloatingAskAIBubbleProps = {}) {
   const navigate = useNavigate();
+  const authenticated = isAuthenticated();
+  const isPublicMode = Boolean(isPublic || !authenticated);
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "history">("chat");
 
@@ -100,7 +139,18 @@ export function FloatingAskAIBubble() {
   const [sessionTitle, setSessionTitle] = useState<string>("New Conversation");
   const [sessionCreatedAt, setSessionCreatedAt] = useState<string>(() => new Date().toISOString());
 
-  const [messages, setMessages] = useState<AIChatMessage[]>([]);
+  const [messages, setMessages] = useState<AIChatMessage[]>(() => {
+    if (typeof window !== "undefined" && (isPublic || !isAuthenticated())) {
+      try {
+        const raw = sessionStorage.getItem("psu_public_ai_messages");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [inputQuery, setInputQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPublication, setSelectedPublication] = useState<InspectedPublication | null>(null);
@@ -112,6 +162,15 @@ export function FloatingAskAIBubble() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Sync public messages to sessionStorage
+  useEffect(() => {
+    if (isPublicMode && typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("psu_public_ai_messages", JSON.stringify(messages));
+      } catch {}
+    }
+  }, [isPublicMode, messages]);
+
   // Auto-scroll to bottom of messages in chat tab
   useEffect(() => {
     if (isOpen && activeTab === "chat") {
@@ -121,19 +180,22 @@ export function FloatingAskAIBubble() {
 
   // Load history list on mount and whenever bubble is opened or history tab clicked
   const refreshHistory = async () => {
+    if (isPublicMode) return;
     const list = await fetchAndSyncChatSessions();
     setHistorySessions(list);
   };
 
   useEffect(() => {
-    refreshHistory();
+    if (!isPublicMode) {
+      refreshHistory();
 
-    const handleUpdate = () => {
-      setHistorySessions(getLocalChatSessions());
-    };
-    window.addEventListener("campus-ai-history-updated", handleUpdate);
-    return () => window.removeEventListener("campus-ai-history-updated", handleUpdate);
-  }, []);
+      const handleUpdate = () => {
+        setHistorySessions(getLocalChatSessions());
+      };
+      window.addEventListener("campus-ai-history-updated", handleUpdate);
+      return () => window.removeEventListener("campus-ai-history-updated", handleUpdate);
+    }
+  }, [isPublicMode]);
 
   // Listen for custom open events (e.g. from CommandPalette)
   useEffect(() => {
@@ -187,6 +249,9 @@ export function FloatingAskAIBubble() {
     setMessages([]);
     setActiveTab("chat");
     setInputQuery("");
+    if (isPublicMode && typeof window !== "undefined") {
+      sessionStorage.removeItem("psu_public_ai_messages");
+    }
   };
 
   // Resume a session from in-bubble history
@@ -233,14 +298,16 @@ export function FloatingAskAIBubble() {
         : sessionTitle;
     setSessionTitle(effectiveTitle);
 
-    // Save user message immediately to session storage
-    persistChatSession({
-      id: sessionId,
-      title: effectiveTitle,
-      createdAt: sessionCreatedAt,
-      updatedAt: new Date().toISOString(),
-      messages: newMessages,
-    });
+    // Save user message immediately to session storage (authenticated only)
+    if (!isPublicMode) {
+      persistChatSession({
+        id: sessionId,
+        title: effectiveTitle,
+        createdAt: sessionCreatedAt,
+        updatedAt: new Date().toISOString(),
+        messages: newMessages,
+      });
+    }
 
     try {
       const recentHistory = messages.slice(-6).map((m) => ({
@@ -262,14 +329,16 @@ export function FloatingAskAIBubble() {
       const finalMessages = [...newMessages, aiMsg];
       setMessages(finalMessages);
 
-      // Persist complete exchange
-      persistChatSession({
-        id: sessionId,
-        title: effectiveTitle,
-        createdAt: sessionCreatedAt,
-        updatedAt: new Date().toISOString(),
-        messages: finalMessages,
-      });
+      // Persist complete exchange (authenticated only)
+      if (!isPublicMode) {
+        persistChatSession({
+          id: sessionId,
+          title: effectiveTitle,
+          createdAt: sessionCreatedAt,
+          updatedAt: new Date().toISOString(),
+          messages: finalMessages,
+        });
+      }
 
       if (!isOpen) {
         setHasUnread(true);
@@ -285,13 +354,15 @@ export function FloatingAskAIBubble() {
       const finalMessages = [...newMessages, errorMsg];
       setMessages(finalMessages);
 
-      persistChatSession({
-        id: sessionId,
-        title: effectiveTitle,
-        createdAt: sessionCreatedAt,
-        updatedAt: new Date().toISOString(),
-        messages: finalMessages,
-      });
+      if (!isPublicMode) {
+        persistChatSession({
+          id: sessionId,
+          title: effectiveTitle,
+          createdAt: sessionCreatedAt,
+          updatedAt: new Date().toISOString(),
+          messages: finalMessages,
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -400,11 +471,13 @@ export function FloatingAskAIBubble() {
                     {activeTab === "history" ? "Chat History" : "Ask Campus AI"}
                   </h3>
                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono">
-                    Flash
+                    {isPublicMode ? "Public Mode" : "Flash"}
                   </Badge>
                 </div>
                 <p className="text-[10px] text-muted-foreground truncate">
-                  {activeTab === "history"
+                  {isPublicMode
+                    ? "Institutional Research Assistant (Public Information)"
+                    : activeTab === "history"
                     ? `${historySessions.length} saved conversations`
                     : sessionTitle}
                 </p>
@@ -413,50 +486,54 @@ export function FloatingAskAIBubble() {
 
             {/* Header Control Buttons */}
             <div className="flex items-center gap-1 shrink-0">
-              {/* New Conversation Button */}
+              {/* New Conversation / Reset Chat Button */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleStartNewChat}
                 className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                title="Start new conversation"
+                title={isPublicMode ? "Reset conversation" : "Start new conversation"}
               >
-                <Plus className="h-4 w-4" />
+                {isPublicMode ? <Trash2 className="h-3.5 w-3.5" /> : <Plus className="h-4 w-4" />}
               </Button>
 
-              {/* Toggle History View Button */}
-              <Button
-                variant={activeTab === "history" ? "secondary" : "ghost"}
-                size="icon"
-                onClick={() => {
-                  const next = activeTab === "history" ? "chat" : "history";
-                  setActiveTab(next);
-                  if (next === "history") refreshHistory();
-                }}
-                className="h-7 w-7 relative text-muted-foreground hover:text-foreground"
-                title="View chat history"
-              >
-                <History className="h-3.5 w-3.5" />
-                {historySessions.length > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 px-1 py-0 text-[8px] font-bold bg-emerald-500 text-white rounded-full">
-                    {historySessions.length > 9 ? "9+" : historySessions.length}
-                  </span>
-                )}
-              </Button>
+              {/* Toggle History View Button (Authenticated only) */}
+              {!isPublicMode && (
+                <Button
+                  variant={activeTab === "history" ? "secondary" : "ghost"}
+                  size="icon"
+                  onClick={() => {
+                    const next = activeTab === "history" ? "chat" : "history";
+                    setActiveTab(next);
+                    if (next === "history") refreshHistory();
+                  }}
+                  className="h-7 w-7 relative text-muted-foreground hover:text-foreground"
+                  title="View chat history"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  {historySessions.length > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 px-1 py-0 text-[8px] font-bold bg-emerald-500 text-white rounded-full">
+                      {historySessions.length > 9 ? "9+" : historySessions.length}
+                    </span>
+                  )}
+                </Button>
+              )}
 
-              {/* Open Dedicated Chat History Page */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setIsOpen(false);
-                  navigate("/dashboard/ai-history");
-                }}
-                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                title="Open full history page"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </Button>
+              {/* Open Dedicated Chat History Page (Authenticated only) */}
+              {!isPublicMode && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setIsOpen(false);
+                    navigate("/dashboard/ai-history");
+                  }}
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  title="Open full history page"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Button>
+              )}
 
               {/* Minimize Assistant */}
               <Button
@@ -594,22 +671,37 @@ export function FloatingAskAIBubble() {
                         <img src={mascotImg} alt="Mascot" className="w-full h-full object-cover" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-foreground text-sm">Welcome to Campus AI!</h4>
+                        <h4 className="font-bold text-foreground text-sm">
+                          {isPublicMode ? "Welcome to Campus AI (Public Assistant)" : "Welcome to Campus AI!"}
+                        </h4>
                         <p className="text-[11px] text-muted-foreground mt-1 max-w-[320px] mx-auto leading-relaxed">
-                          Your dedicated intelligence assistant for the PSU Asingan Research Publication Tracking System.
+                          {isPublicMode
+                            ? "Explore PSU Asingan's institutional research repository, verified publications, and campus statistics."
+                            : "Your dedicated intelligence assistant for the PSU Asingan Research Publication Tracking System."}
                         </p>
                       </div>
 
                       <div className="pt-2 border-t border-border/50 text-[11px] text-left space-y-1 text-muted-foreground">
                         <p className="font-semibold text-foreground flex items-center gap-1">
                           <Shield className="w-3 h-3 text-emerald-600" />
-                          Strict Scope & Supported Topics:
+                          {isPublicMode ? "Public Scope & Data Privacy:" : "Strict Scope & Supported Topics:"}
                         </p>
                         <ul className="list-disc pl-4 space-y-0.5 text-[10px]">
-                          <li><strong>System Activity:</strong> Real-time repository metrics, active researchers, recent imports</li>
-                          <li><strong>System Features:</strong> Google Scholar claiming, deduplication guard, SDG matrix</li>
-                          <li><strong>Research Purposes:</strong> Academic clusters, institutional impact, SDG alignment</li>
-                          <li><strong>Specific Research:</strong> Paper summaries, methodology, authors, citations</li>
+                          {isPublicMode ? (
+                            <>
+                              <li><strong>Platform Overview:</strong> Understand repository purpose, claiming, and verification</li>
+                              <li><strong>Directory Insights:</strong> Public researcher statistics, faculty names, and departments</li>
+                              <li><strong>Institutional Alignment:</strong> Contributions across UN Sustainable Development Goals</li>
+                              <li><strong>Data Privacy:</strong> Personnel credentials and Instructor IDs are strictly confidential</li>
+                            </>
+                          ) : (
+                            <>
+                              <li><strong>System Activity:</strong> Real-time repository metrics, active researchers, recent imports</li>
+                              <li><strong>System Features:</strong> Google Scholar claiming, deduplication guard, SDG matrix</li>
+                              <li><strong>Research Purposes:</strong> Academic clusters, institutional impact, SDG alignment</li>
+                              <li><strong>Specific Research:</strong> Paper summaries, methodology, authors, citations</li>
+                            </>
+                          )}
                         </ul>
                       </div>
                     </div>
@@ -617,10 +709,10 @@ export function FloatingAskAIBubble() {
                     {/* Quick Suggestion Pills */}
                     <div className="space-y-2">
                       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">
-                        Suggested Specific Inquiries:
+                        {isPublicMode ? "Frequently Asked Public Inquiries:" : "Suggested Specific Inquiries:"}
                       </p>
                       <div className="grid grid-cols-1 gap-2">
-                        {SPECIFIC_SUGGESTIONS.map((p) => (
+                        {(isPublicMode ? PUBLIC_SUGGESTIONS : SPECIFIC_SUGGESTIONS).map((p) => (
                           <button
                             key={p.id}
                             onClick={() => handleSendMessage(p.statement)}
@@ -721,30 +813,61 @@ export function FloatingAskAIBubble() {
               {messages.length > 0 && (
                 <div className="px-3 py-1.5 bg-muted/10 border-t border-border/40 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[10px]">
                   <span className="text-muted-foreground shrink-0">Quick ask:</span>
-                  <button
-                    onClick={() => handleSendMessage("How many research publications and researcher profiles are currently tracked in our system?")}
-                    className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
-                  >
-                    System Status
-                  </button>
-                  <button
-                    onClick={() => handleSendMessage("How does the system prevent saving duplicate research papers from Google Scholar?")}
-                    className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
-                  >
-                    Deduplication
-                  </button>
-                  <button
-                    onClick={() => handleSendMessage("What does the study on predicting college students' academic performance using machine learning talk about?")}
-                    className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
-                  >
-                    ML Paper
-                  </button>
-                  <button
-                    onClick={() => handleSendMessage("What are the key clinical findings and purpose of the paper on operative management of acetabular fractures?")}
-                    className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
-                  >
-                    🩺 Surgery Study
-                  </button>
+                  {isPublicMode ? (
+                    <>
+                      <button
+                        onClick={() => handleSendMessage("What is this system for?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        System Purpose
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage("How can I be part of the system?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        How to Join
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage("How many researchers are in the system?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        Researchers Count
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage("What are the top research tracks at PSU Asingan?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        Research Tracks
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleSendMessage("How many research publications and researcher profiles are currently tracked in our system?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        System Status
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage("How does the system prevent saving duplicate research papers from Google Scholar?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        Deduplication
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage("What does the study on predicting college students' academic performance using machine learning talk about?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        ML Paper
+                      </button>
+                      <button
+                        onClick={() => handleSendMessage("What are the key clinical findings and purpose of the paper on operative management of acetabular fractures?")}
+                        className="px-2.5 py-0.5 rounded-full border border-border bg-card hover:bg-muted/60 shrink-0 text-foreground transition-all hover:border-emerald-500/50"
+                      >
+                        <Activity className="w-3 h-3 inline mr-1 text-emerald-500" />Surgery Study
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 

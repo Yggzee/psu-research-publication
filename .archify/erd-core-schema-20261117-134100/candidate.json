@@ -1,0 +1,299 @@
+{
+  "schema_version": 1,
+  "diagram_type": "erd",
+  "meta": {
+    "title": "PSU Asingan Research Publication & Citation Tracking Schema",
+    "subtitle": "Core SQLite / Turso Academic & Identity Tables (6 Entities)",
+    "locale": "en",
+    "output": ".archify/erd-core-schema-20261117-134100/core-schema.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Yggzee/psu-research-publication.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "6d13895dca5d7ff9ebe1493d6d4dc9030b40b7a0"
+    },
+    "views": [
+      {
+        "id": "identity-onboarding",
+        "label": "Identity & Onboarding",
+        "focus": ["users", "researchers", "invitation_requests"],
+        "note": "Account authentication, campus researcher profiles, and invitation workflow."
+      },
+      {
+        "id": "research-attribution",
+        "label": "Author Attribution",
+        "focus": ["researchers", "publications"],
+        "note": "Name-matched logical attribution linking campus researchers to published works."
+      },
+      {
+        "id": "citation-analytics",
+        "label": "Citations & Trends",
+        "focus": ["publications", "citing_papers", "citation_trends"],
+        "note": "Cascade-deleted citing literature records and annual citation history per publication."
+      }
+    ]
+  },
+  "layout": {
+    "mode": "grid",
+    "gapX": 72,
+    "gapY": 44,
+    "entityW": 284
+  },
+  "entities": [
+    {
+      "id": "invitation_requests",
+      "label": "invitation_requests",
+      "sublabel": "Login portal join requests",
+      "tag": "Identity & Onboarding",
+      "row": 0,
+      "col": 0,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 203, "end_line": 216, "label": "invitation_requests DDL" }
+      ],
+      "attributes": [
+        { "name": "id", "type": "TEXT", "key": "pk" },
+        { "name": "first_name", "type": "TEXT" },
+        { "name": "last_name", "type": "TEXT" },
+        { "name": "middle_initial", "type": "TEXT" },
+        { "name": "name", "type": "TEXT" },
+        { "name": "email", "type": "TEXT" },
+        { "name": "instructor_id", "type": "TEXT" },
+        { "name": "department", "type": "TEXT" },
+        { "name": "scholar_url", "type": "TEXT" },
+        { "name": "status", "type": "TEXT" },
+        { "name": "admin_notes", "type": "TEXT" },
+        { "name": "created_at", "type": "TEXT" }
+      ]
+    },
+    {
+      "id": "researchers",
+      "label": "researchers",
+      "sublabel": "Campus researcher directory",
+      "tag": "Identity & Onboarding",
+      "row": 0,
+      "col": 1,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 111, "end_line": 127, "label": "researchers DDL" },
+        { "path": "src/server/db.mjs", "line": 311, "end_line": 312, "label": "status & scholar" }
+      ],
+      "attributes": [
+        { "name": "id", "type": "TEXT", "key": "pk" },
+        { "name": "user_id", "type": "TEXT", "key": "fk", "references": "users.id" },
+        { "name": "instructor_id", "type": "TEXT", "key": "uk" },
+        { "name": "first_name", "type": "TEXT" },
+        { "name": "last_name", "type": "TEXT" },
+        { "name": "middle_initial", "type": "TEXT" },
+        { "name": "name", "type": "TEXT" },
+        { "name": "email", "type": "TEXT" },
+        { "name": "department", "type": "TEXT" },
+        { "name": "is_faculty", "type": "INTEGER" },
+        { "name": "affiliation", "type": "TEXT" },
+        { "name": "photo_url", "type": "TEXT" },
+        { "name": "scholar_url", "type": "TEXT" },
+        { "name": "google_scholar_id", "type": "TEXT" },
+        { "name": "status", "type": "TEXT" },
+        { "name": "has_scholar", "type": "INTEGER" },
+        { "name": "total_publications", "type": "INTEGER" },
+        { "name": "total_citations", "type": "INTEGER" },
+        { "name": "created_at", "type": "TEXT" }
+      ]
+    },
+    {
+      "id": "users",
+      "label": "users",
+      "sublabel": "Auth & login accounts",
+      "tag": "Identity & Onboarding",
+      "row": 0,
+      "col": 2,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 95, "end_line": 106, "label": "users DDL" },
+        { "path": "src/server/db.mjs", "line": 304, "end_line": 309, "label": "onboarding columns" }
+      ],
+      "attributes": [
+        { "name": "id", "type": "TEXT", "key": "pk" },
+        { "name": "username", "type": "TEXT", "key": "uk" },
+        { "name": "email", "type": "TEXT" },
+        { "name": "password", "type": "TEXT" },
+        { "name": "name", "type": "TEXT" },
+        { "name": "middle_initial", "type": "TEXT" },
+        { "name": "role", "type": "TEXT" },
+        { "name": "department", "type": "TEXT" },
+        { "name": "is_faculty", "type": "INTEGER" },
+        { "name": "photo_url", "type": "TEXT" },
+        { "name": "scholar_url", "type": "TEXT" },
+        { "name": "google_scholar_id", "type": "TEXT" },
+        { "name": "status", "type": "TEXT" },
+        { "name": "verification_token", "type": "TEXT" },
+        { "name": "verification_token_expires_at", "type": "TEXT" },
+        { "name": "email_verified_at", "type": "TEXT" },
+        { "name": "registration_type", "type": "TEXT" },
+        { "name": "has_scholar", "type": "INTEGER" },
+        { "name": "created_at", "type": "TEXT" }
+      ]
+    },
+    {
+      "id": "publications",
+      "label": "publications",
+      "sublabel": "Verified works, SDG & metrics",
+      "tag": "Publications Core",
+      "row": 1,
+      "col": 0,
+      "width": 290,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 132, "end_line": 150, "label": "publications DDL" },
+        { "path": "src/server/db.mjs", "line": 220, "end_line": 234, "label": "SDG & RDO columns" },
+        { "path": "src/server/db.mjs", "line": 604, "end_line": 609, "label": "owner_id attribution" }
+      ],
+      "attributes": [
+        { "name": "id", "type": "TEXT", "key": "pk" },
+        { "name": "title", "type": "TEXT" },
+        { "name": "authors", "type": "TEXT" },
+        { "name": "journal", "type": "TEXT" },
+        { "name": "year", "type": "INTEGER" },
+        { "name": "citations", "type": "INTEGER" },
+        { "name": "abstract", "type": "TEXT" },
+        { "name": "url", "type": "TEXT" },
+        { "name": "cited_by_link", "type": "TEXT" },
+        { "name": "impact_score", "type": "REAL" },
+        { "name": "owner_id", "type": "TEXT", "key": "fk", "references": "researchers.instructor_id" },
+        { "name": "owner_name", "type": "TEXT" },
+        { "name": "source", "type": "TEXT" },
+        { "name": "approval_status", "type": "TEXT" },
+        { "name": "research_status", "type": "TEXT" },
+        { "name": "is_public", "type": "INTEGER" },
+        { "name": "file_name", "type": "TEXT" },
+        { "name": "sdg_tags", "type": "TEXT" },
+        { "name": "sdg_rationale", "type": "TEXT" },
+        { "name": "sdg_source", "type": "TEXT" },
+        { "name": "sdg_evidence", "type": "TEXT" },
+        { "name": "journal_indexing", "type": "TEXT" },
+        { "name": "is_predatory_flag", "type": "INTEGER" },
+        { "name": "nbc461_points", "type": "REAL" },
+        { "name": "jc3_points", "type": "REAL" },
+        { "name": "ched_priority", "type": "TEXT" },
+        { "name": "doi", "type": "TEXT" },
+        { "name": "keywords", "type": "TEXT" },
+        { "name": "issn_isbn", "type": "TEXT" },
+        { "name": "volume_issue", "type": "TEXT" },
+        { "name": "publication_date", "type": "TEXT" },
+        { "name": "publication_level", "type": "TEXT" },
+        { "name": "created_at", "type": "TEXT" }
+      ]
+    },
+    {
+      "id": "citing_papers",
+      "label": "citing_papers",
+      "sublabel": "Literature citing each work",
+      "tag": "Citation Analytics",
+      "row": 1,
+      "col": 1,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 249, "end_line": 261, "label": "citing_papers DDL" }
+      ],
+      "attributes": [
+        { "name": "id", "type": "TEXT", "key": "pk" },
+        { "name": "publication_id", "type": "TEXT", "key": "fk", "references": "publications.id" },
+        { "name": "title", "type": "TEXT" },
+        { "name": "authors", "type": "TEXT" },
+        { "name": "year", "type": "INTEGER" },
+        { "name": "link", "type": "TEXT" },
+        { "name": "journal", "type": "TEXT" },
+        { "name": "volume_issue", "type": "TEXT" },
+        { "name": "quarter", "type": "TEXT" },
+        { "name": "doi_issn", "type": "TEXT" }
+      ]
+    },
+    {
+      "id": "citation_trends",
+      "label": "citation_trends",
+      "sublabel": "Annual citation counts",
+      "tag": "Citation Analytics",
+      "row": 1,
+      "col": 2,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 238, "end_line": 244, "label": "citation_trends DDL" }
+      ],
+      "attributes": [
+        { "name": "id", "type": "TEXT", "key": "pk" },
+        { "name": "publication_id", "type": "TEXT", "key": "fk", "references": "publications.id" },
+        { "name": "year", "type": "INTEGER" },
+        { "name": "citations", "type": "INTEGER" }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel_users_researchers",
+      "from": "users",
+      "to": "researchers",
+      "fromCardinality": "one",
+      "toCardinality": "one",
+      "fromOptional": false,
+      "toOptional": true,
+      "label": "has profile"
+    },
+    {
+      "id": "rel_invites_researchers",
+      "from": "invitation_requests",
+      "to": "researchers",
+      "fromCardinality": "one",
+      "toCardinality": "one",
+      "fromOptional": true,
+      "toOptional": true,
+      "identifying": false,
+      "variant": "dashed",
+      "label": "approved into"
+    },
+    {
+      "id": "rel_researchers_publications",
+      "from": "researchers",
+      "to": "publications",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "fromOptional": true,
+      "toOptional": true,
+      "identifying": false,
+      "variant": "dashed",
+      "label": "authors / owns"
+    },
+    {
+      "id": "rel_publications_citing",
+      "from": "publications",
+      "to": "citing_papers",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "fromOptional": false,
+      "toOptional": true,
+      "label": "cited by"
+    },
+    {
+      "id": "rel_publications_trends",
+      "from": "publications",
+      "to": "citation_trends",
+      "fromCardinality": "one",
+      "toCardinality": "many",
+      "fromOptional": false,
+      "toOptional": true,
+      "label": "tracks yearly"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Dual Persistence Sync",
+      "items": [
+        "All 6 core tables exist identically in local SQLite (WAL mode) and Turso Cloud SQLite.",
+        "Foreign keys enforce ON DELETE CASCADE on user_id and publication_id."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Author-Exclusive Attribution",
+      "items": [
+        "publications.owner_id links logically to researchers rather than rigid DB locks.",
+        "reattributePublicationsByAuthorName() reconciles ownership from verified author lists."
+      ]
+    }
+  ]
+}

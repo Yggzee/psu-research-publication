@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "223fdffc-8a1e-4f19-8af1-43b00553e0b2",
+  "status": "current",
+  "command": "deliver",
+  "type": "dataflow",
+  "input": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-pub-citation-20261117-140300\\candidate.json",
+  "output": "D:\\Acts\\Research\\ResPub\\.archify\\dataflow-pub-citation-20261117-140300\\pub-citation-dfd.html",
+  "specification": {
+    "sha256": "1a5470ba5d6c1e17e10b539872422b865205548d39030ebaa54a56f083743afd",
+    "bytes": 8159
+  },
+  "artifact": {
+    "sha256": "7cb6815a6e6340bc288752a73138a0b3f5765640a20580ab2129c6f7b4374366",
+    "bytes": 849163
+  }
+}

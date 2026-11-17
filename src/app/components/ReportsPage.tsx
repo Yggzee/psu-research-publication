@@ -479,7 +479,7 @@ export function ReportsPage() {
                                     <span>Faculty Research Export Studio</span>
                                 </CardTitle>
                                 <CardDescription className="text-xs mt-0.5">
-                                    Official PSU institutional format with 8-column Publication Sheet and 15-column Citation Sheet.
+                                    Official PSU institutional format with 8-column Publication sheet and 16-column Citation sheet.
                                 </CardDescription>
                             </div>
                         </div>

@@ -469,8 +469,8 @@ class ApiService {
   }
 
   // 4. Publications
-  async getPublications(): Promise<Publication[]> {
-    return this.request<Publication[]>('/publications');
+  async getPublications(includePending = false): Promise<Publication[]> {
+    return this.request<Publication[]>(`/publications${includePending ? '?includePending=true' : ''}`);
   }
 
   async getPublicationById(id: string, refresh = false): Promise<Publication> {
@@ -769,6 +769,109 @@ class ApiService {
       method: 'PUT',
       body: JSON.stringify(settings),
     });
+  }
+
+  // --- R2: Resolve DOI Metadata ---
+  async resolveDoi(doi: string): Promise<{
+    success: boolean;
+    title: string;
+    authors: string[];
+    journal?: string;
+    year: number;
+    doi: string;
+    abstract?: string;
+    citations?: number;
+    citedByLink?: string;
+    source?: string;
+  }> {
+    return this.request('/publications/resolve-doi', {
+      method: 'POST',
+      body: JSON.stringify({ doi }),
+    });
+  }
+
+  // --- R2: Unassign / Remove Researcher from Publication ---
+  async unassignPublication(publicationId: string, instructorId?: string): Promise<{
+    success: boolean;
+    unassigned: boolean;
+    deleted: boolean;
+    message: string;
+  }> {
+    return this.request(`/publications/${encodeURIComponent(publicationId)}/unassign`, {
+      method: 'POST',
+      body: JSON.stringify(instructorId ? { instructorId } : {}),
+    });
+  }
+
+  // --- R4: Reload Publication Citation (Single) ---
+  async reloadPublicationCitation(publicationId: string): Promise<{
+    success: boolean;
+    citations: number;
+    citedByLink?: string;
+    source?: string;
+    message?: string;
+  }> {
+    return this.request(`/publications/${encodeURIComponent(publicationId)}/reload-citation`, {
+      method: 'POST',
+    });
+  }
+
+  // --- R4: Reload All Citations (Batch) ---
+  async reloadAllCitations(): Promise<{
+    success: boolean;
+    updatedCount: number;
+    totalPublications: number;
+    results: any[];
+  }> {
+    return this.request('/publications/reload-citations', {
+      method: 'POST',
+    });
+  }
+
+  // --- R6: Database Backups ---
+  async getBackups(): Promise<{
+    backups: Array<{
+      id: string;
+      backupType: string;
+      manilaDate: string;
+      filename: string;
+      sizeBytes: number;
+      tableCounts: Record<string, number>;
+      createdAt: string;
+      createdBy: string;
+    }>;
+    schedule: {
+      cron: string;
+      time: string;
+      timezone: string;
+      description: string;
+    };
+  }> {
+    return this.request('/admin/backups');
+  }
+
+  async createManualBackup(): Promise<{
+    success: boolean;
+    backup: {
+      id: string;
+      backupType: string;
+      manilaDate: string;
+      filename: string;
+      sizeBytes: number;
+      tableCounts: Record<string, number>;
+      createdAt: string;
+      createdBy: string;
+    };
+    snapshot: any;
+    message: string;
+  }> {
+    return this.request('/admin/backups/manual', {
+      method: 'POST',
+    });
+  }
+
+  getBackupDownloadUrl(backupId: string): string {
+    return `${this.baseUrl}/admin/backups/${encodeURIComponent(backupId)}/download`;
   }
 }
 

@@ -10,6 +10,11 @@ import {
   Lock,
   Globe,
   X,
+  Trash2,
+  Link as LinkIcon,
+  Search,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import {
   getCurrentUser,
@@ -51,7 +56,7 @@ export function InstructorPublicationsPage() {
   const loadPublications = async () => {
     setLoading(true);
     try {
-      const data = await apiService.getPublications();
+      const data = await apiService.getPublications(true);
       setPublications(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn("Failed to load instructor publications:", err);
@@ -70,29 +75,127 @@ export function InstructorPublicationsPage() {
 
   const ownPublications = publications.filter(
     (p) =>
-      p.owner_id === user.instructorId ||
-      p.ownerId === user.instructorId ||
-      (Array.isArray(p.authors) ? p.authors.includes(user.name) : String(p.authors).includes(user.name))
+      (p.approval_status === "approved" || p.approvalStatus === "approved") &&
+      (Array.isArray(p.assignedResearcherIds)
+        ? p.assignedResearcherIds.some(
+            (id: string) => String(id).toLowerCase() === String(user.instructorId || "").toLowerCase()
+          )
+        : p.owner_id === user.instructorId || p.ownerId === user.instructorId)
   );
+
+  const pendingPublications = publications.filter(
+    (p) =>
+      (p.approval_status === "pending" || p.approvalStatus === "pending") &&
+      (Array.isArray(p.allLinkedResearcherIds)
+        ? p.allLinkedResearcherIds.some(
+            (id: string) => String(id).toLowerCase() === String(user.instructorId || "").toLowerCase()
+          )
+        : Array.isArray(p.assignedResearcherIds) && p.assignedResearcherIds.length > 0
+        ? p.assignedResearcherIds.some(
+            (id: string) => String(id).toLowerCase() === String(user.instructorId || "").toLowerCase()
+          )
+        : String(p.owner_id || p.ownerId || "").toLowerCase() === String(user.instructorId || "").toLowerCase())
+  );
+
+  // R2 Add Mode: 'manual' vs 'doi'
+  const [addMode, setAddMode] = useState<"manual" | "doi">("manual");
+  const [doiInput, setDoiInput] = useState("");
+  const [isResolvingDoi, setIsResolvingDoi] = useState(false);
+  const [resolvedDoiData, setResolvedDoiData] = useState<{
+    title: string;
+    authors: string[];
+    journal?: string;
+    year: number;
+    doi: string;
+    abstract?: string;
+    citations?: number;
+    citedByLink?: string;
+    source?: string;
+  } | null>(null);
+
+  // R4: Citations reload state
+  const [isReloadingCitations, setIsReloadingCitations] = useState(false);
+  const handleReloadAllCitations = async () => {
+    setIsReloadingCitations(true);
+    try {
+      toast.loading("Reloading live Google Scholar citations for all repository publications...", { id: "reload-cits" });
+      const res = await apiService.reloadAllCitations();
+      toast.success(`Successfully reloaded citations for ${res.updatedCount || 0} publication(s).`, { id: "reload-cits" });
+      await loadPublications();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reload citations.", { id: "reload-cits" });
+    } finally {
+      setIsReloadingCitations(false);
+    }
+  };
+
+  // R2: Resolve DOI Link Retrieval
+  const handleResolveDoi = async () => {
+    const cleanDoi = doiInput.trim();
+    if (!cleanDoi) {
+      toast.error("Please enter a valid DOI or DOI link.");
+      return;
+    }
+    setIsResolvingDoi(true);
+    try {
+      toast.loading("Retrieving bibliographic metadata from CrossRef & OpenAlex...", { id: "resolve-doi" });
+      const res = await apiService.resolveDoi(cleanDoi);
+      setResolvedDoiData(res);
+      setForm({
+        title: res.title || "",
+        coAuthors: (res.authors || []).filter((a: string) => a !== user.name).join(", "),
+        journal: res.journal || "",
+        year: String(res.year || new Date().getFullYear()),
+        abstract: res.abstract || "",
+        url: res.doi ? (res.doi.startsWith("http") ? res.doi : `https://doi.org/${res.doi}`) : "",
+        researchStatus: "Published",
+        fileName: "",
+      });
+      toast.success("DOI resolved! Bibliographic data populated.", { id: "resolve-doi" });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to resolve DOI.", { id: "resolve-doi" });
+    } finally {
+      setIsResolvingDoi(false);
+    }
+  };
+
+  // R2: Remove Publication (Unassigns researcher)
+  const handleRemovePublication = async (publicationId: string, title: string) => {
+    if (!window.confirm(`Are you sure you want to remove "${title}" from your publications?`)) return;
+    try {
+      toast.loading("Removing publication...", { id: "remove-pub" });
+      const res = await apiService.unassignPublication(publicationId);
+      toast.success(res.message || "Publication removed successfully.", { id: "remove-pub" });
+      await loadPublications();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove publication.", { id: "remove-pub" });
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const coAuthors = form.coAuthors.split(",").map((a) => a.trim()).filter(Boolean);
     const authors = [user.name, ...coAuthors];
 
+    if (!form.title.trim() || !form.journal.trim() || !form.year) {
+      toast.error("Title, Journal / Venue, and Publication Year are required.");
+      return;
+    }
+
     const newRecord = {
       id: `manual-${Date.now()}`,
       title: form.title.trim(),
       authors,
-      journal: form.journal.trim() || "Published Research",
+      journal: form.journal.trim(),
       year: Number(form.year),
-      citations: 0,
+      citations: resolvedDoiData?.citations || 0,
+      citedByLink: resolvedDoiData?.citedByLink || undefined,
       abstract: form.abstract.trim(),
-      url: form.url.trim() || undefined,
+      url: form.url.trim() || (resolvedDoiData?.doi ? (resolvedDoiData.doi.startsWith("http") ? resolvedDoiData.doi : `https://doi.org/${resolvedDoiData.doi}`) : undefined),
       ownerId: user.instructorId || "",
       ownerName: user.name,
-      source: "manual",
-      approvalStatus: "approved",
+      source: addMode === "doi" ? "doi" : "manual",
+      approvalStatus: "pending",
       researchStatus: "Published",
       isPublic: false,
       fileName: form.fileName || undefined,
@@ -100,7 +203,7 @@ export function InstructorPublicationsPage() {
     };
 
     try {
-      toast.loading("Saving publication & analyzing UN SDGs with AI...", { id: "save-pub" });
+      toast.loading("Submitting publication for Research Coordinator verification...", { id: "save-pub" });
       await apiService.createPublication(newRecord);
 
       // Auto-classify with Gemini Flash in background
@@ -109,16 +212,17 @@ export function InstructorPublicationsPage() {
         title: newRecord.title,
         abstract: newRecord.abstract,
         journal: newRecord.journal,
-      }).then(() => {
-        loadPublications();
       }).catch(() => {});
 
-      toast.success("Publication registered successfully!", { id: "save-pub" });
+      toast.success("Publication submitted! It is now pending Research Coordinator review and will appear once approved.", { id: "save-pub" });
       await loadPublications();
       setForm(emptyForm);
+      setResolvedDoiData(null);
+      setDoiInput("");
       setShowForm(false);
+      setActiveTab("pending");
     } catch (err: any) {
-      toast.error(`Failed to save publication: ${err.message}`, { id: "save-pub" });
+      toast.error(`Failed to submit publication: ${err.message}`, { id: "save-pub" });
     }
   };
 
@@ -135,6 +239,7 @@ export function InstructorPublicationsPage() {
 
   const tabs = [
     { id: "mine", label: "My Published Research", count: ownPublications.length, icon: FileText },
+    { id: "pending", label: "Waiting for Approval", count: pendingPublications.length, icon: Clock },
     { id: "public", label: "Institutional Repository", count: publicPublications.length, icon: BookOpen },
   ];
 
@@ -149,12 +254,12 @@ export function InstructorPublicationsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={loadPublications}
-              disabled={loading}
+              onClick={handleReloadAllCitations}
+              disabled={isReloadingCitations || loading}
               className="text-xs h-9 gap-1.5"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-              <span>Refresh</span>
+              <RefreshCw className={`h-3.5 w-3.5 ${isReloadingCitations ? "animate-spin" : ""}`} />
+              <span>Reload Citations</span>
             </Button>
             <Button
               size="sm"
@@ -188,6 +293,74 @@ export function InstructorPublicationsPage() {
                 <X className="h-4 w-4" />
               </Button>
             </div>
+
+            <div className="flex items-center gap-2 mb-4 border-b border-border/50 pb-3">
+              <Button
+                type="button"
+                variant={addMode === "manual" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setAddMode("manual")}
+                className="text-xs h-8 gap-1.5"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Manual Entry</span>
+              </Button>
+              <Button
+                type="button"
+                variant={addMode === "doi" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setAddMode("doi")}
+                className="text-xs h-8 gap-1.5"
+              >
+                <LinkIcon className="w-3.5 h-3.5" />
+                <span>DOI Link Retrieval</span>
+              </Button>
+            </div>
+
+            {addMode === "doi" && (
+              <div className="mb-4 p-3.5 rounded-lg border border-brand/30 bg-brand/5 space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="doi-input" className="text-xs font-semibold text-foreground">
+                    Enter DOI or DOI Link *
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Input a DOI (e.g. 10.1016/j.envsoft.2023.105678 or https://doi.org/...) to retrieve bibliographic metadata from CrossRef/OpenAlex and enrich citations via Google Scholar.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="doi-input"
+                    value={doiInput}
+                    onChange={(e) => setDoiInput(e.target.value)}
+                    placeholder="10.xxxx/xxxxx or https://doi.org/10.xxxx/xxxxx"
+                    className="h-8 text-xs font-mono bg-background"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isResolvingDoi || !doiInput.trim()}
+                    onClick={handleResolveDoi}
+                    className="h-8 text-xs bg-brand hover:bg-brand/90 text-white shrink-0 gap-1.5"
+                  >
+                    <Search className={`w-3.5 h-3.5 ${isResolvingDoi ? "animate-spin" : ""}`} />
+                    <span>Retrieve Data</span>
+                  </Button>
+                </div>
+
+                {resolvedDoiData && (
+                  <div className="p-2.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-[11px]">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Data Successfully Retrieved from {resolvedDoiData.source || "DOI Registry"}</span>
+                    </div>
+                    <p className="text-foreground font-medium text-xs truncate">{resolvedDoiData.title}</p>
+                    <p className="text-muted-foreground text-[11px]">
+                      {resolvedDoiData.authors?.join(", ")} • {resolvedDoiData.journal || "Journal"} ({resolvedDoiData.year}) • {resolvedDoiData.citations || 0} citations
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2 text-xs">
               <div className="space-y-1.5 md:col-span-2">
@@ -299,7 +472,7 @@ export function InstructorPublicationsPage() {
       <PageTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
       {/* 4. Tab Content */}
-      {activeTab === "mine" ? (
+      {activeTab === "mine" && (
         <div className="space-y-3">
           {ownPublications.map((publication) => {
             const isPublic = publication.is_public ?? publication.isPublic ?? true;
@@ -386,6 +559,15 @@ export function InstructorPublicationsPage() {
                           onCheckedChange={() => toggleVisibility(publication.id, Boolean(isPublic))}
                         />
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemovePublication(publication.id, publication.title)}
+                        className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive gap-1 px-2"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Remove Publication</span>
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -403,7 +585,107 @@ export function InstructorPublicationsPage() {
             />
           )}
         </div>
-      ) : (
+      )}
+
+      {activeTab === "pending" && (
+        <div className="space-y-3">
+          {pendingPublications.map((publication) => {
+            const authorsList = Array.isArray(publication.authors)
+              ? publication.authors.join(", ")
+              : publication.authors;
+
+            return (
+              <Card
+                key={publication.id}
+                className="border-amber-500/40 bg-amber-500/5 dark:bg-amber-500/5 hover:border-amber-500/60 transition-colors shadow-2xs"
+              >
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="font-mono text-[10px]">
+                          {publication.year}
+                        </Badge>
+                        <StatusBadge status="pending" label="Waiting for Approval" />
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          {publication.citations || 0} citations
+                        </span>
+                      </div>
+
+                      <h3
+                        onClick={() => setInspectedPub(publication)}
+                        className="text-sm font-semibold text-foreground hover:text-brand cursor-pointer transition-colors leading-snug"
+                      >
+                        {publication.title}
+                      </h3>
+
+                      <p className="text-xs text-muted-foreground line-clamp-1">
+                        By {authorsList}
+                      </p>
+
+                      <div className="flex items-center gap-2 flex-wrap pt-1 text-xs">
+                        <span className="text-muted-foreground text-[11px] truncate max-w-xs">
+                          {publication.journal || "Researcher Portfolio"}
+                        </span>
+
+                        {publication.url && (
+                          <Button variant="link" size="sm" asChild className="p-0 h-auto text-xs text-brand">
+                            <a href={publication.url} target="_blank" rel="noreferrer" className="flex items-center gap-1">
+                              <span>DOI / Link</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setInspectedPub(publication)}
+                          className="h-6 text-[11px] px-2 gap-1 text-ai hover:bg-ai-soft"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          <span>Inspect & SDG Check</span>
+                        </Button>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-xs flex items-center gap-2 text-amber-900 dark:text-amber-200">
+                        <Clock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="text-[11px]">
+                          Awaiting review from Research Coordinator Sir Rodelio M. Garin. Once approved, this publication will automatically move to your published portfolio.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/40">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemovePublication(publication.id, publication.title)}
+                        className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive gap-1 px-2"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Withdraw / Remove</span>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {pendingPublications.length === 0 && !loading && (
+            <EmptyState
+              icon={Clock}
+              title="No publications waiting for approval"
+              description="When you add research manually or via DOI retrieval, submissions will appear here while awaiting Research Coordinator approval."
+              actionLabel="Add Publication"
+              onAction={() => setShowForm(true)}
+            />
+          )}
+        </div>
+      )}
+
+      {activeTab === "public" && (
         <div className="space-y-3">
           {publicPublications.map((publication) => {
             const authorsList = Array.isArray(publication.authors)

@@ -61,8 +61,8 @@ export function LoginScreen() {
     }
 
     const digitsOnly = inviteForm.instructorId.replace(/\D/g, "");
-    if (digitsOnly.length !== 5) {
-      setInviteError("Instructor ID must be 5 digits (format: ASIN-00000).");
+    if (digitsOnly.length < 1 || digitsOnly.length > 12) {
+      setInviteError("Instructor ID must be 1 to 12 digits (format: ASIN- followed by digits).");
       return;
     }
 
@@ -120,6 +120,9 @@ export function LoginScreen() {
           id: res.user.id,
           role: res.user.role,
           name: res.user.name,
+          firstName: (res.user as any).firstName,
+          middleInitial: (res.user as any).middleInitial,
+          lastName: (res.user as any).lastName,
           username: res.user.username,
           instructorId: res.user.instructorId,
           department: res.user.department,
@@ -337,10 +340,6 @@ export function LoginScreen() {
                     <span>Ask for Invitation</span>
                   </Button>
                 </div>
-
-                <p className="text-[11px] text-center text-muted-foreground">
-                  Research Coordinator: <span className="font-mono font-medium text-foreground">psuac-rc / admin123</span>
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -475,13 +474,13 @@ export function LoginScreen() {
                         id="reqInstructorId"
                         type="text"
                         inputMode="numeric"
-                        pattern="\d{5}"
-                        maxLength={5}
+                        pattern="\d{1,12}"
+                        maxLength={12}
                         value={inviteForm.instructorId}
                         onChange={(e) =>
                           setInviteForm({
                             ...inviteForm,
-                            instructorId: e.target.value.replace(/\D/g, "").slice(0, 5),
+                            instructorId: e.target.value.replace(/\D/g, "").slice(0, 12),
                           })
                         }
                         placeholder="00000"

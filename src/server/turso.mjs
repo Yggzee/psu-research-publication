@@ -282,6 +282,27 @@ export async function initTursoSchema() {
       registration_type TEXT DEFAULT 'self_registration',
       decline_reason TEXT DEFAULT 'Declined by administrator',
       declined_at TEXT NOT NULL
+    );`,
+    `CREATE TABLE IF NOT EXISTS publication_researchers (
+      publication_id TEXT NOT NULL,
+      instructor_id TEXT NOT NULL,
+      approval_status TEXT NOT NULL DEFAULT 'approved',
+      assigned_by TEXT DEFAULT 'system',
+      claim_source TEXT DEFAULT 'manual',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (publication_id, instructor_id)
+    );`,
+    `CREATE TABLE IF NOT EXISTS db_backups (
+      id TEXT PRIMARY KEY,
+      backup_type TEXT NOT NULL DEFAULT 'manual',
+      manila_date TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      table_counts_json TEXT NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      created_by TEXT DEFAULT 'system',
+      local_path TEXT,
+      created_at TEXT NOT NULL
     );`
   ];
 
@@ -330,6 +351,7 @@ export async function initTursoSchema() {
     `ALTER TABLE citing_papers ADD COLUMN volume_issue TEXT`,
     `ALTER TABLE citing_papers ADD COLUMN quarter TEXT`,
     `ALTER TABLE citing_papers ADD COLUMN doi_issn TEXT`,
+    `ALTER TABLE publication_researchers ADD COLUMN claim_source TEXT DEFAULT 'manual'`,
   ];
 
   await Promise.allSettled(
@@ -381,19 +403,21 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
     console.log('[Turso Sync] Syncing latest records from Turso Cloud into local database...');
 
     const tables = [
+      'system_settings',
+      'apify_tokens',
       'users',
       'researchers',
+      'invitation_requests',
       'publications',
+      'publication_researchers',
       'scraped_publications',
       'citation_trends',
       'citing_papers',
-      'apify_tokens',
-      'invitation_requests',
       'email_logs',
       'ai_chat_sessions',
-      'system_settings',
       'archived_researchers',
-      'declined_registrations'
+      'declined_registrations',
+      'db_backups'
     ];
 
     // Check if Turso Cloud is brand-new (0 users in cloud, while local DB has seed data)
@@ -425,7 +449,7 @@ export async function rehydrateFromTurso(localDb, rawPrepare = null) {
           try {
             // If Turso has rows for core tables (or even 0 rows for dynamic tables like invitation_requests),
             // clear stale git-baked local rows so deletions on Render also persist across restarts.
-            if (result.rows.length > 0 || ['invitation_requests', 'email_logs', 'ai_chat_sessions'].includes(table)) {
+            if (result.rows.length > 0 || ['invitation_requests', 'email_logs', 'ai_chat_sessions', 'publication_researchers', 'db_backups'].includes(table)) {
               prepareFn(`DELETE FROM ${table}`).run();
             }
 

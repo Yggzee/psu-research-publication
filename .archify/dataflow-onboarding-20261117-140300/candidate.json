@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Onboarding & Account Approval Data Flow",
+    "subtitle": "Dual-Path Registration & Verification • Invitation Requests, Self-Registration & Research Coordinator Review",
+    "locale": "en",
+    "output": ".archify/dataflow-onboarding-20261117-140300/onboarding-dfd.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/Yggzee/psu-research-publication.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "6d13895dca5d7ff9ebe1493d6d4dc9030b40b7a0"
+    },
+    "views": [
+      {
+        "id": "invitation-path",
+        "label": "Invitation Path",
+        "focus": ["invite_form", "invite_queue", "coordinator_review", "email_dispatcher", "active_directory", "researcher_portal"],
+        "note": "Visitor requests an invitation, Coordinator issues an invite link, and password setup activates the account."
+      },
+      {
+        "id": "self-registration-path",
+        "label": "Self-Registration & Audit",
+        "focus": ["register_form", "pending_accounts", "email_verifier", "coordinator_review", "active_directory", "declined_archive"],
+        "note": "Applicant submits credentials, verifies email token, and is either admitted or archived."
+      }
+    ]
+  },
+  "stages": [
+    { "label": "Submit" },
+    { "label": "Stage & Queue" },
+    { "label": "Review & Verify" },
+    { "label": "Persist & Notify" },
+    { "label": "Activated Portal" }
+  ],
+  "nodes": [
+    {
+      "id": "invite_form",
+      "type": "frontend",
+      "label": "Ask for Invitation",
+      "sublabel": "Login portal join form",
+      "tag": "Visitor",
+      "stage": 0,
+      "row": 0,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 2111, "end_line": 2124, "label": "POST invitation-requests" }
+      ]
+    },
+    {
+      "id": "register_form",
+      "type": "frontend",
+      "label": "Self-Registration",
+      "sublabel": "Credentials & profile form",
+      "tag": "Applicant",
+      "stage": 0,
+      "row": 2,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 840, "end_line": 856, "label": "POST /auth/register" }
+      ]
+    },
+    {
+      "id": "invite_queue",
+      "type": "database",
+      "label": "invitation_requests",
+      "sublabel": "status = pending queue",
+      "tag": "Queue Store",
+      "stage": 1,
+      "row": 0,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 2150, "end_line": 2168, "label": "insert pending request" }
+      ]
+    },
+    {
+      "id": "pending_accounts",
+      "type": "database",
+      "label": "Staged Accounts",
+      "sublabel": "users + researchers (pending)",
+      "tag": "Pending State",
+      "stage": 1,
+      "row": 2,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 886, "end_line": 923, "label": "insert pending user" }
+      ]
+    },
+    {
+      "id": "coordinator_review",
+      "type": "security",
+      "label": "Coordinator Review",
+      "sublabel": "Invite, admit or decline",
+      "tag": "Admin Gate",
+      "stage": 2,
+      "row": 1,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 1941, "end_line": 2030, "label": "invite researcher" },
+        { "path": "src/server/apiHandler.mjs", "line": 2267, "end_line": 2295, "label": "admit registration" }
+      ]
+    },
+    {
+      "id": "email_verifier",
+      "type": "security",
+      "label": "Token Verification",
+      "sublabel": "Email confirm & password",
+      "tag": "Auth Gate",
+      "stage": 2,
+      "row": 2,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 946, "end_line": 983, "label": "verify-email route" },
+        { "path": "src/server/apiHandler.mjs", "line": 1082, "end_line": 1144, "label": "complete-invitation" }
+      ]
+    },
+    {
+      "id": "email_dispatcher",
+      "type": "cloud",
+      "label": "Email Dispatcher",
+      "sublabel": "Brevo SMTP & email_logs",
+      "tag": "Notifications",
+      "stage": 3,
+      "row": 1,
+      "sources": [
+        { "path": "src/server/emailService.mjs", "line": 373, "end_line": 455, "label": "invite & approval emails" }
+      ]
+    },
+    {
+      "id": "active_directory",
+      "type": "database",
+      "label": "Active Directory",
+      "sublabel": "users + researchers (active)",
+      "tag": "SQLite & Turso",
+      "stage": 3,
+      "row": 2,
+      "sources": [
+        { "path": "src/server/db.mjs", "line": 94, "end_line": 127, "label": "users & researchers DDL" },
+        { "path": "src/server/apiHandler.mjs", "line": 2276, "end_line": 2279, "label": "activate records" }
+      ]
+    },
+    {
+      "id": "declined_archive",
+      "type": "database",
+      "label": "Declined Archive",
+      "sublabel": "declined_registrations",
+      "tag": "Audit Archive",
+      "stage": 3,
+      "row": 0,
+      "sources": [
+        { "path": "src/server/apiHandler.mjs", "line": 2198, "end_line": 2220, "label": "dismiss request" },
+        { "path": "src/server/apiHandler.mjs", "line": 2315, "end_line": 2344, "label": "decline registration" }
+      ]
+    },
+    {
+      "id": "researcher_portal",
+      "type": "frontend",
+      "label": "Researcher Portal",
+      "sublabel": "Protected portal session",
+      "tag": "Authorized",
+      "stage": 4,
+      "row": 1,
+      "sources": [
+        { "path": "src/app/routes.tsx", "line": 27, "end_line": 37, "label": "ProtectedRoute guard" }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "form-to-queue",
+      "from": "invite_form",
+      "to": "invite_queue",
+      "label": "join request",
+      "variant": "default"
+    },
+    {
+      "id": "reg-to-pending",
+      "from": "register_form",
+      "to": "pending_accounts",
+      "label": "hashed creds",
+      "variant": "security"
+    },
+    {
+      "id": "queue-to-coord",
+      "from": "invite_queue",
+      "to": "coordinator_review",
+      "label": "pending request",
+      "variant": "default"
+    },
+    {
+      "id": "pending-to-verifier",
+      "from": "pending_accounts",
+      "to": "email_verifier",
+      "label": "token validation",
+      "variant": "security"
+    },
+    {
+      "id": "verifier-to-coord",
+      "from": "email_verifier",
+      "to": "coordinator_review",
+      "label": "verified queue",
+      "variant": "security"
+    },
+    {
+      "id": "coord-to-mailer",
+      "from": "coordinator_review",
+      "to": "email_dispatcher",
+      "label": "invite / admit mail",
+      "variant": "dashed"
+    },
+    {
+      "id": "coord-to-active",
+      "from": "coordinator_review",
+      "to": "active_directory",
+      "label": "admit / invite",
+      "variant": "emphasis"
+    },
+    {
+      "id": "verifier-to-active",
+      "from": "email_verifier",
+      "to": "active_directory",
+      "label": "password + active",
+      "variant": "emphasis"
+    },
+    {
+      "id": "coord-to-declined",
+      "from": "coordinator_review",
+      "to": "declined_archive",
+      "label": "dismiss / decline",
+      "variant": "default"
+    },
+    {
+      "id": "active-to-portal",
+      "from": "active_directory",
+      "to": "researcher_portal",
+      "label": "active session",
+      "variant": "emphasis"
+    },
+    {
+      "id": "mailer-to-portal",
+      "from": "email_dispatcher",
+      "to": "researcher_portal",
+      "label": "activation notice",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Two-Gate Security Model",
+      "items": [
+        "Self-registrations verify email ownership via UUID token before entering pending_approval.",
+        "Research Coordinator admission is required before account activation and portal access."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Audit & Safe Dismissal",
+      "items": [
+        "Dismissed invitations and declined registrations archive metadata to declined_registrations.",
+        "Staged rows are cleaned up from users and researchers so email identifiers are released."
+      ]
+    }
+  ]
+}

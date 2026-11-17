@@ -19,6 +19,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { getFacultyPhoto, isPSUPaper, hasExternalCollaborators, categorizeAuthors } from "../utils/facultyUtils";
+import { isCoordinator as checkIsCoordinator } from "../utils/researchStore";
 import { apiService } from "../services/api.service";
 import { exportPerResearcherReportsByDepartment } from "../utils/excelExportUtils";
 import { PageHeader, StatCard, StatusBadge, EmptyState } from "./common";
@@ -185,10 +186,7 @@ export function ResearcherProfile() {
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl font-bold text-foreground truncate">{researcher.name}</h2>
                 {(() => {
-                  const isCoordinator =
-                    (researcher.id || "").toUpperCase() === "PSU-002" ||
-                    (researcher.instructorId || "").toUpperCase() === "PSU-002" ||
-                    (researcher.name || "").toLowerCase().includes("garin");
+                  const isCoordinator = checkIsCoordinator(researcher);
                   if (isCoordinator) {
                     return <StatusBadge status="admin" label="Research Coordinator" />;
                   }

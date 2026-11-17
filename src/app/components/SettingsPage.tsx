@@ -24,6 +24,9 @@ import {
   Server,
   Cloud,
   RefreshCw,
+  Download,
+  Clock,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, PageTabs } from "./common";
@@ -100,25 +103,6 @@ export function SettingsPage() {
     toast.success(enabled ? "Automatic Scholar sync enabled." : "Automatic Scholar sync disabled.");
   };
 
-  const [isSyncingDb, setIsSyncingDb] = useState(false);
-
-  const handleSyncDatabase = async () => {
-    setIsSyncingDb(true);
-    toast.loading("Synchronizing database records and cloud storage...", { id: "db-sync" });
-    try {
-      const res = await apiService.syncToTurso();
-      if (res.success) {
-        toast.success(res.message || "Database synchronized successfully with Turso Cloud!", { id: "db-sync" });
-      } else {
-        toast.success("Database records synchronized locally and verified.", { id: "db-sync" });
-      }
-    } catch {
-      toast.success("Database records verified and persistent in storage.", { id: "db-sync" });
-    } finally {
-      setIsSyncingDb(false);
-    }
-  };
-
   const tabs = [
     { id: "appearance", label: "Appearance & Theme", icon: Palette },
     { id: "security", label: "Security & Password", icon: Lock },
@@ -132,19 +116,6 @@ export function SettingsPage() {
       <PageHeader
         title="Settings & System Preferences"
         description="Customize your interface appearance, researcher credentials, and cloud database persistence"
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncDatabase}
-            disabled={isSyncingDb}
-            className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground border-border/80"
-            title="Sync all database records with persistent cloud storage"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDb ? "animate-spin text-brand" : "text-brand"}`} />
-            <span>{isSyncingDb ? "Syncing..." : "Sync Database"}</span>
-          </Button>
-        }
       />
 
       {/* 2. Navigation Tabs */}
@@ -400,19 +371,37 @@ export function SettingsPage() {
 
       {/* 6. Tab 4: System & Cloud Storage */}
       {activeTab === "database" && (
-        <TursoDatabaseCard />
+        <TursoDatabaseCard isAdmin={currentUser.role === "admin"} />
       )}
     </div>
   );
 }
 
-function TursoDatabaseCard() {
+function TursoDatabaseCard({ isAdmin }: { isAdmin: boolean }) {
   const [tursoStatus, setTursoStatus] = useState<{ isConfigured: boolean; databaseUrl: string; mode: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [backups, setBackups] = useState<any[]>([]);
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [loadingBackups, setLoadingBackups] = useState(false);
+
+  const loadBackups = async () => {
+    setLoadingBackups(true);
+    try {
+      const res = await apiService.getBackups();
+      setBackups(res.backups || []);
+    } catch {
+      // Ignored if non-admin or unconfigured
+    } finally {
+      setLoadingBackups(false);
+    }
+  };
 
   useEffect(() => {
     apiService.getTursoStatus().then(setTursoStatus).catch(() => {});
-  }, []);
+    if (isAdmin) {
+      loadBackups();
+    }
+  }, [isAdmin]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -430,77 +419,207 @@ function TursoDatabaseCard() {
     }
   };
 
+  const handleManualBackup = async () => {
+    setIsCreatingBackup(true);
+    try {
+      toast.loading("Generating full database snapshot...", { id: "backup-create" });
+      const res = await apiService.createManualBackup();
+      toast.success(res.message || "Manual backup snapshot created successfully!", { id: "backup-create" });
+      await loadBackups();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create database backup.", { id: "backup-create" });
+    } finally {
+      setIsCreatingBackup(false);
+    }
+  };
+
   return (
-    <Card className="border-border/60 shadow-xs">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-success-soft text-success flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
+    <div className="space-y-6">
+      <Card className="border-border/60 shadow-xs">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-success-soft text-success flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+              <div>
+                <CardTitle className="text-sm font-semibold">Turso Cloud Database Storage</CardTitle>
+                <CardDescription className="text-xs">Persistent cloud storage to prevent deployment data wipeouts</CardDescription>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-sm font-semibold">Turso Cloud Database Storage</CardTitle>
-              <CardDescription className="text-xs">Persistent cloud storage to prevent deployment data wipeouts</CardDescription>
-            </div>
-          </div>
-          {tursoStatus?.isConfigured ? (
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-success-soft text-success border border-success-border">
-              Cloud Connected
-            </span>
-          ) : (
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-warning-soft text-warning border border-warning-border">
-              Local SQLite (WAL Active)
-            </span>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4 text-xs">
-        {tursoStatus?.isConfigured ? (
-          <div className="space-y-3">
-            <p className="text-xs text-foreground leading-relaxed">
-              Your application is connected to <strong>Turso Cloud SQLite</strong>. All researcher accounts, publications, and citations are backed up permanently.
-            </p>
-            {tursoStatus.databaseUrl && (
-              <p className="text-xs font-mono text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
-                Database: {tursoStatus.databaseUrl}
-              </p>
+            {tursoStatus?.isConfigured ? (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-success-soft text-success border border-success-border">
+                Cloud Connected
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-warning-soft text-warning border border-warning-border">
+                Local SQLite (WAL Active)
+              </span>
             )}
-            <Button
-              onClick={handleSync}
-              disabled={syncing}
-              size="sm"
-              className="bg-brand hover:bg-brand/90 text-white text-xs gap-1.5"
-            >
-              {syncing ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Syncing to Cloud...</span>
-                </>
-              ) : (
-                <>
-                  <Cloud className="w-3.5 h-3.5" />
-                  <span>Sync Local Tables to Turso Cloud</span>
-                </>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 text-xs">
+          {tursoStatus?.isConfigured ? (
+            <div className="space-y-3">
+              <p className="text-xs text-foreground leading-relaxed">
+                Your application is connected to <strong>Turso Cloud SQLite</strong>. All researcher accounts, publications, and citations are backed up permanently.
+              </p>
+              {tursoStatus.databaseUrl && (
+                <p className="text-xs font-mono text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                  Database: {tursoStatus.databaseUrl}
+                </p>
               )}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-3 text-xs text-muted-foreground">
-            <p className="leading-relaxed">
-              Your system is currently using local SQLite with Write-Ahead Logging (WAL mode). Data is safely persisted on this machine across reboots.
-            </p>
-            <div className="p-3 bg-muted/30 border border-border/70 rounded-xl space-y-1.5">
-              <p className="font-semibold text-foreground">Cloud Sync Instructions (Optional for production deployment):</p>
-              <ol className="list-decimal pl-4 space-y-0.5 text-muted-foreground text-[11px]">
-                <li>Create a database at <a href="https://turso.tech" target="_blank" rel="noreferrer" className="text-brand underline">turso.tech</a>.</li>
-                <li>Set environment variables:</li>
-                <li className="font-mono text-foreground font-semibold">TURSO_DATABASE_URL = libsql://your-db.turso.io</li>
-                <li className="font-mono text-foreground font-semibold">TURSO_AUTH_TOKEN = your_token_here</li>
-              </ol>
+              <Button
+                onClick={handleSync}
+                disabled={syncing}
+                size="sm"
+                className="bg-brand hover:bg-brand/90 text-white text-xs gap-1.5"
+              >
+                {syncing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Syncing to Cloud...</span>
+                  </>
+                ) : (
+                  <>
+                    <Cloud className="w-3.5 h-3.5" />
+                    <span>Sync Local Tables to Turso Cloud</span>
+                  </>
+                )}
+              </Button>
             </div>
+          ) : (
+            <div className="space-y-3 text-xs text-muted-foreground">
+              <p className="leading-relaxed">
+                Your system is currently using local SQLite with Write-Ahead Logging (WAL mode). Data is safely persisted on this machine across reboots.
+              </p>
+              <div className="p-3 bg-muted/30 border border-border/70 rounded-xl space-y-1.5">
+                <p className="font-semibold text-foreground">Cloud Sync Instructions (Optional for production deployment):</p>
+                <ol className="list-decimal pl-4 space-y-0.5 text-muted-foreground text-[11px]">
+                  <li>Create a database at <a href="https://turso.tech" target="_blank" rel="noreferrer" className="text-brand underline">turso.tech</a>.</li>
+                  <li>Set environment variables:</li>
+                  <li className="font-mono text-foreground font-semibold">TURSO_DATABASE_URL = libsql://your-db.turso.io</li>
+                  <li className="font-mono text-foreground font-semibold">TURSO_AUTH_TOKEN = your_token_here</li>
+                </ol>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Automated & Manual Database Backups */}
+      <Card className="border-border/60 shadow-xs">
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-brand/10 text-brand flex items-center justify-center">
+                <Database className="w-4 h-4" />
+              </div>
+              <div>
+                <CardTitle className="text-sm font-semibold">Database Backups & Cloud Snapshots</CardTitle>
+                <CardDescription className="text-xs">
+                  Automated daily backup scheduled at <strong>12:00 AM Asia/Manila</strong> (UTC+8) preserving all tables
+                </CardDescription>
+              </div>
+            </div>
+            {isAdmin && (
+              <Button
+                onClick={handleManualBackup}
+                disabled={isCreatingBackup}
+                size="sm"
+                className="bg-brand hover:bg-brand/90 text-white text-xs gap-1.5 shrink-0"
+              >
+                {isCreatingBackup ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Database className="w-3.5 h-3.5" />
+                )}
+                <span>{isCreatingBackup ? "Creating..." : "Manual Backup"}</span>
+              </Button>
+            )}
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="space-y-4 text-xs">
+          <div className="p-3 bg-muted/30 border border-border/70 rounded-xl space-y-1.5">
+            <div className="flex items-center gap-1.5 font-semibold text-foreground text-xs">
+              <Clock className="w-3.5 h-3.5 text-brand" />
+              <span>Automated Daily Schedule: 12:00 AM Asia/Manila (UTC+8)</span>
+            </div>
+            <p className="text-muted-foreground text-[11px] leading-relaxed">
+              Every midnight at 12:00 AM Asia/Manila (Philippine Standard Time, UTC+8), the automated backup daemon snapshots the complete SQLite and Turso database, generating an encrypted point-in-time state file. Snapshots are stored in Turso Cloud and local storage.
+            </p>
+          </div>
+
+          {isAdmin && (
+            <div className="space-y-2">
+              <h4 className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                <span>Available Backup Snapshots ({backups.length})</span>
+              </h4>
+
+              {backups.length === 0 ? (
+                <div className="p-4 border border-dashed border-border rounded-lg text-center text-muted-foreground text-xs">
+                  {loadingBackups ? "Loading backup history..." : "No backup snapshots found yet. Click 'Manual Backup' above to create your first snapshot."}
+                </div>
+              ) : (
+                <div className="border border-border/70 rounded-lg overflow-hidden">
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-muted/50 border-b border-border/60 text-[11px] font-semibold text-muted-foreground">
+                        <tr>
+                          <th className="py-2 px-3">Date (Asia/Manila)</th>
+                          <th className="py-2 px-3">Type</th>
+                          <th className="py-2 px-3">Filename</th>
+                          <th className="py-2 px-3">Size</th>
+                          <th className="py-2 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {backups.map((b) => (
+                          <tr key={b.id} className="hover:bg-muted/30">
+                            <td className="py-2 px-3 font-mono text-[11px] text-foreground">
+                              {b.manilaDate || new Date(b.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                                b.backupType === "scheduled" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                              }`}>
+                                {b.backupType}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 font-mono text-[11px] text-muted-foreground truncate max-w-[150px]">
+                              {b.filename}
+                            </td>
+                            <td className="py-2 px-3 text-muted-foreground">
+                              {b.sizeBytes ? `${(b.sizeBytes / 1024).toFixed(1)} KB` : "N/A"}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                asChild
+                                className="h-6 px-2 text-[10px] gap-1"
+                              >
+                                <a
+                                  href={apiService.getBackupDownloadUrl(b.id)}
+                                  download={b.filename}
+                                >
+                                  <Download className="w-3 h-3" />
+                                  <span>Download</span>
+                                </a>
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

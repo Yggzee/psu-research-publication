@@ -5,6 +5,7 @@ export type ResearchStatus = "In Progress" | "Unpublished" | "Published";
 
 export interface ManagedResearcher {
   id?: string;
+  role?: UserRole;
   lastName: string;
   firstName: string;
   name: string;
@@ -65,9 +66,13 @@ export const FACULTY_DATA_KEY = "psu_faculty_data";
 export const PUBLICATIONS_STORAGE_KEY = "psu_research_records";
 export const SESSION_STORAGE_KEY = "psu_current_user";
 
-// Default managed researchers starts completely empty (No mock data!)
-export function getDefaultManagedResearchers(): ManagedResearcher[] {
-  return [];
+export function isCoordinator(
+  entity?: { role?: string; id?: string; instructorId?: string } | null
+): boolean {
+  if (!entity) return false;
+  if (entity.role === "admin") return true;
+  if (entity.id === "admin-1" || entity.id === "PSU-002") return true;
+  return (entity.instructorId || "").toUpperCase() === "ASIN-00002";
 }
 
 export function getManagedResearchers(): ManagedResearcher[] {
@@ -130,22 +135,6 @@ export function removeResearcherRecordsFromLocal(instructorId: string, researche
     return true;
   });
   saveResearchRecords(filtered);
-}
-
-export function updateResearchRecord(id: string, updates: Partial<StoredPublication>) {
-  saveResearchRecords(
-    getResearchRecords().map((record) =>
-      record.id === id ? { ...record, ...updates } : record,
-    ),
-  );
-  apiService.updatePublication(id, updates).catch(() => {});
-}
-
-export function deleteResearchRecord(id: string) {
-  saveResearchRecords(
-    getResearchRecords().filter((record) => record.id !== id),
-  );
-  apiService.deletePublication(id).catch(() => {});
 }
 
 export const AUTH_TOKEN_KEY = "psu_auth_token";

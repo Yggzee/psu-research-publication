@@ -54,6 +54,7 @@ import {
   getManagedResearchers,
   saveManagedResearchers,
   getCurrentUser,
+  isCoordinator as checkIsCoordinator,
   removeResearcherRecordsFromLocal,
   type ManagedResearcher,
 } from "../utils/researchStore";
@@ -164,6 +165,8 @@ export function AdminPage() {
       ]);
       if (settings?.public_scraper_enabled !== undefined) {
         setPublicScraperEnabled(settings.public_scraper_enabled === "true");
+      } else if (status?.publicScraperEnabled !== undefined) {
+        setPublicScraperEnabled(status.publicScraperEnabled);
       }
       if (settings?.scraper_quota_threshold_usd) {
         setScraperQuotaThreshold(settings.scraper_quota_threshold_usd);
@@ -218,6 +221,7 @@ export function AdminPage() {
           const lastName = r.lastName || (parts.length > 1 ? parts.slice(1).join(" ") : "");
           return {
             id: r.id,
+            role: r.role,
             instructorId: r.instructorId || r.id || "",
             firstName,
             lastName,
@@ -315,14 +319,9 @@ export function AdminPage() {
     let finalInstructorId = form.instructorId.trim();
     if (!editingId) {
       let digitsOnly = finalInstructorId.replace(/^ASIN-/i, "").replace(/\D/g, "");
-      if (!digitsOnly) {
-        setFormError("Instructor ID must contain digits (format: ASIN-00000).");
+      if (!digitsOnly || digitsOnly.length < 1 || digitsOnly.length > 12) {
+        setFormError("Instructor ID must contain 1 to 12 digits (format: ASIN-00000).");
         return;
-      }
-      if (digitsOnly.length > 5) {
-        digitsOnly = digitsOnly.slice(0, 5);
-      } else if (digitsOnly.length < 5) {
-        digitsOnly = digitsOnly.padStart(5, "0");
       }
       finalInstructorId = `ASIN-${digitsOnly}`;
     }
@@ -385,14 +384,38 @@ export function AdminPage() {
   };
 
   const editResearcher = (researcher: ManagedResearcher) => {
-    const parts = (researcher.name || "").trim().split(" ");
-    const lastName = parts.length > 1 ? parts.slice(1).join(" ") : parts[0] || "";
-    const firstName = parts.length > 1 ? parts[0] : "";
+    let firstName = (researcher as any).firstName || "";
+    let middleInitial = (researcher as any).middleInitial || (researcher as any).middle_initial || "";
+    let lastName = (researcher as any).lastName || "";
+
+    if (!firstName && !lastName && researcher.name) {
+      const parts = (researcher.name || "").trim().split(/\s+/);
+      if (parts.length === 1) {
+        firstName = parts[0];
+      } else {
+        const isMi = (token: string) => /^(?:[A-Za-z]\.?|Ma\.?)$/i.test(token);
+        let miIndex = -1;
+        for (let i = 1; i < parts.length - 1; i++) {
+          if (isMi(parts[i])) {
+            miIndex = i;
+            break;
+          }
+        }
+        if (miIndex !== -1) {
+          firstName = parts.slice(0, miIndex).join(" ");
+          middleInitial = parts[miIndex];
+          lastName = parts.slice(miIndex + 1).join(" ");
+        } else {
+          firstName = parts.slice(0, -1).join(" ");
+          lastName = parts[parts.length - 1];
+        }
+      }
+    }
 
     setForm({
       lastName,
       firstName,
-      middleInitial: (researcher as any).middleInitial || (researcher as any).middle_initial || "",
+      middleInitial,
       instructorId: researcher.instructorId,
       password: "",
       department: researcher.department || "BSIT",
@@ -544,7 +567,7 @@ export function AdminPage() {
   };
 
   const handleApproveInvitationRequest = (req: InvitationRequest) => {
-    const cleanDigits = (req.instructor_id || "").replace(/^ASIN-/i, "").replace(/\D/g, "").slice(0, 5);
+    const cleanDigits = (req.instructor_id || "").replace(/^ASIN-/i, "").replace(/\D/g, "").slice(0, 12);
     setForm({
       firstName: req.first_name,
       lastName: req.last_name,
@@ -1032,9 +1055,7 @@ export function AdminPage() {
             ) : (
               <div className="divide-y divide-border/60">
                 {filteredResearchers.map((researcher) => {
-                  const isCoordinator =
-                    (researcher.instructorId || "").toUpperCase() === "PSU-002" ||
-                    (researcher.name || "").toLowerCase().includes("garin");
+                  const isCoordinator = checkIsCoordinator(researcher);
                   const initial = (researcher.name || "R").trim().charAt(0).toUpperCase() || "R";
 
                   return (
@@ -1348,12 +1369,12 @@ export function AdminPage() {
                     <input
                       type="text"
                       inputMode="numeric"
-                      maxLength={5}
+                      maxLength={12}
                       value={form.instructorId.replace(/^ASIN-/i, "")}
                       onChange={(e) =>
                         setForm({
                           ...form,
-                          instructorId: e.target.value.replace(/\D/g, "").slice(0, 5),
+                          instructorId: e.target.value.replace(/\D/g, "").slice(0, 12),
                         })
                       }
                       placeholder="00000"

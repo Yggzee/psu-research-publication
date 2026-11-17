@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleApiRequest } from './apiHandler.mjs';
 import { applySecurityHeaders } from './securityHeaders.mjs';
+import { startDailyBackupScheduler } from './backupService.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,6 +113,7 @@ const server = http.createServer(requestHandler);
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Research Tracking Production Server] Running on http://0.0.0.0:${PORT}`);
   console.log(`[Static Files] Serving from: ${DIST_DIR}`);
+  startDailyBackupScheduler();
 });
 
 // Dual-Port listener: Render Docker services may probe either 10000 or 8080 depending on dashboard/Dockerfile sync.
